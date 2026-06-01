@@ -1,0 +1,88 @@
+{
+  "app": {
+    "name": "Extrusion",
+    "subtitle": "Web Console",
+    "localhost": "localhost",
+    "version": "v1 Core Ops",
+    "language": "한국어"
+  },
+  "nav": {
+    "dashboard": "대시보드",
+    "upload": "업로드",
+    "logs": "로그",
+    "settings": "설정"
+  },
+  "dashboard": {
+    "title": "대시보드",
+    "subtitle": "지금 업로드, DB, 런타임이 안전한지 확인합니다.",
+    "status": {
+      "upload": "업로드",
+      "supabase": "Supabase",
+      "storage": "WSL 저장소",
+      "grafana": "Grafana",
+      "stateStore": "State Store"
+    },
+    "jobs": {
+      "title": "최근 작업",
+      "current": "현재 작업",
+      "progress": "진행률",
+      "status": "상태",
+      "started": "시작",
+      "mode": "모드",
+      "files": "파일",
+      "rows": "행",
+      "failures": "실패",
+      "warnings": "주의",
+      "message": "메시지"
+    },
+    "runtime": {
+      "title": "런타임 상태",
+      "service": "서비스",
+      "detail": "세부 상태",
+      "lastCheck": "확인"
+    },
+    "warnings": {
+      "title": "주의/실패",
+      "type": "유형",
+      "count": "건수",
+      "impact": "영향"
+    },
+    "audit": {
+      "title": "최근 감사",
+      "time": "시간",
+      "result": "결과",
+      "action": "작업",
+      "actor": "사용자",
+      "summary": "요약"
+    },
+    "actions": {
+      "preview": "미리보기",
+      "openJob": "작업 보기",
+      "openLogs": "로그 보기",
+      "openGrafana": "Grafana 열기"
+    },
+    "empty": {
+      "noJobs": "아직 업로드 작업 없음",
+      "noWarnings": "주의 항목 없음"
+    },
+    "error": "Dashboard 상태를 불러오지 못했습니다."
+  },
+  "placeholder": {
+    "upload": "Upload 화면은 다음 단계에서 Preview / Job 탭으로 구현합니다.",
+    "logs": "Logs 화면은 다음 단계에서 Job Logs / Audit Logs 탭으로 구현합니다.",
+    "settings": "Settings 화면은 다음 단계에서 환경 설정과 override 상태를 구현합니다."
+  },
+  "status": {
+    "ready": "정상",
+    "running": "실행 중",
+    "attention": "확인 필요",
+    "risk": "주의",
+    "failed": "실패",
+    "blocked": "차단됨",
+    "muted": "알 수 없음"
+  },
+  "mode": {
+    "upload": "업로드",
+    "retry_failed": "실패 재시도"
+  }
+}
