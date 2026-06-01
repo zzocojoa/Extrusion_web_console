@@ -40,7 +40,7 @@ export const mockDashboardData: DashboardResponse = {
       label: "Grafana",
       tone: "ready",
       value: "연결됨",
-      detail: "Open link only",
+      detail: "별도 대시보드",
       action: { label: "Grafana 열기", href: "http://localhost:3001", target: "_blank" },
     },
     {
@@ -198,6 +198,23 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
       detail: item.id === "upload" ? "미리보기 실행 가능" : item.detail,
     }));
     data.currentJob = null;
+    data.recentJobs = data.recentJobs.map((job, index) =>
+      index === 0
+        ? {
+            ...job,
+            status: "succeeded",
+            filesDone: 18,
+            filesTotal: 18,
+            latestMessage: "최근 업로드 완료, 현재 실행 중인 작업 없음",
+          }
+        : job,
+    );
+    data.warningQueue = data.warningQueue.map((row) => ({
+      ...row,
+      tone: "ready",
+      count: 0,
+      impact: "확인 필요 항목 없음",
+    }));
     return data;
   }
 
@@ -217,6 +234,15 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
       detail: item.id === "upload" ? "실패 재시도 2건" : item.detail,
     }));
     data.currentJob = null;
+    data.recentJobs = [
+      {
+        ...data.recentJobs[1],
+        jobId: "job_20260531_1745",
+        status: "partial_failed",
+        latestMessage: "일부 중복 3건과 TEMP 실패 2건 확인 필요",
+      },
+      data.recentJobs[2],
+    ];
     return data;
   }
 
@@ -241,7 +267,194 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
             : item.detail,
     }));
     data.currentJob = null;
+    data.runtimeChecks = data.runtimeChecks.map((row) =>
+      row.id === "supabase"
+        ? {
+            ...row,
+            tone: "blocked",
+            detail: "127.0.0.1:54321 연결 실패",
+          }
+        : row.id === "edge_function"
+          ? {
+              ...row,
+              tone: "blocked",
+              detail: "Supabase 복구 후 확인 가능",
+            }
+          : row,
+    );
+    data.warningQueue = [
+      {
+        id: "supabase_unreachable",
+        label: "Supabase 연결 실패",
+        tone: "blocked",
+        count: 1,
+        impact: "업로드 시작 차단",
+      },
+      ...data.warningQueue.filter((row) => row.id !== "risky"),
+    ];
+    data.recentJobs = [
+      {
+        ...data.recentJobs[0],
+        jobId: "job_20260601_0920",
+        status: "interrupted",
+        filesDone: 0,
+        filesTotal: 18,
+        rowsSent: 0,
+        failureCount: 1,
+        warningCount: 0,
+        latestMessage: "Local Supabase 연결 실패로 업로드 차단",
+      },
+      data.recentJobs[1],
+      data.recentJobs[2],
+    ];
+    data.auditSummary = [
+      {
+        auditId: "audit_blocked_001",
+        time: "2026-06-01T09:20:00+09:00",
+        result: "blocked",
+        action: "upload.start",
+        actor: "local\\operator",
+        summary: "Local Supabase unreachable",
+        jobId: "job_20260601_0920",
+      },
+      ...data.auditSummary,
+    ];
   }
 
+  return data;
+}
+
+export function getLocalizedMockDashboard(
+  state: DashboardResponse["overall"]["state"],
+  language: string,
+): DashboardResponse {
+  const data = getMockDashboardScenario(state);
+  if (!language.startsWith("en")) {
+    return data;
+  }
+
+  const byState: Record<DashboardResponse["overall"]["state"], Pick<DashboardResponse["overall"], "title" | "message">> = {
+    ready: {
+      title: "Upload ready",
+      message: "Supabase, State Store, and WSL storage are ready. No blocking items found.",
+    },
+    attention: {
+      title: "Needs attention",
+      message: "There are 3 partial overlaps and 2 retryable failures. Check Upload Preview.",
+    },
+    blocked: {
+      title: "Upload blocked",
+      message: "Upload start is blocked because Local Supabase is not responding.",
+    },
+    running: {
+      title: "Upload running",
+      message: "Processing 12/18 files, 0 failures, average speed 24,000 rows/min.",
+    },
+  };
+
+  data.overall.title = byState[state].title;
+  data.overall.message = byState[state].message;
+  data.topbarChips = data.topbarChips.map((chip) => ({
+    ...chip,
+    label: chip.id === "upload" ? "Upload" : chip.id === "state_store" ? "State Store" : chip.label,
+    value:
+      chip.value === "정상"
+        ? "Ready"
+        : chip.value === "실행 중"
+          ? "Running"
+          : chip.value === "연결됨"
+            ? "Linked"
+            : chip.value === "차단됨"
+              ? "Blocked"
+              : chip.value === "대기"
+                ? "Idle"
+                : chip.value === "확인 필요"
+                  ? "Attention"
+                  : chip.value,
+  }));
+  data.statusMatrix = data.statusMatrix.map((item) => ({
+    ...item,
+    label:
+      item.id === "upload"
+        ? "Upload"
+        : item.id === "storage"
+          ? "WSL Storage"
+          : item.id === "state_store"
+            ? "State Store"
+            : item.label,
+    value:
+      item.value === "연결됨"
+        ? "Linked"
+        : item.value === "차단됨"
+          ? "Blocked"
+          : item.value === "정상"
+            ? "Ready"
+            : item.value,
+    detail:
+      item.detail === "별도 대시보드"
+        ? "External dashboard"
+        : item.detail === "미리보기 실행 가능"
+          ? "Preview available"
+          : item.detail === "실패 재시도 2건"
+            ? "2 retryable failures"
+            : item.detail === "Supabase 복구 필요"
+              ? "Restore Supabase first"
+              : item.detail === "127.0.0.1:54321 연결 실패"
+                ? "127.0.0.1:54321 unreachable"
+                : item.detail,
+    action: item.action ? { ...item.action, label: "Open Grafana" } : item.action,
+  }));
+  if (data.currentJob) {
+    data.currentJob.latestMessage = "Uploading PLC data for 2026-06-01";
+  }
+  data.recentJobs = data.recentJobs.map((job) => ({
+    ...job,
+    latestMessage:
+      job.status === "interrupted"
+        ? "Upload blocked because Local Supabase is unreachable"
+        : job.status === "partial_failed"
+          ? "Review partial overlaps and 2 TEMP failures"
+          : job.status === "succeeded"
+            ? "Completed after excluding 1 partial overlap"
+            : "Uploading PLC data for 2026-06-01",
+  }));
+  data.runtimeChecks = data.runtimeChecks.map((row) => ({
+    ...row,
+    label: row.id === "state_store" ? "State Store" : row.label,
+    detail:
+      row.detail === "127.0.0.1:54321 연결 실패"
+        ? "127.0.0.1:54321 unreachable"
+        : row.detail === "Supabase 복구 후 확인 가능"
+          ? "Available after Supabase recovery"
+          : row.detail,
+  }));
+  data.warningQueue = data.warningQueue.map((row) => ({
+    ...row,
+    label:
+      row.id === "supabase_unreachable"
+        ? "Supabase unreachable"
+        : row.id === "partial_overlap"
+          ? "Partial overlap"
+          : row.id === "failed_retry"
+            ? "Retry failed"
+            : "Risk candidates",
+    impact:
+      row.id === "supabase_unreachable"
+        ? "Upload start blocked"
+        : row.count === 0
+          ? "No items need attention"
+          : row.id === "partial_overlap"
+            ? "Check in Upload Preview"
+            : "2 TEMP files can be retried",
+  }));
+  data.auditSummary = data.auditSummary.map((row) => ({
+    ...row,
+    summary:
+      row.result === "blocked"
+        ? "Local Supabase unreachable"
+        : row.action === "upload.start"
+          ? "18 targets, partial=false"
+          : row.summary,
+  }));
   return data;
 }

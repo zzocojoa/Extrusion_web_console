@@ -25,8 +25,9 @@ export function statusToneForJob(status: UploadJobStatus): StatusTone {
     case "pausing":
     case "paused":
     case "cancelling":
-    case "cancelled":
       return "attention";
+    case "cancelled":
+      return "muted";
     case "failed":
       return "failed";
     case "interrupted":

@@ -9,7 +9,7 @@ export function DashboardStatusMatrix({ items }: DashboardStatusMatrixProps) {
   return (
     <section className="dashboard-status-matrix" aria-label="Runtime and upload summary">
       {items.map((item) => (
-        <article className="status-cell" key={item.id}>
+        <article className={`status-cell status-cell--${item.tone}`} key={item.id}>
           <div className="status-cell__top">
             <span className="status-cell__label">{item.label}</span>
             <StatusBadge tone={item.tone} />

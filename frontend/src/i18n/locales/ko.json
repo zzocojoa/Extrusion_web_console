@@ -14,13 +14,13 @@
   },
   "dashboard": {
     "title": "대시보드",
-    "subtitle": "지금 업로드, DB, 런타임이 안전한지 확인합니다.",
+    "loading": "Local Supabase, 업로드 상태, 상태 저장소를 확인 중입니다...",
     "status": {
       "upload": "업로드",
       "supabase": "Supabase",
       "storage": "WSL 저장소",
       "grafana": "Grafana",
-      "stateStore": "State Store"
+      "stateStore": "상태 저장소"
     },
     "jobs": {
       "title": "최근 작업",
@@ -57,6 +57,9 @@
     },
     "actions": {
       "preview": "미리보기",
+      "startUpload": "업로드 시작",
+      "retryFailed": "실패 재시도",
+      "startSupabase": "Supabase 시작",
       "openJob": "작업 보기",
       "openLogs": "로그 보기",
       "openGrafana": "Grafana 열기"
@@ -67,10 +70,16 @@
     },
     "error": "Dashboard 상태를 불러오지 못했습니다."
   },
+  "pageSubtitle": {
+    "dashboard": "업로드, DB, 런타임 상태 확인",
+    "upload": "미리보기와 업로드 작업 상태",
+    "logs": "작업 로그와 감사 기록",
+    "settings": "로컬 런타임과 업로드 설정"
+  },
   "placeholder": {
-    "upload": "Upload 화면은 다음 단계에서 Preview / Job 탭으로 구현합니다.",
-    "logs": "Logs 화면은 다음 단계에서 Job Logs / Audit Logs 탭으로 구현합니다.",
-    "settings": "Settings 화면은 다음 단계에서 환경 설정과 override 상태를 구현합니다."
+    "upload": "미리보기와 업로드 작업 제어는 아직 연결되지 않았습니다.",
+    "logs": "작업 로그와 감사 로그는 아직 연결되지 않았습니다.",
+    "settings": "환경 설정과 환경 변수 우선 적용 상태는 아직 연결되지 않았습니다."
   },
   "status": {
     "ready": "정상",

@@ -14,7 +14,7 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Check whether upload, DB, and runtime are safe right now.",
+    "loading": "Checking Local Supabase, upload state, and state store...",
     "status": {
       "upload": "Upload",
       "supabase": "Supabase",
@@ -57,6 +57,9 @@
     },
     "actions": {
       "preview": "Preview",
+      "startUpload": "Start Upload",
+      "retryFailed": "Retry Failed",
+      "startSupabase": "Start Supabase",
       "openJob": "View Job",
       "openLogs": "View Logs",
       "openGrafana": "Open Grafana"
@@ -67,10 +70,16 @@
     },
     "error": "Dashboard status could not be loaded."
   },
+  "pageSubtitle": {
+    "dashboard": "Upload, DB, and runtime status",
+    "upload": "Upload preview and job status",
+    "logs": "Job logs and audit history",
+    "settings": "Local runtime and upload configuration"
+  },
   "placeholder": {
-    "upload": "Upload will add Preview / Job tabs in the next phase.",
-    "logs": "Logs will add Job Logs / Audit Logs tabs in the next phase.",
-    "settings": "Settings will add configuration and override state in the next phase."
+    "upload": "Preview and upload job controls are not connected in this scaffold.",
+    "logs": "Job logs and audit logs are not connected in this scaffold.",
+    "settings": "Configuration and environment override state are not connected in this scaffold."
   },
   "status": {
     "ready": "Ready",

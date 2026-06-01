@@ -54,7 +54,7 @@ export function RecentJobsPanel({ jobs, currentJob }: RecentJobsPanelProps) {
                 <td>{t(`mode.${job.mode}`)}</td>
                 <td className="num">{job.filesDone}/{job.filesTotal}</td>
                 <td className="num">{formatCount(job.rowsSent)}</td>
-                <td className="num">{job.failureCount}</td>
+                <td className={job.failureCount > 0 ? "num num--danger" : "num"}>{job.failureCount}</td>
                 <td className="truncate">{job.latestMessage}</td>
               </tr>
             ))}

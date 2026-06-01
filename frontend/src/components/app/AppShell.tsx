@@ -16,7 +16,7 @@ export function AppShell({ activePage, onNavigate, children }: AppShellProps) {
   return (
     <div className="app-shell">
       <SidebarNav activePage={activePage} onNavigate={onNavigate} />
-      <TopStatusBar title={t(`nav.${activePage}`)} subtitle={t("dashboard.subtitle")} />
+      <TopStatusBar title={t(`nav.${activePage}`)} subtitle={t(`pageSubtitle.${activePage}`)} />
       {children}
     </div>
   );

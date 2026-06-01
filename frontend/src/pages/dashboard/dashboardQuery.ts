@@ -1,23 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { fetchDashboard } from "../../api/dashboard";
-import { getMockDashboardScenario, mockDashboardData } from "./mockDashboardData";
+import { getLocalizedMockDashboard } from "./mockDashboardData";
 import type { DashboardResponse } from "./dashboardTypes";
 
 const useMockDashboard = import.meta.env.VITE_API_MODE !== "api";
 
-async function getMockDashboard(): Promise<DashboardResponse> {
+async function getMockDashboard(language: string): Promise<DashboardResponse> {
   const state = new URLSearchParams(window.location.search).get("state");
   if (state === "ready" || state === "attention" || state === "blocked" || state === "running") {
-    return getMockDashboardScenario(state);
+    return getLocalizedMockDashboard(state, language);
   }
-  return mockDashboardData;
+  return getLocalizedMockDashboard("running", language);
 }
 
 export function useDashboardQuery() {
+  const { i18n } = useTranslation();
+
   return useQuery({
-    queryKey: ["dashboard"],
-    queryFn: useMockDashboard ? getMockDashboard : fetchDashboard,
+    queryKey: ["dashboard", i18n.language, window.location.search],
+    queryFn: useMockDashboard ? () => getMockDashboard(i18n.language) : fetchDashboard,
     refetchInterval: 5000,
   });
 }

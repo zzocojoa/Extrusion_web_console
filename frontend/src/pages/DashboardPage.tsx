@@ -15,7 +15,7 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <main className="dashboard-page" aria-labelledby="dashboard-title">
-        <section className="panel panel--loading">Local Supabase, upload, and state store 확인 중...</section>
+        <section className="panel panel--loading">{t("dashboard.loading")}</section>
       </main>
     );
   }

@@ -28,6 +28,8 @@ export function SidebarNav({ activePage, onNavigate }: SidebarNavProps) {
               type="button"
               className="sidebar__nav-item"
               aria-current={isActive ? "page" : undefined}
+              aria-label={t(item.labelKey)}
+              title={t(item.labelKey)}
               onClick={() => onNavigate(item.id)}
             >
               <Icon aria-hidden="true" size={16} />

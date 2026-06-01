@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, CheckCircle, OctagonAlert } from "lucide-react";
+import { Activity, CheckCircle, OctagonAlert, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { DashboardOverall, OverallSystemState } from "../../pages/dashboard/dashboardTypes";
@@ -7,7 +7,7 @@ import { StatusBadge } from "../status/StatusBadge";
 const overallIcon: Record<OverallSystemState, typeof CheckCircle> = {
   ready: CheckCircle,
   running: Activity,
-  attention: AlertTriangle,
+  attention: TriangleAlert,
   blocked: OctagonAlert,
 };
 
@@ -18,6 +18,16 @@ interface SafetySummaryBannerProps {
 export function SafetySummaryBanner({ overall }: SafetySummaryBannerProps) {
   const { t } = useTranslation();
   const Icon = overallIcon[overall.state];
+  const actionLabel = overall.action
+    ? {
+        preview: t("dashboard.actions.preview"),
+        start_upload: t("dashboard.actions.startUpload"),
+        retry_failed: t("dashboard.actions.retryFailed"),
+        open_job: t("dashboard.actions.openJob"),
+        start_supabase: t("dashboard.actions.startSupabase"),
+        open_logs: t("dashboard.actions.openLogs"),
+      }[overall.action]
+    : null;
 
   return (
     <section className={`safety-summary safety-summary--${overall.state}`} aria-live="polite">
@@ -31,9 +41,11 @@ export function SafetySummaryBanner({ overall }: SafetySummaryBannerProps) {
         <h2>{overall.title}</h2>
         <p>{overall.message}</p>
       </div>
-      <button className="button button--secondary" type="button">
-        {overall.action === "open_job" ? t("dashboard.actions.openJob") : t("dashboard.actions.openLogs")}
-      </button>
+      {actionLabel ? (
+        <button className="button button--secondary" type="button">
+          {actionLabel}
+        </button>
+      ) : null}
     </section>
   );
 }
