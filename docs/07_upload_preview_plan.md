@@ -20,8 +20,10 @@ Implemented on branch `codex/upload-preview-reconciliation`:
 - SQLite `preview_runs` and `preview_items` persistence in the new web state store.
 - Local CSV candidate scanning from configured backend source folders.
 - Row-streamed `(timestamp, device_id)` key extraction without loading full transformed CSV data into memory.
-- Chunked exact-key DB matching against Supabase/Postgres.
+- `sampleRows` schema preflight, `forceFullScan` override, and row-level cancel/deadline checks during key extraction.
+- Chunked exact-key DB matching against Supabase/Postgres using `chunkRows`.
 - Direct local Supabase exact reconciliation through `EWC_SUPABASE_DB_URL` and `public.all_metrics`.
+- DB reconciliation time bounds through Postgres `connect_timeout`, per-batch `statement_timeout`, and cancel/deadline checks between DB batches.
 - DB unreachable handling:
   - run status `partial_failed`
   - DB status `unreachable`
@@ -74,10 +76,9 @@ No browser console errors, page errors, or unexpected failed requests were obser
 - Real reachable local Supabase reconciliation still needs operator-environment testing against representative `all_metrics` data.
 - Legacy CSV fixture coverage should be expanded before upload execution work, especially for CP949 files, locked files, unstable files, empty files, and mixed date/source folders.
 - `db_query_failed` and other partial batch-failure paths need more focused tests beyond the DB unreachable path.
-- Request options such as `sampleRows`, `chunkRows`, and `forceFullScan` are accepted by DTOs, but the currently wired service path does not yet use every option as fully as this plan describes.
 - The currently wired service streams CSV rows and chunks DB matching, but it does not use the planned temporary `preview_key_stage` table. Very large CSV behavior is bounded by timeouts and key deduplication, not by temp-table staging yet.
-- Cancel is checked between files in the wired service path. The planned between-chunk cancellation should be revisited before large-file operator rollout.
-- Timeout behavior is bounded and persisted, but mid-file cancellation is not active in the wired service path yet and should be rechecked with larger real CSV files.
+- Cancel and deadline checks are wired before scanning, during CSV row extraction, and between DB batches. A single in-flight DB statement is bounded by Postgres `statement_timeout`, but true mid-statement cancellation still depends on the DB driver/network path.
+- Timeout behavior is bounded and persisted, but it should still be rechecked with larger real CSV files on the operator PC.
 - Preview retry creates new run state, but the full operator retry workflow should be revisited when real upload jobs and audit logs exist.
 - Audit logging is planned but not yet implemented, so preview failures are visible in UI/DB/log output but not yet in the future audit table.
 
@@ -633,7 +634,7 @@ Timeout:
 Cancel:
 
 - `POST /api/upload/preview/{id}/cancel` sets `cancel_requested = 1`.
-- Worker checks the flag between files and between chunks.
+- Worker checks the flag before scanning, during CSV row extraction, and between DB batches.
 - Run becomes `cancelling`, then `cancelled`.
 - Already persisted items remain visible.
 - Not-yet-scanned items are not inserted unless discovered; discovered-but-incomplete items become `risky` with `reason_code = 'cancelled'`.

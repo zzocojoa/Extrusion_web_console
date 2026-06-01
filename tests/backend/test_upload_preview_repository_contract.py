@@ -198,3 +198,56 @@ def test_preview_repository_schema_enforces_statuses_and_unique_file_per_run(tmp
 
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(insert_item_sql, item_values)
+
+
+def test_preview_repository_marks_stale_active_runs_interrupted(tmp_path: Path) -> None:
+    db_path = tmp_path / "web_console_state.db"
+    repository = _build_repository(db_path)
+    repository.create_run(
+        preview_run_id="prv_stale",
+        range_mode="today",
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    changed = repository.mark_interrupted_active_runs()
+    row = repository.get_run("prv_stale")
+
+    assert changed == 1
+    assert row["status"] == "failed"
+    assert row["error_code"] == "interrupted"
+    assert row["finished_at"] is not None
+    assert repository.has_active_run() is None
+
+
+def test_preview_repository_atomic_create_reports_existing_active_run(tmp_path: Path) -> None:
+    db_path = tmp_path / "web_console_state.db"
+    repository = _build_repository(db_path)
+    repository.create_run(
+        preview_run_id="prv_active",
+        range_mode="today",
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    active_run_id = repository.create_run_if_no_active(
+        preview_run_id="prv_new",
+        range_mode="today",
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    assert active_run_id == "prv_active"
+    assert repository.get_run("prv_new") is None

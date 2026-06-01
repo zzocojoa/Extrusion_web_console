@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from backend.app.core.settings import Settings
 from backend.app.db.preview_repository import PreviewRepository, iso_now
@@ -28,8 +28,23 @@ class PreviewDbUnavailableError(RuntimeError):
     pass
 
 
+class PreviewCancelledError(RuntimeError):
+    pass
+
+
+class PreviewSchemaMismatchError(RuntimeError):
+    pass
+
+
 class ExactReconciler(Protocol):
-    def find_existing_keys(self, keys: set[tuple[str, str]]) -> set[tuple[str, str]]:
+    def find_existing_keys(
+        self,
+        keys: set[tuple[str, str]],
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+        run_deadline: float | None = None,
+        chunk_rows: int = 1000,
+    ) -> set[tuple[str, str]]:
         ...
 
 
@@ -51,6 +66,7 @@ class CandidateFile:
 @dataclass
 class KeyExtractionResult:
     row_count: int
+    sample_row_count: int
     local_keys: set[tuple[str, str]]
     first_timestamp: str | None
     last_timestamp: str | None
@@ -137,14 +153,14 @@ class CandidateScanner:
         stable_before = now_ts - (request.options.stable_lag_minutes * 60)
         for folder in folders:
             if not folder.path.exists() or not folder.path.is_dir():
-                local_issues.append(
-                    self._issue_item(
-                        folder,
-                        folder.path,
-                        PreviewItemStatus.risky,
-                        "source_missing",
-                        "Configured source folder is missing.",
-                    )
+                self._append_issue(
+                    local_issues,
+                    request.options.max_files,
+                    folder,
+                    folder.path,
+                    PreviewItemStatus.risky,
+                    "source_missing",
+                    "Configured source folder is missing.",
                 )
                 continue
             count = 0
@@ -156,26 +172,26 @@ class CandidateScanner:
                 try:
                     stat = entry.stat()
                 except OSError as error:
-                    local_issues.append(
-                        self._issue_item(
-                            folder,
-                            entry,
-                            PreviewItemStatus.risky,
-                            "file_missing",
-                            f"Could not read file metadata: {error}",
-                        )
+                    self._append_issue(
+                        local_issues,
+                        request.options.max_files,
+                        folder,
+                        entry,
+                        PreviewItemStatus.risky,
+                        "file_missing",
+                        f"Could not read file metadata: {error}",
                     )
                     continue
                 if stat.st_mtime > stable_before:
-                    local_issues.append(
-                        self._issue_item(
-                            folder,
-                            entry,
-                            PreviewItemStatus.excluded,
-                            "file_unstable",
-                            "File was modified too recently.",
-                            stat,
-                        )
+                    self._append_issue(
+                        local_issues,
+                        request.options.max_files,
+                        folder,
+                        entry,
+                        PreviewItemStatus.excluded,
+                        "file_unstable",
+                        "File was modified too recently.",
+                        stat,
                     )
                     continue
                 file_date = (
@@ -184,33 +200,64 @@ class CandidateScanner:
                     else parse_temperature_file_date(entry.name)
                 )
                 if file_date is None:
-                    local_issues.append(
-                        self._issue_item(
-                            folder,
-                            entry,
-                            PreviewItemStatus.excluded,
-                            "file_date_missing",
-                            "File date could not be parsed.",
-                            stat,
-                        )
+                    self._append_issue(
+                        local_issues,
+                        request.options.max_files,
+                        folder,
+                        entry,
+                        PreviewItemStatus.excluded,
+                        "file_date_missing",
+                        "File date could not be parsed.",
+                        stat,
                     )
                     continue
                 if file_date < start_date or file_date > end_date:
-                    local_issues.append(
-                        self._issue_item(
-                            folder,
-                            entry,
-                            PreviewItemStatus.excluded,
-                            "outside_date_range",
-                            "File date is outside the preview range.",
-                            stat,
-                            file_date,
-                        )
+                    self._append_issue(
+                        local_issues,
+                        request.options.max_files,
+                        folder,
+                        entry,
+                        PreviewItemStatus.excluded,
+                        "outside_date_range",
+                        "File date is outside the preview range.",
+                        stat,
+                        file_date,
+                    )
+                    continue
+                if is_file_locked(entry):
+                    self._append_issue(
+                        local_issues,
+                        request.options.max_files,
+                        folder,
+                        entry,
+                        PreviewItemStatus.excluded,
+                        "file_locked",
+                        "File is locked by another process.",
+                        stat,
+                        file_date,
                     )
                     continue
                 candidates.append(CandidateFile(folder, entry, file_date, stat))
                 count += 1
         return candidates, local_issues
+
+    def _append_issue(
+        self,
+        local_issues: list[dict[str, object]],
+        max_issues: int,
+        source: SourceFolder,
+        path: Path,
+        status: PreviewItemStatus,
+        reason_code: str,
+        reason_text: str,
+        stat: os.stat_result | None = None,
+        file_date: date | None = None,
+    ) -> None:
+        if len(local_issues) >= max_issues:
+            return
+        local_issues.append(
+            self._issue_item(source, path, status, reason_code, reason_text, stat, file_date)
+        )
 
     def _issue_item(
         self,
@@ -253,45 +300,73 @@ class CandidateScanner:
 
 
 class CsvKeyExtractor:
-    def extract(self, candidate: CandidateFile, max_file_seconds: int) -> KeyExtractionResult:
+    def extract(
+        self,
+        candidate: CandidateFile,
+        max_file_seconds: int,
+        sample_rows: int,
+        force_full_scan: bool,
+        should_cancel: Callable[[], bool] | None = None,
+        run_deadline: float | None = None,
+    ) -> KeyExtractionResult:
         started = time.monotonic()
         row_count = 0
+        sample_row_count = 0
+        sample_valid_key_count = 0
         keys: set[tuple[str, str]] = set()
         first_timestamp: str | None = None
         last_timestamp: str | None = None
         device_ids: set[str] = set()
+
+        def process_row(row: dict[str, str]) -> None:
+            nonlocal first_timestamp, last_timestamp, row_count, sample_row_count, sample_valid_key_count
+            row_count += 1
+            timestamp, device_id = self._extract_key(candidate, row)
+            if row_count <= sample_rows:
+                sample_row_count += 1
+                if timestamp and device_id:
+                    sample_valid_key_count += 1
+            elif not force_full_scan and sample_row_count >= sample_rows and sample_valid_key_count == 0:
+                raise PreviewSchemaMismatchError("Sample rows did not contain valid timestamp/device_id keys")
+            if not timestamp or not device_id:
+                return
+            keys.add((timestamp, device_id))
+            device_ids.add(device_id)
+            if first_timestamp is None or timestamp < first_timestamp:
+                first_timestamp = timestamp
+            if last_timestamp is None or timestamp > last_timestamp:
+                last_timestamp = timestamp
+
         try:
             rows = self._open_rows(candidate.path)
             for row in rows:
+                if should_cancel and should_cancel():
+                    raise PreviewCancelledError("Preview run was cancelled")
                 if time.monotonic() - started > max_file_seconds:
                     raise TimeoutError("CSV key extraction timed out")
-                row_count += 1
-                timestamp, device_id = self._extract_key(candidate, row)
-                if not timestamp or not device_id:
-                    continue
-                keys.add((timestamp, device_id))
-                device_ids.add(device_id)
-                if first_timestamp is None or timestamp < first_timestamp:
-                    first_timestamp = timestamp
-                if last_timestamp is None or timestamp > last_timestamp:
-                    last_timestamp = timestamp
+                if run_deadline is not None and time.monotonic() > run_deadline:
+                    raise TimeoutError("Preview run exceeded the configured time limit")
+                process_row(row)
         except UnicodeDecodeError:
+            row_count = 0
+            sample_row_count = 0
+            sample_valid_key_count = 0
+            keys.clear()
+            device_ids.clear()
+            first_timestamp = None
+            last_timestamp = None
             rows = self._open_rows(candidate.path, encoding="cp949")
             for row in rows:
+                if should_cancel and should_cancel():
+                    raise PreviewCancelledError("Preview run was cancelled")
                 if time.monotonic() - started > max_file_seconds:
                     raise TimeoutError("CSV key extraction timed out")
-                row_count += 1
-                timestamp, device_id = self._extract_key(candidate, row)
-                if not timestamp or not device_id:
-                    continue
-                keys.add((timestamp, device_id))
-                device_ids.add(device_id)
-                if first_timestamp is None or timestamp < first_timestamp:
-                    first_timestamp = timestamp
-                if last_timestamp is None or timestamp > last_timestamp:
-                    last_timestamp = timestamp
+                if run_deadline is not None and time.monotonic() > run_deadline:
+                    raise TimeoutError("Preview run exceeded the configured time limit")
+                process_row(row)
         return KeyExtractionResult(
             row_count=row_count,
+            sample_row_count=sample_row_count,
             local_keys=keys,
             first_timestamp=first_timestamp,
             last_timestamp=last_timestamp,
@@ -337,7 +412,14 @@ class SupabaseExactReconciler:
     def __init__(self, db_url: str) -> None:
         self.db_url = db_url
 
-    def find_existing_keys(self, keys: set[tuple[str, str]]) -> set[tuple[str, str]]:
+    def find_existing_keys(
+        self,
+        keys: set[tuple[str, str]],
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+        run_deadline: float | None = None,
+        chunk_rows: int = 1000,
+    ) -> set[tuple[str, str]]:
         if not self.db_url:
             raise PreviewDbUnavailableError("SUPABASE_DB_URL is not configured")
         try:
@@ -347,12 +429,24 @@ class SupabaseExactReconciler:
 
         existing: set[tuple[str, str]] = set()
         sorted_keys = sorted(keys)
+        batch_size = max(1, min(chunk_rows, 5000))
         try:
-            with psycopg.connect(self.db_url, autocommit=True) as connection:
+            raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
+            connect_timeout = compute_connect_timeout(run_deadline)
+            with psycopg.connect(
+                self.db_url,
+                autocommit=True,
+                connect_timeout=connect_timeout,
+            ) as connection:
                 with connection.cursor() as cursor:
-                    cursor.execute("SET TRANSACTION READ ONLY")
-                    for index in range(0, len(sorted_keys), 1000):
-                        batch = sorted_keys[index : index + 1000]
+                    for index in range(0, len(sorted_keys), batch_size):
+                        raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
+                        statement_timeout_ms = compute_statement_timeout_ms(run_deadline)
+                        cursor.execute(
+                            "SELECT set_config('statement_timeout', %s, false)",
+                            (str(statement_timeout_ms),),
+                        )
+                        batch = sorted_keys[index : index + batch_size]
                         values_sql = ",".join(["(%s::timestamptz,%s::text)"] * len(batch))
                         params: list[str] = []
                         for timestamp, device_id in batch:
@@ -372,7 +466,12 @@ class SupabaseExactReconciler:
                         )
                         for timestamp, device_id in cursor.fetchall():
                             existing.add((str(timestamp), str(device_id)))
+                        raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
+        except (PreviewCancelledError, TimeoutError):
+            raise
         except Exception as error:
+            if run_deadline is not None and time.monotonic() > run_deadline:
+                raise TimeoutError("Preview run exceeded the configured time limit") from error
             raise PreviewDbUnavailableError(str(error)) from error
         return existing
 
@@ -392,6 +491,14 @@ class PreviewService:
 
     def run_preview(self, preview_run_id: str, request: PreviewCreateRequest) -> None:
         run_started = time.monotonic()
+        run_deadline = run_started + request.options.max_run_seconds
+        if self.repository.is_cancel_requested(preview_run_id):
+            self.repository.recompute_summary(
+                preview_run_id,
+                status=PreviewRunStatus.cancelled,
+                db_status=PreviewDbStatus.not_checked,
+            )
+            return
         self.repository.update_run(
             preview_run_id,
             status=PreviewRunStatus.running.value,
@@ -411,6 +518,15 @@ class PreviewService:
 
             db_error: str | None = None
             any_db_unreachable = False
+            timed_out = False
+            source_error = next(
+                (
+                    item
+                    for item in local_items
+                    if item.get("reason_code") in {"source_not_configured", "source_missing"}
+                ),
+                None,
+            )
             for index, candidate in enumerate(candidates):
                 if self.repository.is_cancel_requested(preview_run_id):
                     self.repository.recompute_summary(
@@ -419,7 +535,7 @@ class PreviewService:
                         db_status=PreviewDbStatus.not_checked,
                     )
                     return
-                if time.monotonic() - run_started > request.options.max_run_seconds:
+                if time.monotonic() > run_deadline:
                     for remaining_candidate in candidates[index:]:
                         self.repository.insert_item(
                             preview_run_id,
@@ -442,7 +558,25 @@ class PreviewService:
                     )
                     return
                 try:
-                    extraction = self.extractor.extract(candidate, request.options.max_file_seconds)
+                    extraction = self.extractor.extract(
+                        candidate,
+                        request.options.max_file_seconds,
+                        sample_rows=request.options.sample_rows,
+                        force_full_scan=request.options.force_full_scan,
+                        should_cancel=lambda: self.repository.is_cancel_requested(preview_run_id),
+                        run_deadline=run_deadline,
+                    )
+                    if self.repository.is_cancel_requested(preview_run_id):
+                        self.repository.insert_item(
+                            preview_run_id,
+                            build_error_item(candidate, "cancelled", "Preview run was cancelled."),
+                        )
+                        self.repository.recompute_summary(
+                            preview_run_id,
+                            status=PreviewRunStatus.cancelled,
+                            db_status=PreviewDbStatus.not_checked,
+                        )
+                        return
                     if not extraction.local_keys:
                         self.repository.insert_item(
                             preview_run_id,
@@ -456,7 +590,27 @@ class PreviewService:
                         )
                         continue
                     try:
-                        existing = self.reconciler.find_existing_keys(extraction.local_keys)
+                        if time.monotonic() > run_deadline:
+                            raise TimeoutError("Preview run exceeded the configured time limit")
+                        existing = self.reconciler.find_existing_keys(
+                            extraction.local_keys,
+                            should_cancel=lambda: self.repository.is_cancel_requested(preview_run_id),
+                            run_deadline=run_deadline,
+                            chunk_rows=request.options.chunk_rows,
+                        )
+                        if self.repository.is_cancel_requested(preview_run_id):
+                            self.repository.insert_item(
+                                preview_run_id,
+                                build_error_item(candidate, "cancelled", "Preview run was cancelled."),
+                            )
+                            self.repository.recompute_summary(
+                                preview_run_id,
+                                status=PreviewRunStatus.cancelled,
+                                db_status=PreviewDbStatus.not_checked,
+                            )
+                            return
+                        if time.monotonic() > run_deadline:
+                            raise TimeoutError("Preview run exceeded the configured time limit")
                         status, reason_code, reason_text = classify_keys(
                             len(extraction.local_keys),
                             len(existing),
@@ -487,9 +641,26 @@ class PreviewService:
                             ),
                         )
                 except TimeoutError as error:
+                    timed_out = True
                     self.repository.insert_item(
                         preview_run_id,
                         build_error_item(candidate, "timeout", str(error)),
+                    )
+                except PreviewCancelledError:
+                    self.repository.insert_item(
+                        preview_run_id,
+                        build_error_item(candidate, "cancelled", "Preview run was cancelled."),
+                    )
+                    self.repository.recompute_summary(
+                        preview_run_id,
+                        status=PreviewRunStatus.cancelled,
+                        db_status=PreviewDbStatus.not_checked,
+                    )
+                    return
+                except PreviewSchemaMismatchError as error:
+                    self.repository.insert_item(
+                        preview_run_id,
+                        build_error_item(candidate, "schema_mismatch", str(error)),
                     )
                 except Exception as error:
                     self.repository.insert_item(
@@ -504,6 +675,22 @@ class PreviewService:
                     db_status=PreviewDbStatus.unreachable,
                     error_code="db_unreachable",
                     error_message=db_error,
+                )
+            elif timed_out:
+                self.repository.recompute_summary(
+                    preview_run_id,
+                    status=PreviewRunStatus.timed_out,
+                    db_status=PreviewDbStatus.not_checked,
+                    error_code="timeout",
+                    error_message="Preview run exceeded the configured time limit.",
+                )
+            elif source_error is not None and not candidates:
+                self.repository.recompute_summary(
+                    preview_run_id,
+                    status=PreviewRunStatus.failed,
+                    db_status=PreviewDbStatus.not_checked,
+                    error_code=str(source_error.get("reason_code")),
+                    error_message=str(source_error.get("reason_text")),
                 )
             else:
                 self.repository.recompute_summary(
@@ -587,7 +774,7 @@ def build_result_item(
         "reason_code": reason_code,
         "reason_text": reason_text,
         "scan_mode": "full",
-        "sample_row_count": None,
+        "sample_row_count": extraction.sample_row_count,
         "row_count": extraction.row_count,
         "local_key_count": local_count,
         "db_match_count": db_match_count,
@@ -602,7 +789,7 @@ def build_result_item(
 
 
 def build_error_item(candidate: CandidateFile, reason_code: str, reason_text: str) -> dict[str, object]:
-    extraction = KeyExtractionResult(0, set(), None, None, [])
+    extraction = KeyExtractionResult(0, 0, set(), None, None, [])
     return build_result_item(
         candidate,
         PreviewItemStatus.risky,
@@ -631,6 +818,34 @@ def clean(value: object) -> str | None:
     return text or None
 
 
+def raise_if_cancelled_or_timed_out(
+    should_cancel: Callable[[], bool] | None,
+    run_deadline: float | None,
+) -> None:
+    if should_cancel and should_cancel():
+        raise PreviewCancelledError("Preview run was cancelled")
+    if run_deadline is not None and time.monotonic() > run_deadline:
+        raise TimeoutError("Preview run exceeded the configured time limit")
+
+
+def compute_connect_timeout(run_deadline: float | None) -> int:
+    if run_deadline is None:
+        return 10
+    remaining = run_deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Preview run exceeded the configured time limit")
+    return max(1, min(10, int(remaining)))
+
+
+def compute_statement_timeout_ms(run_deadline: float | None) -> int:
+    if run_deadline is None:
+        return 30_000
+    remaining = run_deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Preview run exceeded the configured time limit")
+    return max(250, min(30_000, int(remaining * 1000)))
+
+
 def build_integrated_timestamp(date_value: object, time_value: object) -> str | None:
     date_text = clean(date_value)
     time_text = clean(time_value)
@@ -646,3 +861,11 @@ def build_integrated_timestamp(date_value: object, time_value: object) -> str | 
     if parsed is None:
         return f"{date_text}T{time_text}+09:00"
     return parsed.replace(tzinfo=KST).isoformat()
+
+
+def is_file_locked(path: Path) -> bool:
+    try:
+        with path.open("r+b"):
+            return False
+    except OSError:
+        return True

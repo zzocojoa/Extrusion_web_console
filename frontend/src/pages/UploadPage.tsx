@@ -4,6 +4,7 @@ import { Ban, Database, FileSearch, Play, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
+  ActivePreviewRunError,
   cancelUploadPreview,
   createDefaultPreviewRequest,
   createUploadPreview,
@@ -118,7 +119,8 @@ export function UploadPage() {
     },
   });
 
-  const currentPreview = previewQuery.data ?? latestQuery.data ?? null;
+  const currentPreview = previewRunId ? previewQuery.data ?? null : latestQuery.data ?? null;
+  const activePreviewRunId = currentPreview?.run.previewRunId ?? previewRunId;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -139,13 +141,19 @@ export function UploadPage() {
       setPreviewRunId(response.previewRunId);
       setActiveTab("preview");
     },
+    onError: (error) => {
+      if (error instanceof ActivePreviewRunError) {
+        setPreviewRunId(error.activePreviewRunId);
+        setActiveTab("preview");
+      }
+    },
   });
 
   const cancelMutation = useMutation({
     mutationFn: async () => {
-      if (!previewRunId) throw new Error("No preview run");
-      if (!API_MODE) return { previewRunId, status: "cancelled" as const, pollUrl: "" };
-      return cancelUploadPreview(previewRunId);
+      if (!activePreviewRunId) throw new Error("No preview run");
+      if (!API_MODE) return { previewRunId: activePreviewRunId, status: "cancelled" as const, pollUrl: "" };
+      return cancelUploadPreview(activePreviewRunId);
     },
     onSuccess: () => {
       if (!API_MODE) setMockCancelled(true);
@@ -186,6 +194,10 @@ export function UploadPage() {
             currentPreview?.run.status &&
               ["queued", "running", "cancelling"].includes(currentPreview.run.status),
           )}
+          runPreviewDisabled={createMutation.isPending || Boolean(
+            currentPreview?.run.status &&
+              ["queued", "running", "cancelling"].includes(currentPreview.run.status),
+          )}
           cancelling={cancelMutation.isPending}
           onRangeModeChange={setRangeMode}
           onStartDateChange={setStartDate}
@@ -214,6 +226,7 @@ interface PreviewTabProps {
   search: string;
   sort: PreviewSortKey;
   canCancel: boolean;
+  runPreviewDisabled: boolean;
   cancelling: boolean;
   onRangeModeChange: (value: PreviewRangeMode) => void;
   onStartDateChange: (value: string) => void;
@@ -229,7 +242,11 @@ function PreviewTab(props: PreviewTabProps) {
   const { t } = useTranslation();
   const run = props.currentPreview?.run;
   const summary = run?.summary;
-  const dbWarning = run?.dbStatus === "unreachable" || run?.status === "partial_failed";
+  const runAlert = Boolean(
+    run &&
+      (["partial_failed", "failed", "timed_out"].includes(run.status) ||
+        ["unreachable", "query_failed"].includes(run.dbStatus)),
+  );
 
   return (
     <section className="upload-preview">
@@ -243,7 +260,12 @@ function PreviewTab(props: PreviewTabProps) {
                 {props.cancelling ? t("upload.actions.cancelling") : t("upload.actions.cancelPreview")}
               </button>
             ) : null}
-            <button className="button button--primary" type="button" onClick={props.onRunPreview}>
+            <button
+              className="button button--primary"
+              type="button"
+              onClick={props.onRunPreview}
+              disabled={props.runPreviewDisabled}
+            >
               <FileSearch size={16} aria-hidden="true" />
               {t("upload.actions.runPreview")}
             </button>
@@ -289,7 +311,7 @@ function PreviewTab(props: PreviewTabProps) {
       </div>
 
       {run ? (
-        <div className={`preview-status-strip ${dbWarning ? "preview-status-strip--warning" : ""}`} role={dbWarning ? "alert" : "status"}>
+        <div className={`preview-status-strip ${runAlert ? "preview-status-strip--warning" : ""}`} role={runAlert ? "alert" : "status"}>
           <StatusBadge tone={runTone[run.status]} label={t(`upload.runStatus.${run.status}`)} />
           <span>{t("upload.preview.runId")}: <code>{run.previewRunId}</code></span>
           <span>{t("upload.preview.db")}: {t(`upload.dbStatus.${run.dbStatus}`)}</span>

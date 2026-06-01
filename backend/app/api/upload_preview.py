@@ -1,9 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from backend.app.core.settings import Settings, get_settings
 from backend.app.db.preview_repository import PreviewRepository
@@ -13,6 +13,7 @@ from backend.app.schemas.upload_preview import (
     PreviewCreateResponse,
     PreviewDbStatus,
     PreviewItemDto,
+    PreviewItemStatus,
     PreviewPageDto,
     PreviewRunDetailResponse,
     PreviewRunDto,
@@ -93,20 +94,11 @@ def item_dto(row: Any) -> PreviewItemDto:
 @router.post("", response_model=PreviewCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 def create_preview(
     request: PreviewCreateRequest,
-    response: Response,
     settings: Settings = Depends(get_settings),
     repository: PreviewRepository = Depends(get_preview_repository),
 ) -> PreviewCreateResponse:
-    active_run_id = repository.has_active_run()
-    if active_run_id is not None:
-        response.headers["Location"] = f"/api/upload/preview/{active_run_id}"
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"activePreviewRunId": active_run_id},
-        )
-
     preview_run_id = f"prv_{uuid4().hex[:12]}"
-    repository.create_run(
+    active_run_id = repository.create_run_if_no_active(
         preview_run_id=preview_run_id,
         range_mode=request.range_mode.value,
         start_date=request.start_date.isoformat() if request.start_date else None,
@@ -120,6 +112,12 @@ def create_preview(
         },
         retry_of_run_id=request.retry_of_run_id,
     )
+    if active_run_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"activePreviewRunId": active_run_id},
+            headers={"Location": f"/api/upload/preview/{active_run_id}"},
+        )
     service = PreviewService(settings, repository)
     executor.submit(service.run_preview, preview_run_id, request)
     return PreviewCreateResponse(
@@ -132,10 +130,10 @@ def create_preview(
 @router.get("/latest", response_model=PreviewRunDetailResponse)
 def get_latest_preview(
     completed_only: bool = Query(default=False, alias="completedOnly"),
-    status_filter: str | None = Query(default=None, alias="status"),
+    status_filter: PreviewItemStatus | None = Query(default=None, alias="status"),
     q: str | None = None,
-    sort: str = "status",
-    order: str = "asc",
+    sort: Literal["status", "fileDate", "filename", "uploadRows", "modifiedAt"] = "status",
+    order: Literal["asc", "desc"] = "asc",
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     repository: PreviewRepository = Depends(get_preview_repository),
@@ -145,7 +143,7 @@ def get_latest_preview(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No preview run exists")
     return build_preview_detail(
         row["preview_run_id"],
-        status_filter=status_filter,
+        status_filter=None if status_filter is None else status_filter.value,
         q=q,
         sort=sort,
         order=order,
@@ -187,17 +185,17 @@ def build_preview_detail(
 @router.get("/{previewRunId}", response_model=PreviewRunDetailResponse)
 def preview_detail(
     preview_run_id: str = Path(alias="previewRunId"),
-    status_filter: str | None = Query(default=None, alias="status"),
+    status_filter: PreviewItemStatus | None = Query(default=None, alias="status"),
     q: str | None = None,
-    sort: str = "status",
-    order: str = "asc",
+    sort: Literal["status", "fileDate", "filename", "uploadRows", "modifiedAt"] = "status",
+    order: Literal["asc", "desc"] = "asc",
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     repository: PreviewRepository = Depends(get_preview_repository),
 ) -> PreviewRunDetailResponse:
     return build_preview_detail(
         preview_run_id,
-        status_filter=status_filter,
+        status_filter=None if status_filter is None else status_filter.value,
         q=q,
         sort=sort,
         order=order,

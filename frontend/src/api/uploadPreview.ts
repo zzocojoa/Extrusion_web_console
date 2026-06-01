@@ -112,6 +112,16 @@ export interface PreviewQueryParams {
   offset?: number;
 }
 
+export class ActivePreviewRunError extends Error {
+  activePreviewRunId: string;
+
+  constructor(activePreviewRunId: string) {
+    super("A preview run is already active");
+    this.name = "ActivePreviewRunError";
+    this.activePreviewRunId = activePreviewRunId;
+  }
+}
+
 const defaultOptions: PreviewOptions = {
   stableLagMinutes: 3,
   sampleRows: 200,
@@ -209,6 +219,13 @@ export async function createUploadPreview(
   });
 
   if (!response.ok) {
+    if (response.status === 409) {
+      const raw = await response.json().catch(() => null);
+      const activePreviewRunId = raw?.detail?.activePreviewRunId;
+      if (typeof activePreviewRunId === "string" && activePreviewRunId.length > 0) {
+        throw new ActivePreviewRunError(activePreviewRunId);
+      }
+    }
     throw new Error("Upload preview could not be started");
   }
 

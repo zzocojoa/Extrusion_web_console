@@ -122,3 +122,54 @@ def test_upload_preview_latest_returns_persisted_run_details(tmp_path) -> None:
     assert filtered_payload["run"]["previewRunId"] == "prv_latest"
     assert filtered_payload["items"] == []
     assert filtered_payload["page"]["totalItems"] == 0
+
+
+def test_upload_preview_conflict_returns_active_run_location(tmp_path) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_active",
+        range_mode="today",
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={"rangeMode": "today", "sources": ["plc"]},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.headers["location"] == "/api/upload/preview/prv_active"
+    assert response.json()["detail"]["activePreviewRunId"] == "prv_active"
+
+
+def test_upload_preview_rejects_invalid_list_query_params(tmp_path) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_latest",
+        range_mode="today",
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/upload/preview/latest?status=not_a_status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422

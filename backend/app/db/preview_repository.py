@@ -147,6 +147,75 @@ class PreviewRepository:
             ).fetchone()
         return None if row is None else str(row["preview_run_id"])
 
+    def mark_interrupted_active_runs(self) -> int:
+        now = iso_now()
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE preview_runs
+                SET status = 'failed',
+                    finished_at = COALESCE(finished_at, ?),
+                    error_code = 'interrupted',
+                    error_message = 'Preview was interrupted before completion.',
+                    updated_at = ?
+                WHERE status IN ('queued', 'running', 'cancelling')
+                """,
+                (now, now),
+            )
+            return int(cursor.rowcount)
+
+    def create_run_if_no_active(
+        self,
+        *,
+        preview_run_id: str,
+        range_mode: str,
+        start_date: str | None,
+        end_date: str | None,
+        sources: list[str],
+        options: dict[str, Any],
+        config_snapshot: dict[str, Any],
+        retry_of_run_id: str | None,
+    ) -> str | None:
+        now = iso_now()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT preview_run_id
+                FROM preview_runs
+                WHERE status IN ('queued', 'running', 'cancelling')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is not None:
+                return str(row["preview_run_id"])
+            connection.execute(
+                """
+                INSERT INTO preview_runs(
+                  preview_run_id, status, requested_at, range_mode, start_date, end_date,
+                  sources_json, options_json, config_snapshot_json, retry_of_run_id,
+                  created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    preview_run_id,
+                    PreviewRunStatus.queued.value,
+                    now,
+                    range_mode,
+                    start_date,
+                    end_date,
+                    _json(sources),
+                    _json(options),
+                    _json(config_snapshot),
+                    retry_of_run_id,
+                    now,
+                    now,
+                ),
+            )
+            return None
+
     def create_run(
         self,
         *,
@@ -342,9 +411,9 @@ class PreviewRepository:
             where.append("status = ?")
             params.append(status)
         if query:
-            where.append("(filename LIKE ? OR path LIKE ?)")
+            where.append("(filename LIKE ? OR path LIKE ? OR reason_code LIKE ? OR reason_text LIKE ?)")
             like_query = f"%{query}%"
-            params.extend([like_query, like_query])
+            params.extend([like_query, like_query, like_query, like_query])
         where_sql = " AND ".join(where)
         order_sql = "DESC" if order.lower() == "desc" else "ASC"
         sort_sql = sortable.get(sort, "status")
