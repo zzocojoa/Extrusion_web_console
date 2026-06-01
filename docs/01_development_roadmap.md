@@ -56,7 +56,20 @@ Status on branch `codex/web-console-scaffold`:
 - Done: Korean/English i18n baseline with persisted language selection.
 - Done: backend tests for health and Dashboard mock API contracts.
 - Verified: frontend typecheck/build, backend tests, browser QA at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
-- Not done: real upload jobs, real Supabase runtime control, real CSV scanning, state store persistence, launcher integration.
+- Not done: real upload jobs, real Supabase runtime control, launcher integration.
+
+Status on branch `codex/upload-preview-reconciliation`:
+
+- Done: Upload Preview backend API.
+- Done: SQLite `preview_runs` and `preview_items` persistence for preview results.
+- Done: local CSV candidate scanning for configured source folders.
+- Done: row-streamed `(timestamp, device_id)` key extraction with chunked exact-key DB matching.
+- Done: exact Supabase reconciliation when `EWC_SUPABASE_DB_URL` is configured.
+- Done: DB unreachable path persists run `partial_failed` and item `risky/db_unreachable`.
+- Done: Upload page Preview UI with status summary, table, filters, polling, mock data, and Korean/English i18n.
+- Done: Upload Job tab placeholder remains scoped to future upload execution.
+- Verified: backend tests, frontend typecheck/build, and browser QA for Dashboard regression plus Upload Preview responsive states.
+- Not done: real Start Upload execution, Retry Failed execution, SSE progress/log streaming, local Supabase start/stop/status, audit log persistence, launcher integration.
 
 ## 4. Build Backend Core Ops
 
@@ -71,7 +84,7 @@ Implement backend capabilities in this order:
 7. progress and log streaming
 8. launcher integration
 
-Current scaffold note: only mock Dashboard aggregation endpoints exist. Runtime, upload, config, audit, SSE, and launcher APIs remain future work.
+Current implementation note: mock Dashboard aggregation endpoints and Upload Preview APIs exist. Config write, audit, runtime Supabase/Grafana status, upload job execution, retry, SSE, and launcher APIs remain future work.
 
 ## 5. Build Frontend Core Ops
 
@@ -84,7 +97,7 @@ Implement frontend screens in this order:
 
 The UI should be operational and dense, not marketing-oriented.
 
-Current scaffold note: Dashboard mock UI is implemented first. Settings, Upload, and Logs are placeholders only and must not be treated as Core Ops parity yet.
+Current implementation note: Dashboard mock UI and Upload Preview UI are implemented. Upload Job, Logs, and Settings remain placeholders and must not be treated as Core Ops parity yet. Real Start Upload and Retry Failed behavior is not implemented.
 
 ## 6. Validate Against Legacy Behavior
 
@@ -98,6 +111,11 @@ Compare the new app against the legacy GUI for:
 - local Supabase readiness
 - settings precedence where retained
 
+Status:
+
+- Partially started: Upload Preview now uses legacy scanning/transform behavior as reference and tests exact-key reconciliation.
+- Still required: representative local Supabase integration with real operator CSVs, broader legacy CSV fixture coverage, real upload batching, Smart Sync parity for upload execution, and failure reporting across Logs/Audit.
+
 ## 7. Package And Transition
 
 Create a double-click launcher only after backend/frontend flows are stable.
@@ -109,3 +127,5 @@ Transition from the legacy GUI only after:
 - duplicate risk preview is working
 - upload behavior is tested with representative CSV files
 - README run instructions are accurate
+
+Current transition status: blocked. Duplicate-risk preview foundation is implemented, but legacy GUI replacement still requires real upload jobs, audit logs, progress/log streaming, local Supabase controls, Settings, Logs, and launcher integration.

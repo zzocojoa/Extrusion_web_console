@@ -57,8 +57,10 @@ GET  /api/runtime/supabase/status
 POST /api/runtime/supabase/start       audit: supabase.start
 POST /api/runtime/supabase/stop        audit: supabase.stop
 GET  /api/runtime/grafana/status
-GET  /api/upload/preview
 POST /api/upload/preview               audit: upload.preview
+GET  /api/upload/preview/latest
+GET  /api/upload/preview/{preview_run_id}
+POST /api/upload/preview/{preview_run_id}/cancel
 POST /api/upload/jobs                  audit: upload.start
 POST /api/upload/jobs/{id}/retry       audit: upload.retry
 POST /api/upload/jobs/{id}/pause       audit: upload.pause

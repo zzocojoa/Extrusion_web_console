@@ -150,7 +150,8 @@ Header controls:
 - Custom start/end date fields when Custom is selected.
 - File source summary: PLC dir, temp dir if enabled later.
 - Buttons: Run Preview, Start Upload.
-- Start Upload is disabled when preview is stale, blocked, or absent.
+- Current scaffold: Start Upload is visible but disabled because real upload job execution is not implemented yet.
+- Future upload job phase: Start Upload remains disabled when preview is stale, blocked, or absent.
 
 Preview summary row:
 
@@ -176,8 +177,8 @@ Preview table columns:
 Status meanings:
 
 - `target`: local rows are not represented in DB and file is safe to upload.
-- `already_in_db`: all sampled or exact keys are represented in Supabase.
-- `partial_overlap`: some keys exist and some do not. This is uploadable only with explicit visible warning.
+- `already_in_db`: all extracted exact `(timestamp, device_id)` keys are represented in Supabase.
+- `partial_overlap`: some exact `(timestamp, device_id)` keys exist and some do not. This is not included by default in v1.
 - `risky`: DB unreachable, parse incomplete, schema uncertain, or state mismatch.
 - `excluded`: out of range, locked, unstable, unsupported, empty, already completed in new state store.
 
@@ -186,14 +187,14 @@ Preview interactions:
 - Search filename/path.
 - Filter by status.
 - Sort by status, date, filename, upload rows.
-- Row expand shows detailed reasons and sampled key counts.
-- Bulk selection is not needed for v1. Start Upload uses all eligible `target` rows plus allowed partial rows if backend permits.
+- Row expand shows detailed reasons and exact key counts.
+- Bulk selection is not needed for v1. When upload jobs are implemented, Start Upload uses eligible `target` rows by default.
 
 Risk handling:
 
 - `risky` files are never uploaded by default.
-- `partial_overlap` appears in warning color and requires a visible checkbox in the preview summary: "Include partial-overlap files". Default off.
-- This checkbox state is audit logged as part of upload start params.
+- `partial_overlap` appears in warning color and remains excluded by default.
+- A future include-partial control, if added, must be visible and audit logged as part of upload start params.
 
 ### Upload Job Tab
 
@@ -505,8 +506,8 @@ Dashboard blocked -> Start Local Supabase
 ```text
 Upload Preview -> risky/partial rows visible
   -> Start Upload disabled for risky
-  -> partial rows excluded unless operator enables include-partial checkbox
-  -> audit logs chosen behavior
+  -> partial rows excluded by default
+  -> future override behavior must be audit logged
 ```
 
 ### Settings Override

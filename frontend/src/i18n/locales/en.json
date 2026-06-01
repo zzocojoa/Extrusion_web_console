@@ -87,6 +87,112 @@
     "logs": "The Logs screen is being prepared. Check the Dashboard for recent failures and audit summary.",
     "settings": "The Settings screen is being prepared. Check the Dashboard for local runtime status."
   },
+  "upload": {
+    "tabs": {
+      "label": "Upload sections",
+      "preview": "Preview",
+      "job": "Job"
+    },
+    "preview": {
+      "title": "Upload Preview",
+      "runId": "Run",
+      "db": "DB",
+      "updated": "Updated",
+      "uploadRows": "Upload rows",
+      "loading": "Checking local CSV files and DB reconciliation...",
+      "error": "Upload preview status could not be loaded."
+    },
+    "actions": {
+      "runPreview": "Preview",
+      "startUpload": "Start Upload",
+      "startUploadUnavailable": "Not implemented",
+      "startUploadDisabledReason": "Upload job execution is not implemented in this phase.",
+      "cancelPreview": "Cancel",
+      "cancelling": "Cancelling"
+    },
+    "controls": {
+      "range": "Range",
+      "startDate": "Start",
+      "endDate": "End",
+      "source": "Source: configured PLC folder",
+      "search": "Search filename, path, or reason"
+    },
+    "range": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "last2Days": "Last 2 days",
+      "custom": "Custom"
+    },
+    "filters": {
+      "all": "All statuses"
+    },
+    "sort": {
+      "status": "Status",
+      "fileDate": "File date",
+      "filename": "Filename",
+      "uploadRows": "Upload rows",
+      "modifiedAt": "Modified"
+    },
+    "status": {
+      "target": "Target",
+      "already_in_db": "Already in DB",
+      "partial_overlap": "Partial",
+      "risky": "Risky",
+      "excluded": "Excluded"
+    },
+    "reason": {
+      "db_no_match": "No exact DB keys found. This file is an upload target.",
+      "db_full_match": "All exact timestamp/device_id keys already exist in DB.",
+      "db_partial_match": "Some exact keys already exist in DB. Excluded unless explicitly allowed later.",
+      "schema_mismatch": "CSV schema is incomplete. Timestamp or device_id could not be confirmed.",
+      "file_unstable": "File was modified inside the configured stability lag window.",
+      "db_unreachable": "Local Supabase DB could not be reached.",
+      "timeout": "Preview run exceeded the configured time limit.",
+      "transform_error": "CSV transform failed.",
+      "no_valid_keys": "No valid timestamp/device_id keys were found."
+    },
+    "runStatus": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "partial_failed": "Partial failed",
+      "failed": "Failed",
+      "cancelling": "Cancelling",
+      "cancelled": "Cancelled",
+      "timed_out": "Timed out"
+    },
+    "dbStatus": {
+      "not_checked": "Not checked",
+      "reachable": "Reachable",
+      "unreachable": "Unreachable",
+      "query_failed": "Query failed"
+    },
+    "kind": {
+      "plc": "PLC",
+      "temperature": "Temp"
+    },
+    "table": {
+      "status": "Status",
+      "filename": "Filename",
+      "kind": "Kind",
+      "fileDate": "File date",
+      "rows": "Rows",
+      "dbMatch": "DB match",
+      "uploadRows": "Upload rows",
+      "reason": "Reason",
+      "modified": "Modified",
+      "path": "Path"
+    },
+    "empty": {
+      "title": "No preview run yet",
+      "detail": "Run Preview to compare local CSV files with local Supabase rows.",
+      "noRows": "No rows match the current filters."
+    },
+    "job": {
+      "title": "Upload Job",
+      "placeholder": "Upload job execution is not implemented in this phase. Review Preview results first."
+    }
+  },
   "status": {
     "ready": "Ready",
     "running": "Running",
