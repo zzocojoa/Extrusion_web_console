@@ -20,3 +20,20 @@ def test_dashboard_endpoint_returns_variant_d_mock_contract() -> None:
     assert data["currentJob"]["status"] == "running"
     assert data["recentJobs"]
     assert data["warningQueue"]
+
+
+def test_dashboard_summary_endpoint_returns_same_mock_contract() -> None:
+    client = TestClient(app)
+    response = client.get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall"]["state"] == "running"
+    assert {item["id"] for item in data["statusMatrix"]} == {
+        "upload",
+        "supabase",
+        "storage",
+        "grafana",
+        "state_store",
+    }
+    assert data["currentJob"]["jobId"] == "job_20260601_0912"

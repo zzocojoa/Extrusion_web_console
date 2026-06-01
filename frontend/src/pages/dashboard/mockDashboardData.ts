@@ -194,21 +194,21 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
     data.statusMatrix = data.statusMatrix.map((item) => ({
       ...item,
       tone: item.id === "upload" ? "ready" : item.tone,
-      value: item.id === "upload" ? "ready" : item.value,
+      value: item.id === "upload" ? "대기" : item.value,
       detail: item.id === "upload" ? "미리보기 실행 가능" : item.detail,
     }));
     data.currentJob = null;
-    data.recentJobs = data.recentJobs.map((job, index) =>
-      index === 0
-        ? {
-            ...job,
-            status: "succeeded",
-            filesDone: 18,
-            filesTotal: 18,
-            latestMessage: "최근 업로드 완료, 현재 실행 중인 작업 없음",
-          }
-        : job,
-    );
+    data.recentJobs = data.recentJobs.map((job, index) => ({
+      ...job,
+      status: "succeeded",
+      filesDone: job.filesTotal,
+      failureCount: 0,
+      warningCount: 0,
+      latestMessage:
+        index === 0
+          ? "최근 업로드 완료, 현재 실행 중인 작업 없음"
+          : "이전 작업 정상 완료",
+    }));
     data.warningQueue = data.warningQueue.map((row) => ({
       ...row,
       tone: "ready",
@@ -258,7 +258,7 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
     data.statusMatrix = data.statusMatrix.map((item) => ({
       ...item,
       tone: item.id === "supabase" || item.id === "upload" ? "blocked" : item.tone,
-      value: item.id === "supabase" ? "unreachable" : item.id === "upload" ? "blocked" : item.value,
+      value: item.id === "supabase" ? "연결 실패" : item.id === "upload" ? "차단됨" : item.value,
       detail:
         item.id === "supabase"
           ? "127.0.0.1:54321 연결 실패"
@@ -387,6 +387,10 @@ export function getLocalizedMockDashboard(
         ? "Linked"
         : item.value === "차단됨"
           ? "Blocked"
+          : item.value === "대기"
+            ? "Idle"
+            : item.value === "연결 실패"
+              ? "Unreachable"
           : item.value === "정상"
             ? "Ready"
             : item.value,
@@ -395,6 +399,8 @@ export function getLocalizedMockDashboard(
         ? "External dashboard"
         : item.detail === "미리보기 실행 가능"
           ? "Preview available"
+          : item.detail === "Docker / VHDX 정상"
+            ? "Docker / VHDX healthy"
           : item.detail === "실패 재시도 2건"
             ? "2 retryable failures"
             : item.detail === "Supabase 복구 필요"

@@ -10,9 +10,17 @@ interface SidebarNavProps {
 
 export function SidebarNav({ activePage, onNavigate }: SidebarNavProps) {
   const { t, i18n } = useTranslation();
+  const nextLanguage = i18n.language === "ko" ? "en" : "ko";
+
+  function changeLanguage() {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("ewc.language", nextLanguage);
+    }
+    void i18n.changeLanguage(nextLanguage);
+  }
 
   return (
-    <aside className="sidebar" aria-label="Primary navigation">
+    <aside className="sidebar" aria-label={t("a11y.primaryNavigation")}>
       <div className="sidebar__brand">
         <span className="sidebar__product">{t("app.name")}</span>
         <span className="sidebar__subtitle">{t("app.subtitle")}</span>
@@ -44,9 +52,9 @@ export function SidebarNav({ activePage, onNavigate }: SidebarNavProps) {
         <button
           className="language-button"
           type="button"
-          onClick={() => i18n.changeLanguage(i18n.language === "ko" ? "en" : "ko")}
+          onClick={changeLanguage}
         >
-          {i18n.language === "ko" ? "English" : "한국어"}
+          {nextLanguage === "en" ? "English" : "한국어"}
         </button>
         <span className="sidebar__version">{t("app.version")}</span>
       </div>

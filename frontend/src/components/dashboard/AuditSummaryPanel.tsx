@@ -17,10 +17,10 @@ interface AuditSummaryPanelProps {
 }
 
 export function AuditSummaryPanel({ rows }: AuditSummaryPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
-    <Panel className="audit-summary-panel" title={t("dashboard.audit.title")}>
+    <Panel className="audit-summary-panel" title={t("dashboard.audit.title")} titleId="audit-summary-title">
       <div className="table-scroll">
         <table className="data-table data-table--audit">
           <thead>
@@ -37,10 +37,10 @@ export function AuditSummaryPanel({ rows }: AuditSummaryPanelProps) {
               const tone = resultTone[row.result];
               return (
                 <tr className={`row--${tone}`} key={row.auditId}>
-                  <td><time className="timestamp" dateTime={row.time}>{formatKstTime(row.time)}</time></td>
+                  <td><time className="timestamp" dateTime={row.time}>{formatKstTime(row.time, i18n.language)}</time></td>
                   <td><StatusBadge tone={tone} /></td>
-                  <td className="endpoint">{row.action}</td>
-                  <td>{row.actor}</td>
+                  <td className="endpoint truncate">{row.action}</td>
+                  <td className="truncate">{row.actor}</td>
                   <td className="truncate">{row.summary}</td>
                 </tr>
               );

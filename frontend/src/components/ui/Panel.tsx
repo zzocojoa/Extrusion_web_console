@@ -4,13 +4,16 @@ interface PanelProps extends PropsWithChildren {
   title: string;
   className?: string;
   action?: ReactNode;
+  titleId?: string;
 }
 
-export function Panel({ title, className = "", action, children }: PanelProps) {
+export function Panel({ title, className = "", action, children, titleId }: PanelProps) {
+  const headingId = titleId ?? `${className || "panel"}-title`;
+
   return (
-    <section className={`panel ${className}`} aria-labelledby={`${title}-title`}>
+    <section className={`panel ${className}`} aria-labelledby={headingId}>
       <div className="panel__header">
-        <h2 id={`${title}-title`}>{title}</h2>
+        <h2 id={headingId}>{title}</h2>
         {action}
       </div>
       {children}

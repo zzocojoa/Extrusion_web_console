@@ -11,10 +11,10 @@ interface RecentJobsPanelProps {
 }
 
 export function RecentJobsPanel({ jobs, currentJob }: RecentJobsPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
-    <Panel className="recent-jobs-panel" title={t("dashboard.jobs.title")}>
+    <Panel className="recent-jobs-panel" title={t("dashboard.jobs.title")} titleId="recent-jobs-title">
       {currentJob ? (
         <div className="current-job">
           <div>
@@ -50,10 +50,10 @@ export function RecentJobsPanel({ jobs, currentJob }: RecentJobsPanelProps) {
             {jobs.map((job) => (
               <tr className={`row--${statusToneForJob(job.status)}`} key={job.jobId}>
                 <td><StatusBadge tone={statusToneForJob(job.status)} /></td>
-                <td><time className="timestamp" dateTime={job.startedAt}>{formatKstTime(job.startedAt)}</time></td>
+                <td><time className="timestamp" dateTime={job.startedAt}>{formatKstTime(job.startedAt, i18n.language)}</time></td>
                 <td>{t(`mode.${job.mode}`)}</td>
                 <td className="num">{job.filesDone}/{job.filesTotal}</td>
-                <td className="num">{formatCount(job.rowsSent)}</td>
+                <td className="num">{formatCount(job.rowsSent, i18n.language)}</td>
                 <td className={job.failureCount > 0 ? "num num--danger" : "num"}>{job.failureCount}</td>
                 <td className="truncate">{job.latestMessage}</td>
               </tr>

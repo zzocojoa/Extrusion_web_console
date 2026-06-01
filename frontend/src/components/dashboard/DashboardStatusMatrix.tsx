@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import type { StatusMatrixItem } from "../../pages/dashboard/dashboardTypes";
 import { StatusBadge } from "../status/StatusBadge";
 
@@ -6,8 +8,10 @@ interface DashboardStatusMatrixProps {
 }
 
 export function DashboardStatusMatrix({ items }: DashboardStatusMatrixProps) {
+  const { t } = useTranslation();
+
   return (
-    <section className="dashboard-status-matrix" aria-label="Runtime and upload summary">
+    <section className="dashboard-status-matrix" aria-label={t("a11y.runtimeUploadSummary")}>
       {items.map((item) => (
         <article className={`status-cell status-cell--${item.tone}`} key={item.id}>
           <div className="status-cell__top">

@@ -12,6 +12,12 @@
     "logs": "Logs",
     "settings": "Settings"
   },
+  "a11y": {
+    "primaryNavigation": "Primary navigation",
+    "systemStatus": "System status",
+    "runtimeUploadSummary": "Runtime and upload summary",
+    "dashboardDetailSummaries": "Dashboard detail summaries"
+  },
   "dashboard": {
     "title": "Dashboard",
     "loading": "Checking Local Supabase, upload state, and state store...",
@@ -77,9 +83,9 @@
     "settings": "Local runtime and upload configuration"
   },
   "placeholder": {
-    "upload": "Preview and upload job controls are not connected in this scaffold.",
-    "logs": "Job logs and audit logs are not connected in this scaffold.",
-    "settings": "Configuration and environment override state are not connected in this scaffold."
+    "upload": "The Upload screen is being prepared. Check the Dashboard for current status.",
+    "logs": "The Logs screen is being prepared. Check the Dashboard for recent failures and audit summary.",
+    "settings": "The Settings screen is being prepared. Check the Dashboard for local runtime status."
   },
   "status": {
     "ready": "Ready",

@@ -10,10 +10,10 @@ interface RuntimeCheckPanelProps {
 }
 
 export function RuntimeCheckPanel({ rows }: RuntimeCheckPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
-    <Panel className="runtime-check-panel" title={t("dashboard.runtime.title")}>
+    <Panel className="runtime-check-panel" title={t("dashboard.runtime.title")} titleId="runtime-check-title">
       <div className="table-scroll">
         <table className="data-table data-table--runtime">
           <thead>
@@ -32,7 +32,7 @@ export function RuntimeCheckPanel({ rows }: RuntimeCheckPanelProps) {
                 <td className="endpoint truncate">
                   {row.href ? <a href={row.href} target="_blank" rel="noreferrer">{row.detail}</a> : row.detail}
                 </td>
-                <td><time className="timestamp" dateTime={row.lastCheckedAt}>{formatKstTime(row.lastCheckedAt)}</time></td>
+                <td><time className="timestamp" dateTime={row.lastCheckedAt}>{formatKstTime(row.lastCheckedAt, i18n.language)}</time></td>
               </tr>
             ))}
           </tbody>

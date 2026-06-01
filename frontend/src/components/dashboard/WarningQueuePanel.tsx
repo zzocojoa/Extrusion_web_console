@@ -12,7 +12,7 @@ export function WarningQueuePanel({ rows }: WarningQueuePanelProps) {
   const { t } = useTranslation();
 
   return (
-    <Panel className="warning-queue-panel" title={t("dashboard.warnings.title")}>
+    <Panel className="warning-queue-panel" title={t("dashboard.warnings.title")} titleId="warning-queue-title">
       <div className="table-scroll">
         <table className="data-table data-table--warning">
           <thead>
