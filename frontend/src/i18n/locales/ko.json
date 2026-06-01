@@ -105,6 +105,8 @@
     "actions": {
       "runPreview": "미리보기",
       "startUpload": "업로드 시작",
+      "startUploadUnavailable": "업로드 준비 중",
+      "startUploadDisabledReason": "이번 단계에서는 실제 업로드 작업을 실행하지 않습니다.",
       "cancelPreview": "취소",
       "cancelling": "취소 중"
     },
@@ -137,6 +139,17 @@
       "partial_overlap": "일부 중복",
       "risky": "주의",
       "excluded": "제외"
+    },
+    "reason": {
+      "db_no_match": "DB에서 일치하는 키가 없어 업로드 대상입니다.",
+      "db_full_match": "모든 timestamp/device_id 키가 이미 DB에 있습니다.",
+      "db_partial_match": "일부 키가 이미 DB에 있습니다. 이후 명시적으로 허용하기 전에는 제외됩니다.",
+      "schema_mismatch": "CSV 스키마가 불완전해 timestamp 또는 device_id를 확인할 수 없습니다.",
+      "file_unstable": "설정된 안정 대기 시간 안에 파일이 수정되었습니다.",
+      "db_unreachable": "Local Supabase DB에 연결할 수 없습니다.",
+      "timeout": "미리보기가 설정된 시간 제한을 초과했습니다.",
+      "transform_error": "CSV 변환에 실패했습니다.",
+      "no_valid_keys": "유효한 timestamp/device_id 키가 없습니다."
     },
     "runStatus": {
       "queued": "대기",

@@ -72,6 +72,7 @@ export function UploadPage() {
   const [endDate, setEndDate] = useState<string>("");
   const [previewRunId, setPreviewRunId] = useState<string | null>(null);
   const [mockStartedAt, setMockStartedAt] = useState<number | null>(null);
+  const [mockCancelled, setMockCancelled] = useState(false);
   const [statusFilter, setStatusFilter] = useState<PreviewItemStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<PreviewSortKey>("status");
@@ -96,12 +97,18 @@ export function UploadPage() {
   });
 
   const previewQuery = useQuery({
-    queryKey: ["upload-preview", previewRunId, mockStartedAt, queryParams, i18n.language],
+    queryKey: ["upload-preview", previewRunId, mockStartedAt, mockCancelled, queryParams, i18n.language],
     enabled: activeTab === "preview" && Boolean(previewRunId),
     queryFn: async () => {
       if (!previewRunId) return null;
       if (!API_MODE) {
-        return getMockUploadPreview(previewRunId, mockStartedAt ?? Date.now(), i18n.language, queryParams);
+        return getMockUploadPreview(
+          previewRunId,
+          mockStartedAt ?? Date.now(),
+          i18n.language,
+          queryParams,
+          mockCancelled,
+        );
       }
       return fetchUploadPreview(previewRunId, queryParams);
     },
@@ -123,6 +130,7 @@ export function UploadPage() {
       if (!API_MODE) {
         const id = mockRunId();
         setMockStartedAt(Date.now());
+        setMockCancelled(false);
         return { previewRunId: id, status: "queued" as const, pollUrl: `/api/upload/preview/${id}` };
       }
       return createUploadPreview(request);
@@ -138,6 +146,9 @@ export function UploadPage() {
       if (!previewRunId) throw new Error("No preview run");
       if (!API_MODE) return { previewRunId, status: "cancelled" as const, pollUrl: "" };
       return cancelUploadPreview(previewRunId);
+    },
+    onSuccess: () => {
+      if (!API_MODE) setMockCancelled(true);
     },
   });
 
@@ -236,9 +247,15 @@ function PreviewTab(props: PreviewTabProps) {
               <FileSearch size={16} aria-hidden="true" />
               {t("upload.actions.runPreview")}
             </button>
-            <button className="button button--secondary" type="button" disabled>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled
+              title={t("upload.actions.startUploadDisabledReason")}
+              aria-label={t("upload.actions.startUploadDisabledReason")}
+            >
               <Play size={16} aria-hidden="true" />
-              {t("upload.actions.startUpload")}
+              {t("upload.actions.startUploadUnavailable")}
             </button>
           </div>
         </div>
@@ -391,7 +408,9 @@ function PreviewTable({ items }: { items: PreviewItem[] }) {
               <td className="num">{formatNumber(item.rowCount)}</td>
               <td className="num">{formatNumber(item.dbMatchCount)}</td>
               <td className="num">{formatNumber(item.uploadRowEstimate)}</td>
-              <td className="preview-reason">{item.reasonText}</td>
+              <td className="preview-reason">
+                {t(`upload.reason.${item.reasonCode}`, { defaultValue: item.reasonText })}
+              </td>
               <td className="num">{formatDateTime(item.modifiedAt)}</td>
               <td className="preview-path" title={item.path}>{item.path}</td>
             </tr>

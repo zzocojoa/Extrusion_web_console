@@ -391,6 +391,7 @@ class PreviewService:
         self.reconciler = reconciler or SupabaseExactReconciler(settings.supabase_db_url)
 
     def run_preview(self, preview_run_id: str, request: PreviewCreateRequest) -> None:
+        run_started = time.monotonic()
         self.repository.update_run(
             preview_run_id,
             status=PreviewRunStatus.running.value,
@@ -410,12 +411,34 @@ class PreviewService:
 
             db_error: str | None = None
             any_db_unreachable = False
-            for candidate in candidates:
+            for index, candidate in enumerate(candidates):
                 if self.repository.is_cancel_requested(preview_run_id):
                     self.repository.recompute_summary(
                         preview_run_id,
                         status=PreviewRunStatus.cancelled,
                         db_status=PreviewDbStatus.not_checked,
+                    )
+                    return
+                if time.monotonic() - run_started > request.options.max_run_seconds:
+                    for remaining_candidate in candidates[index:]:
+                        self.repository.insert_item(
+                            preview_run_id,
+                            build_error_item(
+                                remaining_candidate,
+                                "timeout",
+                                "Preview run exceeded the configured time limit.",
+                            ),
+                        )
+                    self.repository.recompute_summary(
+                        preview_run_id,
+                        status=PreviewRunStatus.timed_out,
+                        db_status=(
+                            PreviewDbStatus.unreachable
+                            if any_db_unreachable
+                            else PreviewDbStatus.not_checked
+                        ),
+                        error_code="timeout",
+                        error_message="Preview run exceeded the configured time limit.",
                     )
                     return
                 try:
@@ -543,7 +566,11 @@ def build_result_item(
     error_message: str | None = None,
 ) -> dict[str, object]:
     local_count = len(extraction.local_keys)
-    upload_estimate = max(0, local_count - db_match_count) if status != PreviewItemStatus.excluded else 0
+    upload_estimate = (
+        max(0, local_count - db_match_count)
+        if status in {PreviewItemStatus.target, PreviewItemStatus.partial_overlap}
+        else 0
+    )
     return {
         "file_key": build_file_key(candidate.source.path, candidate.path, candidate.stat),
         "folder_label": candidate.source.label,

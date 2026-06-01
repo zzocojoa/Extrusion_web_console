@@ -169,3 +169,56 @@ def test_preview_service_marks_db_unreachable_candidates_risky(tmp_path: Path) -
     assert total == 1
     assert items[0]["status"] == "risky"
     assert items[0]["reason_code"] == "db_unreachable"
+    assert items[0]["upload_row_estimate"] == 0
+
+
+def test_preview_service_times_out_remaining_candidates(tmp_path: Path, monkeypatch) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        ["Date,Time,Mold1", "2026-06-01,09:00:00,1"],
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": PreviewOptions(
+                stable_lag_minutes=0,
+                max_run_seconds=10,
+            ).model_dump(by_alias=True),
+        }
+    )
+    repository.create_run(
+        preview_run_id="prv_timeout",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=FakeReconciler(),
+    )
+    monotonic_values = iter([0.0, 11.0])
+    monkeypatch.setattr("backend.app.services.upload_preview.time.monotonic", lambda: next(monotonic_values))
+    service.run_preview("prv_timeout", request)
+
+    row = repository.get_run("prv_timeout")
+    items, total = repository.list_items("prv_timeout")
+
+    assert row is not None
+    assert row["status"] == "timed_out"
+    assert row["error_code"] == "timeout"
+    assert total == 1
+    assert items[0]["status"] == "risky"
+    assert items[0]["reason_code"] == "timeout"
+    assert items[0]["upload_row_estimate"] == 0

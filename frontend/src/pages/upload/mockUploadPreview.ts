@@ -208,9 +208,14 @@ export function getMockUploadPreview(
   startedAt: number,
   language: string,
   params: PreviewQueryParams,
+  cancelled = false,
 ): PreviewResponse {
   const dbUnreachable = new URLSearchParams(window.location.search).get("preview") === "db_unreachable";
-  const runStatus: PreviewRunStatus = dbUnreachable ? "partial_failed" : getMockStatus(startedAt);
+  const runStatus: PreviewRunStatus = cancelled
+    ? "cancelled"
+    : dbUnreachable
+      ? "partial_failed"
+      : getMockStatus(startedAt);
   const allItems = dbUnreachable ? buildDbUnreachableItems(language) : localizeItems(language);
   const filteredItems = applyFilters(allItems, params, runStatus);
   const offset = params.offset ?? 0;

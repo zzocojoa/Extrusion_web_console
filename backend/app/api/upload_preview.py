@@ -132,23 +132,37 @@ def create_preview(
 @router.get("/latest", response_model=PreviewRunDetailResponse)
 def get_latest_preview(
     completed_only: bool = Query(default=False, alias="completedOnly"),
-    repository: PreviewRepository = Depends(get_preview_repository),
-) -> PreviewRunDetailResponse:
-    row = repository.get_latest_run(completed_only=completed_only)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No preview run exists")
-    return preview_detail(row["preview_run_id"], repository=repository)
-
-
-@router.get("/{previewRunId}", response_model=PreviewRunDetailResponse)
-def preview_detail(
-    preview_run_id: str = Path(alias="previewRunId"),
     status_filter: str | None = Query(default=None, alias="status"),
     q: str | None = None,
     sort: str = "status",
     order: str = "asc",
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    repository: PreviewRepository = Depends(get_preview_repository),
+) -> PreviewRunDetailResponse:
+    row = repository.get_latest_run(completed_only=completed_only)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No preview run exists")
+    return build_preview_detail(
+        row["preview_run_id"],
+        status_filter=status_filter,
+        q=q,
+        sort=sort,
+        order=order,
+        limit=limit,
+        offset=offset,
+        repository=repository,
+    )
+
+
+def build_preview_detail(
+    preview_run_id: str = Path(alias="previewRunId"),
+    status_filter: str | None = None,
+    q: str | None = None,
+    sort: str = "status",
+    order: str = "asc",
+    limit: int = 100,
+    offset: int = 0,
     repository: PreviewRepository = Depends(get_preview_repository),
 ) -> PreviewRunDetailResponse:
     row = repository.get_run(preview_run_id)
@@ -167,6 +181,29 @@ def preview_detail(
         run=run_dto(row),
         items=[item_dto(item) for item in items],
         page=PreviewPageDto(limit=limit, offset=offset, total_items=total_items),
+    )
+
+
+@router.get("/{previewRunId}", response_model=PreviewRunDetailResponse)
+def preview_detail(
+    preview_run_id: str = Path(alias="previewRunId"),
+    status_filter: str | None = Query(default=None, alias="status"),
+    q: str | None = None,
+    sort: str = "status",
+    order: str = "asc",
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    repository: PreviewRepository = Depends(get_preview_repository),
+) -> PreviewRunDetailResponse:
+    return build_preview_detail(
+        preview_run_id,
+        status_filter=status_filter,
+        q=q,
+        sort=sort,
+        order=order,
+        limit=limit,
+        offset=offset,
+        repository=repository,
     )
 
 

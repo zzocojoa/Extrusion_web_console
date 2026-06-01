@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from backend.app.api.upload_preview import get_preview_repository
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.main import app
+from backend.app.schemas.upload_preview import PreviewDbStatus, PreviewRunStatus
 
 
 def test_upload_preview_routes_are_registered_in_openapi() -> None:
@@ -47,3 +48,77 @@ def test_upload_preview_delete_is_not_a_v1_api() -> None:
     response = client.delete("/api/upload/preview/prv_20260601_000001")
 
     assert response.status_code == 405
+
+
+def test_upload_preview_latest_returns_persisted_run_details(tmp_path) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_latest",
+        range_mode="today",
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+    repository.insert_item(
+        "prv_latest",
+        {
+            "file_key": "PLC/Factory_Integrated_Log_20260601_090000.csv",
+            "folder_label": "PLC",
+            "folder_path": "C:\\data\\plc",
+            "filename": "Factory_Integrated_Log_20260601_090000.csv",
+            "path": "C:\\data\\plc\\Factory_Integrated_Log_20260601_090000.csv",
+            "kind": "plc",
+            "file_date": "2026-06-01",
+            "size_bytes": 100,
+            "mtime_ns": 1,
+            "modified_at": "2026-06-01T09:00:00+09:00",
+            "file_signature": "sig",
+            "status": "risky",
+            "reason_code": "db_unreachable",
+            "reason_text": "Local Supabase DB could not be reached.",
+            "scan_mode": "full",
+            "sample_row_count": 2,
+            "row_count": 2,
+            "local_key_count": 2,
+            "db_match_count": None,
+            "upload_row_estimate": 0,
+            "first_timestamp": "2026-06-01T09:00:00+09:00",
+            "last_timestamp": "2026-06-01T09:01:00+09:00",
+            "device_ids": ["extruder_integrated"],
+            "issues": ["db_unreachable"],
+            "error_code": "db_unreachable",
+            "error_message": "Local Supabase DB could not be reached.",
+        },
+    )
+    repository.recompute_summary(
+        "prv_latest",
+        status=PreviewRunStatus.partial_failed,
+        db_status=PreviewDbStatus.unreachable,
+        error_code="db_unreachable",
+        error_message="Local Supabase DB could not be reached.",
+    )
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/upload/preview/latest")
+        filtered_response = client.get("/api/upload/preview/latest?status=target")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run"]["previewRunId"] == "prv_latest"
+    assert payload["run"]["status"] == "partial_failed"
+    assert payload["run"]["dbStatus"] == "unreachable"
+    assert payload["items"][0]["status"] == "risky"
+    assert payload["items"][0]["reasonCode"] == "db_unreachable"
+
+    assert filtered_response.status_code == 200
+    filtered_payload = filtered_response.json()
+    assert filtered_payload["run"]["previewRunId"] == "prv_latest"
+    assert filtered_payload["items"] == []
+    assert filtered_payload["page"]["totalItems"] == 0

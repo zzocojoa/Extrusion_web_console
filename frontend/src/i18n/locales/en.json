@@ -105,6 +105,8 @@
     "actions": {
       "runPreview": "Preview",
       "startUpload": "Start Upload",
+      "startUploadUnavailable": "Not implemented",
+      "startUploadDisabledReason": "Upload job execution is not implemented in this phase.",
       "cancelPreview": "Cancel",
       "cancelling": "Cancelling"
     },
@@ -137,6 +139,17 @@
       "partial_overlap": "Partial",
       "risky": "Risky",
       "excluded": "Excluded"
+    },
+    "reason": {
+      "db_no_match": "No exact DB keys found. This file is an upload target.",
+      "db_full_match": "All exact timestamp/device_id keys already exist in DB.",
+      "db_partial_match": "Some exact keys already exist in DB. Excluded unless explicitly allowed later.",
+      "schema_mismatch": "CSV schema is incomplete. Timestamp or device_id could not be confirmed.",
+      "file_unstable": "File was modified inside the configured stability lag window.",
+      "db_unreachable": "Local Supabase DB could not be reached.",
+      "timeout": "Preview run exceeded the configured time limit.",
+      "transform_error": "CSV transform failed.",
+      "no_valid_keys": "No valid timestamp/device_id keys were found."
     },
     "runStatus": {
       "queued": "Queued",
