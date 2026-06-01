@@ -6,6 +6,48 @@ Variant D direction: **Data Table-Oriented Console**.
 
 This is not an app implementation. It is the screen contract that lets a frontend implementer build the Dashboard with mock data first, then wire it to the backend APIs defined in `docs/02_engineering_plan.md`.
 
+## Implementation Status
+
+Status on branch `codex/web-console-scaffold` after commit `95ec996`:
+
+- Implemented: React + Vite + TypeScript frontend scaffold.
+- Implemented: FastAPI backend scaffold.
+- Implemented: Dashboard Variant D mock UI using the component structure in this document.
+- Implemented: App shell with Sidebar, Topbar, Dashboard content area, and placeholder pages for Upload, Logs, and Settings.
+- Implemented: Sidebar navigation limited to Dashboard, Upload, Logs, Settings.
+- Implemented: TanStack Query Dashboard query with mock-first behavior.
+- Implemented: frontend mock state switching via `?state=ready|attention|blocked|running`.
+- Implemented: Korean/English i18n baseline with persisted language selection in `localStorage`.
+- Implemented: backend mock endpoints `/api/health`, `/api/dashboard`, and `/api/dashboard/summary`.
+- Implemented: backend tests for health and Dashboard mock contracts.
+
+Not implemented in this scaffold:
+
+- Real upload jobs.
+- Real Upload Preview reconciliation against local CSV and Supabase data.
+- Real local Supabase start/stop/status probing.
+- Real Grafana health probing beyond mock display/link behavior.
+- SQLite state store persistence.
+- Audit log persistence.
+- SSE progress/log streaming.
+- Legacy `core/*` extraction.
+- Double-click launcher.
+
+Verified after implementation:
+
+- `npm run typecheck`
+- `npm run build`
+- `.\.venv\Scripts\python -m pytest tests\backend`
+- Browser QA for `ready`, `attention`, `blocked`, and `running` states.
+- Responsive QA at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
+
+Known scaffold limitations:
+
+- `?state=ready|attention|blocked|running` applies to the frontend mock data path. In `VITE_API_MODE="api"`, the backend mock currently returns the running Dashboard payload.
+- Upload, Logs, and Settings are placeholder pages, not implemented workflows.
+- Dashboard actions are visual/non-mutating shortcuts in the scaffold. They do not start uploads or runtime operations.
+- At `720px` width, the safety banner may exceed the desktop `72-96px` target because Korean/English text wraps for readability.
+
 ## Source Of Truth
 
 - Product scope: `docs/00_product_scope.md`

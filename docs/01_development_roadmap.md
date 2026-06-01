@@ -46,6 +46,18 @@ tests/
 
 Do not port business logic until the skeleton can start and show a health page.
 
+Status on branch `codex/web-console-scaffold`:
+
+- Done: FastAPI backend scaffold with `/api/health`, `/api/dashboard`, and `/api/dashboard/summary`.
+- Done: React + Vite + TypeScript frontend scaffold.
+- Done: Dashboard Variant D mock UI with `ready`, `attention`, `blocked`, and `running` mock states.
+- Done: Sidebar navigation limited to Dashboard, Upload, Logs, Settings.
+- Done: Upload, Logs, and Settings placeholder pages.
+- Done: Korean/English i18n baseline with persisted language selection.
+- Done: backend tests for health and Dashboard mock API contracts.
+- Verified: frontend typecheck/build, backend tests, browser QA at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
+- Not done: real upload jobs, real Supabase runtime control, real CSV scanning, state store persistence, launcher integration.
+
 ## 4. Build Backend Core Ops
 
 Implement backend capabilities in this order:
@@ -59,6 +71,8 @@ Implement backend capabilities in this order:
 7. progress and log streaming
 8. launcher integration
 
+Current scaffold note: only mock Dashboard aggregation endpoints exist. Runtime, upload, config, audit, SSE, and launcher APIs remain future work.
+
 ## 5. Build Frontend Core Ops
 
 Implement frontend screens in this order:
@@ -69,6 +83,8 @@ Implement frontend screens in this order:
 4. Logs
 
 The UI should be operational and dense, not marketing-oriented.
+
+Current scaffold note: Dashboard mock UI is implemented first. Settings, Upload, and Logs are placeholders only and must not be treated as Core Ops parity yet.
 
 ## 6. Validate Against Legacy Behavior
 

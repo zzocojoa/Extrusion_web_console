@@ -8,13 +8,17 @@ This project replaces the legacy Tkinter GUI in `C:\Users\user\Documents\GitHub\
 
 The first runnable scaffold is in place:
 
-- FastAPI backend with `/api/health` and mock `/api/dashboard`.
+- FastAPI backend with `/api/health`, mock `/api/dashboard`, and mock `/api/dashboard/summary`.
 - React + Vite + TypeScript frontend.
 - Dashboard Variant D mock UI using design tokens from `docs/04_design_system.md`.
-- Korean/English i18n baseline.
+- TanStack Query mock-first Dashboard query.
+- Korean/English i18n baseline with language persistence in `localStorage`.
+- Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
 - Upload, Logs, and Settings are placeholder pages only.
 
 No real upload job, Supabase control, CSV scanning, or legacy core extraction is implemented in this scaffold.
+
+The Dashboard scaffold has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 
 ## Repository Layout
 
@@ -59,6 +63,7 @@ Health checks:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/api/health
 Invoke-RestMethod http://127.0.0.1:8000/api/dashboard
+Invoke-RestMethod http://127.0.0.1:8000/api/dashboard/summary
 ```
 
 Backend tests:
@@ -93,6 +98,8 @@ npm run dev
 
 The Vite dev server proxies `/api` to `http://127.0.0.1:8000`.
 
+Important scaffold limitation: `?state=ready|attention|blocked|running` is implemented in the frontend mock data path. When `VITE_API_MODE="api"` is used, the backend mock currently returns the running Dashboard payload.
+
 Mock Dashboard states can be checked with query strings:
 
 ```text
@@ -118,6 +125,16 @@ Dashboard QA:
 - Status uses icon + label + semantic color.
 - Tables keep 36px row height and horizontal scrolling on small widths.
 - Korean/English language toggle does not break buttons, badges, or table cells.
+- Korean/English language choice persists after reload.
+- Ready, attention, blocked, and running mock states are visually distinct and internally consistent.
+
+Browser QA has been run against:
+
+- `http://127.0.0.1:5173/?state=ready`
+- `http://127.0.0.1:5173/?state=attention`
+- `http://127.0.0.1:5173/?state=blocked`
+- `http://127.0.0.1:5173/?state=running`
+- Upload, Logs, and Settings placeholders through sidebar navigation.
 
 ## Source Documents
 
@@ -159,8 +176,12 @@ Out of scope for this scaffold:
 
 - Actual upload job execution
 - Actual Supabase start/stop
+- Actual local Supabase status probing
 - CSV scanning
 - Legacy core code extraction
+- Upload Preview reconciliation
+- SSE progress/log streaming
+- Audit log persistence
 - Data Mgmt
 - Cycle Ops
 - Training Dataset Builder
