@@ -1,0 +1,223 @@
+﻿plan-eng-review 기준으로 기술 설계를 확정합니다. 기준 문서는 [AGENTS.md](/C:/Users/user/Documents/GitHub/Extrusion_web_console/AGENTS.md), [README.md](/C:/Users/user/Documents/GitHub/Extrusion_web_console/README.md), [docs/00_product_scope.md](/C:/Users/user/Documents/GitHub/Extrusion_web_console/docs/00_product_scope.md), [docs/01_development_roadmap.md](/C:/Users/user/Documents/GitHub/Extrusion_web_console/docs/01_development_roadmap.md)를 따릅니다.
+
+**핵심 결정**
+1. Backend: `FastAPI + Uvicorn + Pydantic + SQLite WAL`.
+   이유: 기존 Python 업로드/변환 코드를 가장 적게 흔들고, SSE 스트리밍과 typed API를 깔끔하게 제공한다. Django는 과하고 Flask는 타입/스키마/비동기 운영 이벤트에 약하다.
+
+2. Frontend: `React + Vite + TypeScript + TanStack Query + i18next`.
+   이유: 운영 콘솔 UI에 필요한 상태 관리, SSE 구독, bilingual UI, 컴포넌트 분리가 안정적이다. Production은 FastAPI가 빌드된 static을 서빙한다.
+
+3. Worker: 별도 큐 서버 없이 backend in-process `ThreadPoolExecutor`.
+   단일 operator PC, localhost 전용이므로 Celery/RQ는 과하다. 단, 모든 job/event는 SQLite에 persist해서 재시작 복구한다.
+
+**디렉터리 구조**
+```text
+backend/
+  app/
+    main.py
+    api/
+    core/              # copied/extracted transform/upload/files adapters
+    services/          # upload, preview, runtime, grafana, audit, config
+    db/                # sqlite schema + repositories
+    schemas/           # pydantic DTOs
+frontend/
+  src/
+    api/
+    i18n/
+    pages/             # Dashboard, Settings, Upload, Logs
+    components/
+launcher/
+  start_web_console.ps1
+  start_web_console.bat
+supabase/
+  functions/upload-metrics/
+  migrations/
+grafana/
+  provisioning/
+  dashboards/
+tests/
+  backend/
+  frontend/
+  integration/
+docs/
+```
+
+**기존 자산 재사용**
+- 재사용: [core/upload.py](/C:/Users/user/Documents/GitHub/Extrusion_data/core/upload.py:27)의 `UploadSession*`, `run_upload_session`; [core/transform.py](/C:/Users/user/Documents/GitHub/Extrusion_data/core/transform.py:28)의 PLC/temp 변환; [core/files.py](/C:/Users/user/Documents/GitHub/Extrusion_data/core/files.py:31)의 preflight 모델.
+- 수정 필요: `core/files.py`는 legacy `load_processed()` 의존을 제거하고 새 state repository를 주입한다.
+- 패턴 재사용: [core/state_db.py](/C:/Users/user/Documents/GitHub/Extrusion_data/core/state_db.py:449)의 upload run/file state SQLite 구조.
+- 그대로 유지해야 할 안전장치: [upload-metrics/index.ts](/C:/Users/user/Documents/GitHub/Extrusion_data/supabase/functions/upload-metrics/index.ts:299)의 `onConflict: "timestamp,device_id"`와 [20260421000001_restore_all_metrics_device_scope.sql](/C:/Users/user/Documents/GitHub/Extrusion_data/supabase/migrations/20260421000001_restore_all_metrics_device_scope.sql:61)의 unique constraint.
+
+**Backend API**
+```text
+GET  /api/health
+GET  /api/config
+PUT  /api/config                       audit: settings.save
+GET  /api/runtime/supabase/status
+POST /api/runtime/supabase/start       audit: supabase.start
+POST /api/runtime/supabase/stop        audit: supabase.stop
+GET  /api/runtime/grafana/status
+GET  /api/upload/preview
+POST /api/upload/preview               audit: upload.preview
+POST /api/upload/jobs                  audit: upload.start
+POST /api/upload/jobs/{id}/retry       audit: upload.retry
+POST /api/upload/jobs/{id}/pause       audit: upload.pause
+POST /api/upload/jobs/{id}/resume      audit: upload.resume
+POST /api/upload/jobs/{id}/cancel      audit: upload.cancel
+GET  /api/upload/jobs
+GET  /api/upload/jobs/{id}
+GET  /api/upload/jobs/{id}/events      SSE
+GET  /api/audit
+GET  /api/logs
+```
+
+**State Store**
+새 DB는 `%APPDATA%\ExtrusionWebConsole\web_console_state.db`. 기존 `uploader_state.db`는 기본 import하지 않는다.
+
+필수 테이블:
+```text
+app_config(key, value_json, updated_at)
+audit_log(audit_id, ts, actor, action, target_type, target_id,
+          params_json_redacted, result, error_code, error_message,
+          job_id, request_id)
+upload_jobs(job_id, type, status, requested_at, started_at, finished_at,
+            total_files, success_files, failed_files, warning_count,
+            config_snapshot_json, error_message)
+upload_job_files(job_file_id, job_id, file_key, folder, filename, path,
+                 kind, status, resume_offset, row_count, inserted_count,
+                 last_error, retry_count)
+job_events(event_id, job_id, seq, ts, level, event_type, message, data_json)
+file_state(file_key, legacy_key, folder, filename, state,
+           resume_offset, last_error, retry_count, completed_at, failed_at)
+preview_runs(...)
+preview_items(...)
+```
+
+**Upload Job 상태**
+```text
+queued -> running -> succeeded
+                 -> partial_failed
+                 -> failed
+                 -> pausing -> paused -> running
+                 -> cancelling -> cancelled
+                 -> interrupted
+```
+재시작 시 `running/pausing/cancelling` job은 `interrupted`로 닫고, 파일별 `resume_offset`과 `failed_retry_set`으로 복구 가능하게 한다.
+
+**Preview 데이터 흐름**
+```text
+Local CSV dirs
+  -> candidate scan/files preflight
+  -> transform chunks to canonical rows
+  -> build local keys: (timestamp, device_id)
+  -> query local Supabase by exact key batches
+  -> classify per file:
+       already_in_db | upload_target | partial_overlap | risky | excluded
+  -> persist preview_run + preview_items
+  -> UI table with reasons
+```
+Preview는 “latest timestamp only”로 판단하지 않는다. 정확한 reconciliation은 `(timestamp, device_id)` key batch join/count로 한다. 최종 중복 방지는 DB unique/upsert가 계속 담당한다.
+
+**Upload 데이터 흐름**
+```text
+UI start/retry
+  -> FastAPI validates config + state health
+  -> audit_log row: upload.start
+  -> upload_jobs row queued/running
+  -> worker calls extracted run_upload_session()
+  -> per-file state + job_events persisted
+  -> POST edge function upload-metrics
+  -> Supabase upsert on (timestamp, device_id)
+  -> SSE streams job_events to UI
+  -> final audit success/failure
+```
+
+**Streaming**
+SSE로 확정. `GET /api/upload/jobs/{id}/events?after_seq=N`를 지원하고 `Last-Event-ID` reconnect를 처리한다. 모든 progress/log는 `job_events`에 먼저 저장한 뒤 publish한다. UI가 닫혀도 로그가 사라지지 않는다.
+
+**Config**
+우선순위:
+```text
+built-in defaults
+< %APPDATA%\ExtrusionWebConsole\config.json
+< repo .env / launcher env
+< process environment
+```
+UI 저장은 `config.json`만 갱신한다. env override가 있는 key는 UI에서 “overridden”으로 표시한다. secrets는 audit/log에서 redaction한다. 기존 `compute_edge_url`, `validate_config` 로직은 재사용한다.
+
+**Local Supabase**
+Backend가 고정 allowlist command만 실행한다.
+- status: `wsl.exe ... supabase status`, Docker container health, Edge runtime probe, DB `pg_isready`
+- start: WSL project dir에서 `supabase start`, DB ready wait, required migrations check
+- stop: `supabase stop`
+- fallback: Supabase CLI 없으면 `docker start/stop supabase_*_Extrusion_data` 패턴만 허용
+
+임의 shell 입력은 받지 않는다.
+
+**Grafana**
+웹앱 안에 iframe embedding 없음. `GET /api/runtime/grafana/status`는 configured URL, 기본 `http://localhost:3001`, HTTP status와 Docker container 상태만 확인한다. UI는 “Open Grafana” 링크만 제공한다. 기존 provisioning/dashboard 파일은 복사한다.
+
+**보안**
+- Backend bind: `127.0.0.1` only.
+- CORS: same-origin 또는 `127.0.0.1` dev port만.
+- Mutating API는 launcher가 발급한 per-run local token 필요.
+- Configured PLC/TEMP directory 밖 파일 접근 금지.
+- Runtime commands는 allowlist.
+- audit log append-only. UI delete 없음.
+
+**오류 처리**
+모든 background exception은 세 곳에 기록한다: `job_events`, `upload_jobs/upload_job_files`, `audit_log`. UI Dashboard는 latest failed job과 failed files를 반드시 표시한다. Supabase DB unreachable이면 upload start는 block, preview는 `risky/db_unreachable`로 표시한다.
+
+**테스트 전략**
+- Unit: config precedence, audit redaction, state transitions, SSE replay.
+- Legacy regression copy: [test_smart_sync_regressions.py](/C:/Users/user/Documents/GitHub/Extrusion_data/tests/test_smart_sync_regressions.py), [test_upload_progress_core.py](/C:/Users/user/Documents/GitHub/Extrusion_data/tests/test_upload_progress_core.py).
+- Contract: migration has `all_metrics_timestamp_device_id_key`; edge function uses `onConflict: timestamp,device_id`.
+- Integration: local Supabase preview exact reconciliation, upload retry, DB down failure path.
+- Frontend: Dashboard/Settings/Upload/Logs smoke, Korean/English toggle.
+- Launcher: starts backend, opens browser, reuses port or reports clear error.
+
+**구현 순서**
+1. Scaffold backend/frontend/launcher and health page.
+2. Add SQLite schema, config, audit services.
+3. Extract transform/files/upload core with injected state callbacks.
+4. Copy Supabase function/migrations and Grafana provisioning.
+5. Implement Supabase/Grafana status/start/stop.
+6. Implement upload preview reconciliation.
+7. Implement upload jobs, retry, pause/resume/cancel, SSE.
+8. Build frontend Core Ops screens.
+9. Add double-click launcher.
+10. Run regression, integration, frontend smoke tests.
+
+**Failure Modes**
+```text
+CSV transform fails        -> file failed, job partial_failed, UI visible, tested
+SSE disconnect             -> reconnect by seq, no lost logs, test needed
+Supabase DB down           -> upload blocked, audit failure, integration test
+Edge function 500          -> retry then failed file, existing upload test base
+Backend killed mid-upload  -> startup marks interrupted, resume available, test needed
+Config env override hidden -> UI source_by_key, audit redacted, unit test
+Grafana down               -> status degraded, link still shown, smoke test
+```
+Critical silent-failure gap: none allowed by design. The two “test needed” items must be implemented before v1 signoff.
+
+**Parallelization**
+```text
+Lane A: backend state/config/audit -> upload job service
+Lane B: frontend shell/i18n/pages using mocked API
+Lane C: supabase/grafana asset copy + runtime status service
+Lane D: launcher scripts
+
+Merge A+C before real upload integration.
+Merge A+B before SSE UI verification.
+Launcher waits until backend port/token behavior is stable.
+```
+
+**NOT in scope**
+- Data archive/delete UI: explicitly deferred.
+- Supabase delete management UI: explicitly deferred.
+- Cycle Ops: not Core Ops v1.
+- Training Dataset Builder: separate product area.
+- Cloud Supabase migration: local-only v1.
+- Multi-user LAN web app: violates localhost-only constraint.
+- Grafana iframe embedding: Grafana stays separate.
+- Automatic legacy `uploader_state.db` import: forbidden for default migration path.
