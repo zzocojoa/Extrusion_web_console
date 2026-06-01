@@ -9,14 +9,22 @@ This project replaces the legacy Tkinter GUI in `C:\Users\user\Documents\GitHub\
 The first runnable scaffold is in place:
 
 - FastAPI backend with `/api/health`, mock `/api/dashboard`, and mock `/api/dashboard/summary`.
+- Upload Preview reconciliation API with persisted preview runs/items:
+  - `POST /api/upload/preview`
+  - `GET /api/upload/preview/latest`
+  - `GET /api/upload/preview/{previewRunId}`
+  - `POST /api/upload/preview/{previewRunId}/cancel`
 - React + Vite + TypeScript frontend.
 - Dashboard Variant D mock UI using design tokens from `docs/04_design_system.md`.
+- Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
 - TanStack Query mock-first Dashboard query.
 - Korean/English i18n baseline with language persistence in `localStorage`.
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
-- Upload, Logs, and Settings are placeholder pages only.
+- Logs and Settings are placeholder pages only.
 
-No real upload job, Supabase control, CSV scanning, or legacy core extraction is implemented in this scaffold.
+No real upload job, Supabase control, or legacy upload state import is implemented in this scaffold.
+
+Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
 The Dashboard scaffold has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 
@@ -66,6 +74,16 @@ Invoke-RestMethod http://127.0.0.1:8000/api/dashboard
 Invoke-RestMethod http://127.0.0.1:8000/api/dashboard/summary
 ```
 
+Upload Preview configuration is read from environment-backed settings:
+
+```powershell
+$env:EWC_PLC_DATA_DIR="C:\path\to\plc_csv"
+$env:EWC_SUPABASE_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+$env:EWC_STATE_DB_PATH="C:\tmp\ExtrusionWebConsole\web_console_state.db"
+```
+
+`EWC_SUPABASE_DB_URL` is optional for UI/dev smoke checks. Without it, preview runs still persist and show DB-dependent CSV candidates as risky.
+
 Backend tests:
 
 ```powershell
@@ -100,6 +118,8 @@ The Vite dev server proxies `/api` to `http://127.0.0.1:8000`.
 
 Important scaffold limitation: `?state=ready|attention|blocked|running` is implemented in the frontend mock data path. When `VITE_API_MODE="api"` is used, the backend mock currently returns the running Dashboard payload.
 
+The Upload Preview page also uses mock data by default so all five preview states can be inspected without local Supabase. To use the real backend preview API, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
+
 Mock Dashboard states can be checked with query strings:
 
 ```text
@@ -127,6 +147,14 @@ Dashboard QA:
 - Korean/English language toggle does not break buttons, badges, or table cells.
 - Korean/English language choice persists after reload.
 - Ready, attention, blocked, and running mock states are visually distinct and internally consistent.
+
+Upload Preview QA:
+
+- Preview tab replaces the old Upload placeholder.
+- Preview status table shows `target`, `already_in_db`, `partial_overlap`, `risky`, and `excluded`.
+- Status uses icon + label + semantic color, not color alone.
+- DB unreachable is visible in the run status strip and risky rows.
+- Start Upload is present but disabled because actual upload job execution is not implemented in this phase.
 
 Browser QA has been run against:
 
@@ -177,9 +205,7 @@ Out of scope for this scaffold:
 - Actual upload job execution
 - Actual Supabase start/stop
 - Actual local Supabase status probing
-- CSV scanning
-- Legacy core code extraction
-- Upload Preview reconciliation
+- Full legacy core extraction
 - SSE progress/log streaming
 - Audit log persistence
 - Data Mgmt

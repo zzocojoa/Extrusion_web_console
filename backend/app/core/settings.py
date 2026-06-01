@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,6 +12,10 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     grafana_url: str = "http://localhost:3001"
+    state_db_path: str = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "web_console_state.db")
+    plc_data_dir: str = ""
+    temperature_data_dir: str = ""
+    supabase_db_url: str = ""
     cors_origins: tuple[str, ...] = (
         "http://127.0.0.1:5173",
         "http://localhost:5173",

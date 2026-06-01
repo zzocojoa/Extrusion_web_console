@@ -87,6 +87,99 @@
     "logs": "The Logs screen is being prepared. Check the Dashboard for recent failures and audit summary.",
     "settings": "The Settings screen is being prepared. Check the Dashboard for local runtime status."
   },
+  "upload": {
+    "tabs": {
+      "label": "Upload sections",
+      "preview": "Preview",
+      "job": "Job"
+    },
+    "preview": {
+      "title": "Upload Preview",
+      "runId": "Run",
+      "db": "DB",
+      "updated": "Updated",
+      "uploadRows": "Upload rows",
+      "loading": "Checking local CSV files and DB reconciliation...",
+      "error": "Upload preview status could not be loaded."
+    },
+    "actions": {
+      "runPreview": "Preview",
+      "startUpload": "Start Upload",
+      "cancelPreview": "Cancel",
+      "cancelling": "Cancelling"
+    },
+    "controls": {
+      "range": "Range",
+      "startDate": "Start",
+      "endDate": "End",
+      "source": "Source: configured PLC folder",
+      "search": "Search filename, path, or reason"
+    },
+    "range": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "last2Days": "Last 2 days",
+      "custom": "Custom"
+    },
+    "filters": {
+      "all": "All statuses"
+    },
+    "sort": {
+      "status": "Status",
+      "fileDate": "File date",
+      "filename": "Filename",
+      "uploadRows": "Upload rows",
+      "modifiedAt": "Modified"
+    },
+    "status": {
+      "target": "Target",
+      "already_in_db": "Already in DB",
+      "partial_overlap": "Partial",
+      "risky": "Risky",
+      "excluded": "Excluded"
+    },
+    "runStatus": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "partial_failed": "Partial failed",
+      "failed": "Failed",
+      "cancelling": "Cancelling",
+      "cancelled": "Cancelled",
+      "timed_out": "Timed out"
+    },
+    "dbStatus": {
+      "not_checked": "Not checked",
+      "reachable": "Reachable",
+      "unreachable": "Unreachable",
+      "query_failed": "Query failed"
+    },
+    "kind": {
+      "plc": "PLC",
+      "temperature": "Temp"
+    },
+    "table": {
+      "status": "Status",
+      "filename": "Filename",
+      "kind": "Kind",
+      "fileDate": "File date",
+      "rows": "Rows",
+      "dbMatch": "DB match",
+      "uploadRows": "Upload rows",
+      "reason": "Reason",
+      "modified": "Modified",
+      "path": "Path"
+    },
+    "empty": {
+      "title": "No preview run yet",
+      "detail": "Run Preview to compare local CSV files with local Supabase rows.",
+      "noRows": "No rows match the current filters."
+    },
+    "job": {
+      "title": "Upload Job",
+      "placeholder": "Upload job execution is not implemented in this phase. Review Preview results first."
+    }
+  },
   "status": {
     "ready": "Ready",
     "running": "Running",

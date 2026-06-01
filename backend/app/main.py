@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.health import router as health_router
+from backend.app.api.upload_preview import router as upload_preview_router
 from backend.app.core.settings import get_settings
 
 
@@ -11,6 +12,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
+        openapi_url="/api/openapi.json",
         docs_url="/api/docs",
         redoc_url=None,
     )
@@ -23,6 +25,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health_router)
     app.include_router(dashboard_router)
+    app.include_router(upload_preview_router)
     return app
 
 
