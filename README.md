@@ -22,7 +22,7 @@ The first runnable scaffold is in place:
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
 - Logs and Settings are placeholder pages only.
 
-No real upload job, Supabase control, or legacy upload state import is implemented in this scaffold.
+No real upload job, Supabase control, SSE upload progress, audit log persistence, or legacy upload state import is implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
@@ -54,7 +54,7 @@ docs/
 - Node.js 20 or newer
 - npm
 
-Local Supabase, WSL, Docker, and Grafana are not required for this mock Dashboard scaffold.
+Local Supabase, WSL, Docker, and Grafana are not required for the mock Dashboard and mock Upload Preview paths. Local Supabase is required only when testing real reachable Upload Preview reconciliation against `all_metrics`.
 
 ## Backend Development
 
@@ -82,7 +82,34 @@ $env:EWC_SUPABASE_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgre
 $env:EWC_STATE_DB_PATH="C:\tmp\ExtrusionWebConsole\web_console_state.db"
 ```
 
-`EWC_SUPABASE_DB_URL` is optional for UI/dev smoke checks. Without it, preview runs still persist and show DB-dependent CSV candidates as risky.
+`EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB is unreachable, preview runs still persist and DB-dependent CSV candidates are shown as `risky/db_unreachable` under a `partial_failed` run.
+
+Upload Preview API smoke check:
+
+```powershell
+$body = @{
+  rangeMode = "today"
+  sources = @("plc")
+  options = @{
+    stableLagMinutes = 3
+    sampleRows = 200
+    chunkRows = 20000
+    maxFiles = 500
+    maxRunSeconds = 120
+    maxFileSeconds = 30
+    forceFullScan = $false
+  }
+  retryOfRunId = $null
+} | ConvertTo-Json -Depth 5
+
+$preview = Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/upload/preview `
+  -ContentType "application/json" `
+  -Body $body
+
+Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/$($preview.previewRunId)
+Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/latest
+```
 
 Backend tests:
 
@@ -162,7 +189,7 @@ Browser QA has been run against:
 - `http://127.0.0.1:5173/?state=attention`
 - `http://127.0.0.1:5173/?state=blocked`
 - `http://127.0.0.1:5173/?state=running`
-- Upload, Logs, and Settings placeholders through sidebar navigation.
+- Upload Preview plus Logs and Settings placeholders through sidebar navigation.
 
 ## Source Documents
 
@@ -175,6 +202,7 @@ Browser QA has been run against:
 - `docs/04_design_system.md`
 - `docs/05_dashboard_design_review.md`
 - `docs/06_dashboard_implementation_spec.md`
+- `docs/07_upload_preview_plan.md`
 
 ## Reference Project
 
@@ -213,3 +241,19 @@ Out of scope for this scaffold:
 - Training Dataset Builder
 - Grafana iframe
 - Cloud or multi-user web access
+
+## Troubleshooting
+
+If the backend fails after pulling this branch with `ModuleNotFoundError: psycopg` or a DB driver error, reinstall backend dependencies:
+
+```powershell
+.\.venv\Scripts\python -m pip install -r backend\requirements.txt
+```
+
+If Upload Preview reports `partial_failed` with `risky/db_unreachable`, check:
+
+- `EWC_SUPABASE_DB_URL` is set for the backend process.
+- Local Supabase is running and its Postgres port is reachable, usually `127.0.0.1:54322`.
+- The local database contains `public.all_metrics` with the existing `timestamp, device_id` uniqueness policy.
+
+This failure state is expected when the DB cannot be checked. The app should show the risk in the UI instead of treating files as upload targets.

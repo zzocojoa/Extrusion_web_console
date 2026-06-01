@@ -1,12 +1,85 @@
 # Upload Preview Reconciliation Plan
 
-Status: decision-complete implementation plan
+Status: implemented for v1 scaffold on branch `codex/upload-preview-reconciliation`
 
 Branch: `codex/upload-preview-reconciliation`
 
 Scope: v1 Core Ops Upload Preview only
 
 This document finalizes the engineering plan for Upload Preview reconciliation. It follows `docs/00_product_scope.md`, `docs/02_engineering_plan.md`, `docs/03_ui_ux_plan.md`, and `docs/04_design_system.md`.
+
+## Implementation Result
+
+Implemented on branch `codex/upload-preview-reconciliation`:
+
+- Backend Preview API:
+  - `POST /api/upload/preview`
+  - `GET /api/upload/preview/latest`
+  - `GET /api/upload/preview/{previewRunId}`
+  - `POST /api/upload/preview/{previewRunId}/cancel`
+- SQLite `preview_runs` and `preview_items` persistence in the new web state store.
+- Local CSV candidate scanning from configured backend source folders.
+- Row-streamed `(timestamp, device_id)` key extraction without loading full transformed CSV data into memory.
+- Chunked exact-key DB matching against Supabase/Postgres.
+- Direct local Supabase exact reconciliation through `EWC_SUPABASE_DB_URL` and `public.all_metrics`.
+- DB unreachable handling:
+  - run status `partial_failed`
+  - DB status `unreachable`
+  - DB-dependent candidate rows `risky/db_unreachable`
+  - upload row estimate held at `0` for unreachable DB rows
+- Preview run polling and latest-run retrieval.
+- Upload Preview frontend UI:
+  - Preview and Job tabs
+  - status summary
+  - status/reason table
+  - filters/search/sort/pagination wiring
+  - mock data covering `target`, `already_in_db`, `partial_overlap`, `risky`, and `excluded`
+  - mock DB unreachable and cancel states
+  - Korean/English i18n entries
+- Start Upload remains visible but disabled because real upload execution is not implemented in this phase.
+
+Still not implemented:
+
+- Real upload job execution.
+- Retry Failed execution.
+- SSE upload progress/log streaming.
+- Local Supabase start/stop/status controls.
+- Audit log persistence.
+- Legacy `uploader_state.db` import.
+- Data Mgmt, Cycle Ops, Training Dataset Builder, cloud migration, multi-user LAN access, or Grafana iframe.
+
+## Verification Result
+
+Verified after implementation and QA:
+
+- Backend tests: `.\.venv\Scripts\python -m pytest tests\backend`
+- Frontend typecheck: `npm run typecheck`
+- Frontend build: `npm run build`
+- Browser QA for Dashboard regression:
+  - `http://127.0.0.1:5173/?state=ready`
+  - `http://127.0.0.1:5173/?state=attention`
+  - `http://127.0.0.1:5173/?state=blocked`
+  - `http://127.0.0.1:5173/?state=running`
+- Browser QA for Upload Preview:
+  - default mock preview table
+  - DB unreachable mock state
+  - cancelled mock state
+  - Korean/English language switch
+  - responsive widths `1440x900`, `1366x768`, `1024x768`, and `720x900`
+
+No browser console errors, page errors, or unexpected failed requests were observed during the QA pass.
+
+## Remaining Risks
+
+- Real reachable local Supabase reconciliation still needs operator-environment testing against representative `all_metrics` data.
+- Legacy CSV fixture coverage should be expanded before upload execution work, especially for CP949 files, locked files, unstable files, empty files, and mixed date/source folders.
+- `db_query_failed` and other partial batch-failure paths need more focused tests beyond the DB unreachable path.
+- Request options such as `sampleRows`, `chunkRows`, and `forceFullScan` are accepted by DTOs, but the currently wired service path does not yet use every option as fully as this plan describes.
+- The currently wired service streams CSV rows and chunks DB matching, but it does not use the planned temporary `preview_key_stage` table. Very large CSV behavior is bounded by timeouts and key deduplication, not by temp-table staging yet.
+- Cancel is checked between files in the wired service path. The planned between-chunk cancellation should be revisited before large-file operator rollout.
+- Timeout behavior is bounded and persisted, but mid-file cancellation is not active in the wired service path yet and should be rechecked with larger real CSV files.
+- Preview retry creates new run state, but the full operator retry workflow should be revisited when real upload jobs and audit logs exist.
+- Audit logging is planned but not yet implemented, so preview failures are visible in UI/DB/log output but not yet in the future audit table.
 
 ## Goals
 

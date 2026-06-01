@@ -24,10 +24,8 @@ Status on branch `codex/web-console-scaffold` after commit `95ec996`:
 Not implemented in this scaffold:
 
 - Real upload jobs.
-- Real Upload Preview reconciliation against local CSV and Supabase data.
 - Real local Supabase start/stop/status probing.
 - Real Grafana health probing beyond mock display/link behavior.
-- SQLite state store persistence.
 - Audit log persistence.
 - SSE progress/log streaming.
 - Legacy `core/*` extraction.
@@ -44,9 +42,15 @@ Verified after implementation:
 Known scaffold limitations:
 
 - `?state=ready|attention|blocked|running` applies to the frontend mock data path. In `VITE_API_MODE="api"`, the backend mock currently returns the running Dashboard payload.
-- Upload, Logs, and Settings are placeholder pages, not implemented workflows.
+- On `codex/web-console-scaffold`, Upload, Logs, and Settings were placeholder pages.
+- On `codex/upload-preview-reconciliation`, Upload Preview reconciliation and the Preview tab UI are implemented. Upload Job, Logs, and Settings remain placeholders.
 - Dashboard actions are visual/non-mutating shortcuts in the scaffold. They do not start uploads or runtime operations.
 - At `720px` width, the safety banner may exceed the desktop `72-96px` target because Korean/English text wraps for readability.
+
+Current branch update:
+
+- Implemented after this Dashboard spec: Upload Preview API, SQLite `preview_runs` / `preview_items`, local CSV candidate scanning, row-streamed exact-key extraction, chunked DB matching, Supabase exact reconciliation, DB unreachable handling, Upload Preview UI, polling, mock data, and Korean/English Upload Preview i18n. See `docs/07_upload_preview_plan.md`.
+- Still not implemented: real upload job execution, Retry Failed execution, SSE progress/log streaming, local Supabase start/stop/status controls, audit log persistence, and launcher integration.
 
 ## Source Of Truth
 
