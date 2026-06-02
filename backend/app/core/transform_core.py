@@ -49,17 +49,48 @@ INTEGRATED_PLC_MAP = {
 }
 
 LEGACY_PLC_ALIASES = {
-    "main_pressure": ("main_pressure", "main pressure", "Main Pressure"),
-    "billet_length": ("billet_length", "billet length", "Billet Length"),
-    "container_temp_front": ("container_temp_front", "container temp front", "Container Temp Front"),
-    "container_temp_rear": ("container_temp_rear", "container temp rear", "Container Temp Rear"),
-    "production_counter": ("production_counter", "production counter", "Production Counter"),
-    "current_speed": ("current_speed", "current speed", "Current Speed"),
-    "extrusion_end_position": ("extrusion_end_position", "extrusion end position", "Extrusion End Position"),
+    "time": ("시간", "시각", "Time", "time"),
+    "main_pressure": ("메인압력", "메인 압력", "main_pressure", "main pressure", "Main Pressure"),
+    "billet_length": ("빌렛길이", "빌렛 길이", "billet_length", "billet length", "Billet Length"),
+    "container_temp_front": (
+        "콘테이너온도 앞쪽",
+        "콘테이너 온도 앞쪽",
+        "container_temp_front",
+        "container temp front",
+        "Container Temp Front",
+    ),
+    "container_temp_rear": (
+        "콘테이너온도 뒤쪽",
+        "콘테이너 온도 뒤쪽",
+        "container_temp_rear",
+        "container temp rear",
+        "Container Temp Rear",
+    ),
+    "production_counter": (
+        "생산카운터",
+        "생산 카운터",
+        "생산카운트",
+        "생산 카운트",
+        "production_counter",
+        "production counter",
+        "Production Counter",
+    ),
+    "current_speed": ("현재속도", "현재 속도", "current_speed", "current speed", "Current Speed"),
+    "extrusion_end_position": (
+        "압출종료 위치",
+        "압출 종료 위치",
+        "압출종료위치",
+        "extrusion_end_position",
+        "extrusion end position",
+        "Extrusion End Position",
+    ),
 }
 
 TEMP_ALIASES = {
-    "temperature": ("temperature", "Temperature", "temp", "Temp"),
+    "datetime": ("datetime", "date_time", "날짜시간", "일시"),
+    "date": ("date", "날짜", "일자"),
+    "time": ("time", "시간", "시각"),
+    "temperature": ("temperature", "온도", "temp"),
 }
 
 
@@ -169,7 +200,9 @@ def _legacy_plc_record(file_row: Any, row: dict[str, str]) -> dict[str, Any] | N
     canonical = _canonical_record(row)
     if canonical is not None:
         return canonical
-    time_value = clean(row.get("Time")) or clean(row.get("time"))
+    colmap = legacy_plc_colmap(row)
+    time_column = colmap.get("time")
+    time_value = clean(row.get(time_column)) if time_column else None
     file_date = clean(file_row["file_date"])
     if not time_value or not file_date:
         return None
@@ -177,10 +210,18 @@ def _legacy_plc_record(file_row: Any, row: dict[str, str]) -> dict[str, Any] | N
         "timestamp": f"{file_date}T{time_value}+09:00",
         "device_id": PLC_DEVICE_ID,
     }
-    for target, aliases in LEGACY_PLC_ALIASES.items():
-        value = first_present(row, aliases)
-        if value is not None:
-            record[target] = coerce_metric_value(value, target)
+    for target in (
+        "main_pressure",
+        "billet_length",
+        "container_temp_front",
+        "container_temp_rear",
+        "production_counter",
+        "current_speed",
+        "extrusion_end_position",
+    ):
+        column = colmap.get(target)
+        if column:
+            record[target] = coerce_metric_value(row.get(column), target)
     return record
 
 
@@ -188,27 +229,69 @@ def _temperature_record(row: dict[str, str]) -> dict[str, Any] | None:
     canonical = _canonical_record(row)
     if canonical is not None:
         return canonical
-    timestamp = (
-        clean(row.get("datetime"))
-        or clean(row.get("Datetime"))
-        or clean(row.get("date_time"))
-        or clean(row.get("DateTime"))
-    )
+    normalized = normalized_temperature_row(row)
+    timestamp = None
+    datetime_key = pick_normalized_key(normalized, TEMP_ALIASES["datetime"])
+    if datetime_key:
+        timestamp = build_temperature_timestamp(clean(normalized[datetime_key]), None)
     if not timestamp:
-        date_value = clean(row.get("date")) or clean(row.get("Date"))
-        time_value = clean(row.get("time")) or clean(row.get("Time"))
+        date_key = pick_normalized_key(normalized, TEMP_ALIASES["date"])
+        time_key = pick_normalized_key(normalized, TEMP_ALIASES["time"])
+        date_value = clean(normalized[date_key]) if date_key else None
+        time_value = clean(normalized[time_key]) if time_key else None
         if date_value and time_value:
-            timestamp = build_integrated_timestamp(date_value, time_value)
+            timestamp = build_temperature_timestamp(date_value, time_value)
     if not timestamp:
         return None
     record: dict[str, Any] = {
         "timestamp": timestamp,
         "device_id": TEMPERATURE_DEVICE_ID,
     }
-    value = first_present(row, TEMP_ALIASES["temperature"])
-    if value is not None:
-        record["temperature"] = coerce_metric_value(value, "temperature")
+    temperature_key = pick_normalized_key(normalized, TEMP_ALIASES["temperature"])
+    if temperature_key:
+        record["temperature"] = coerce_metric_value(normalized[temperature_key], "temperature")
     return record
+
+
+def legacy_plc_colmap(row: dict[str, str]) -> dict[str, str]:
+    colmap: dict[str, str] = {}
+    columns = list(row.keys())
+    for target, aliases in LEGACY_PLC_ALIASES.items():
+        for alias in aliases:
+            if alias in row:
+                colmap[target] = alias
+                break
+
+    if "container_temp_rear" not in colmap:
+        used = set(colmap.values())
+        for column in columns:
+            if column in used:
+                continue
+            if ("뒤" in column) or ("후" in column) or ("rear" in column.lower()):
+                colmap["container_temp_rear"] = column
+                break
+
+    if "container_temp_rear" not in colmap and "container_temp_front" in colmap:
+        try:
+            front_index = columns.index(colmap["container_temp_front"])
+        except ValueError:
+            front_index = -1
+        if front_index >= 0:
+            used = set(colmap.values())
+            for column in columns[front_index + 1 :]:
+                if column in used:
+                    continue
+                if is_numeric_like(row.get(column)):
+                    colmap["container_temp_rear"] = column
+                    break
+
+    if "production_counter" not in colmap:
+        for column in columns:
+            if "생산" in column and ("카운터" in column or "카운트" in column):
+                colmap["production_counter"] = column
+                break
+
+    return colmap
 
 
 def build_integrated_timestamp(date_value: object, time_value: object) -> str | None:
@@ -232,6 +315,43 @@ def build_integrated_timestamp(date_value: object, time_value: object) -> str | 
     return f"{date_text}T{time_text}+09:00"
 
 
+def build_temperature_timestamp(date_value: object, time_value: object | None) -> str | None:
+    date_text = clean(date_value)
+    if not date_text:
+        return None
+    timestamp_text = date_text
+    if time_value is not None:
+        time_text = normalize_legacy_time(clean(time_value))
+        if not time_text:
+            return None
+        timestamp_text = f"{date_text} {time_text}"
+    else:
+        timestamp_text = timestamp_text.replace("T", " ")
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S.%f%z",
+        "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y/%m/%d %H:%M:%S.%f",
+        "%Y/%m/%d %H:%M:%S",
+    ):
+        try:
+            parsed = datetime.strptime(timestamp_text, fmt)
+            return parsed.strftime("%Y-%m-%dT%H:%M:%S.%f+09:00")
+        except ValueError:
+            continue
+    return None
+
+
+def normalize_legacy_time(value: str | None) -> str | None:
+    if not value:
+        return None
+    if value.count(":") >= 3:
+        head, tail = value.rsplit(":", 1)
+        return f"{head}.{tail}"
+    return value
+
+
 def canonical_metric_key(value: str) -> str | None:
     stripped = value.strip()
     if stripped in ALLOWED_METRIC_KEYS:
@@ -247,6 +367,33 @@ def normalize_column_name(value: str) -> str:
     while "__" in normalized:
         normalized = normalized.replace("__", "_")
     return normalized.strip("_")
+
+
+def normalized_temperature_row(row: dict[str, str]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for key, value in row.items():
+        normalized_key = key.strip().replace("[", "").replace("]", "").lower()
+        normalized[normalized_key] = value
+    return normalized
+
+
+def pick_normalized_key(row: dict[str, str], aliases: tuple[str, ...]) -> str | None:
+    for alias in aliases:
+        normalized_alias = alias.strip().replace("[", "").replace("]", "").lower()
+        if normalized_alias in row:
+            return normalized_alias
+    return None
+
+
+def is_numeric_like(value: object) -> bool:
+    cleaned = clean(value)
+    if cleaned is None:
+        return False
+    try:
+        float(cleaned)
+    except ValueError:
+        return False
+    return True
 
 
 def first_present(row: dict[str, str], aliases: tuple[str, ...]) -> str | None:

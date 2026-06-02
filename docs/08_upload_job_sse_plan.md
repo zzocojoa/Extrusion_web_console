@@ -16,7 +16,7 @@ Implemented on branch `codex/upload-job-sse`:
 - SSE event replay backed by persisted `job_events`.
 - Startup recovery that marks active upload jobs interrupted.
 - Upload Job frontend tab with progress summary, action buttons, file table, event viewer, mock mode, API mode, and SSE reconnect.
-- Review hardening for canonical legacy-compatible CSV transform, terminal status guards, blocked-path audit logging, idempotent pause events, job-scoped SSE reconnect/replay, and concurrent event sequence writes.
+- Review hardening for canonical legacy-compatible CSV transform, legacy Korean PLC/temperature fixture parity, terminal status guards, blocked-path audit logging, idempotent pause events, job-scoped SSE reconnect/replay, and concurrent event sequence writes.
 
 Verified after implementation:
 
@@ -27,7 +27,7 @@ Verified after implementation:
 Remaining implementation risks:
 
 - Real operator-PC upload against local Supabase Edge Function still needs environment QA with representative CSVs.
-- Broader legacy CSV parity tests should be expanded with representative Korean/integrated PLC and temperature fixtures before v1 replacement.
+- Broader legacy CSV parity tests now cover synthetic Korean PLC and temperature fixtures; real operator-PC representative CSVs still need environment QA before v1 replacement.
 - In-flight Edge HTTP cancellation is bounded by timeout; pause/cancel take effect at the next checkpoint after the HTTP call returns.
 
 This plan follows `AGENTS.md`, `docs/00_product_scope.md`, `docs/02_engineering_plan.md`, `docs/03_ui_ux_plan.md`, `docs/04_design_system.md`, and `docs/07_upload_preview_plan.md`.

@@ -1,7 +1,16 @@
+import json
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from backend.app.core.transform_core import ALLOWED_METRIC_KEYS
 from backend.app.services.upload_jobs import CsvUploadRecordReader
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+LEGACY_TRANSFORM = Path(r"C:\Users\user\Documents\GitHub\Extrusion_data\core\transform.py")
 
 
 def file_row(path: Path, *, kind: str = "plc", file_date: str = "2026-06-02") -> dict[str, object]:
@@ -16,6 +25,59 @@ def collect_records(path: Path, *, kind: str = "plc") -> list[dict[str, object]]
     reader = CsvUploadRecordReader()
     chunks = list(reader.iter_records(file_row(path, kind=kind), chunk_rows=2))
     return [record for chunk in chunks for record in chunk]
+
+
+def collect_records_chunked(path: Path, *, kind: str = "plc") -> list[dict[str, object]]:
+    reader = CsvUploadRecordReader()
+    chunks = list(reader.iter_records(file_row(path, kind=kind), chunk_rows=1))
+    return [record for chunk in chunks for record in chunk]
+
+
+def collect_legacy_records(function_name: str, path: Path, filename: str, *, chunksize: int | None = None) -> list[dict[str, object]]:
+    python = shutil.which("python")
+    if python is None or not LEGACY_TRANSFORM.exists():
+        pytest.skip("Legacy transform reference is not available in this environment.")
+    code = """
+import importlib.util
+import json
+import sys
+
+transform_path, function_name, csv_path, filename, chunksize_text = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("legacy_transform", transform_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+chunksize = None if chunksize_text == "none" else int(chunksize_text)
+result = getattr(module, function_name)(csv_path, filename, chunksize=chunksize)
+frames = list(result) if chunksize is not None else [result]
+records = []
+for frame in frames:
+    if frame.empty:
+        continue
+    clean = frame.where(frame.notna(), None)
+    records.extend(clean.to_dict(orient="records"))
+print(json.dumps(records, ensure_ascii=False))
+"""
+    completed = subprocess.run(
+        [
+            python,
+            "-c",
+            code,
+            str(LEGACY_TRANSFORM),
+            function_name,
+            str(path),
+            filename,
+            "none" if chunksize is None else str(chunksize),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if completed.returncode != 0:
+        if "ModuleNotFoundError" in completed.stderr:
+            pytest.skip(f"Legacy transform dependencies are not available: {completed.stderr}")
+        raise AssertionError(completed.stderr)
+    return json.loads(completed.stdout)
 
 
 def test_upload_reader_filters_unknown_columns_from_edge_payload(tmp_path: Path) -> None:
@@ -82,6 +144,68 @@ def test_upload_reader_maps_temperature_to_legacy_keys(tmp_path: Path) -> None:
         }
     ]
     assert set(records[0]).issubset(ALLOWED_METRIC_KEYS)
+
+
+def test_upload_reader_matches_legacy_plc_korean_mapping_contract() -> None:
+    csv_path = FIXTURES / "legacy_plc_korean.csv"
+
+    records = collect_records(csv_path, kind="plc")
+    legacy_records = collect_legacy_records("build_records_plc", csv_path, "260602_legacy_plc.csv")
+    legacy_chunked_records = collect_legacy_records("build_records_plc", csv_path, "260602_legacy_plc.csv", chunksize=1)
+
+    assert records == [
+        {
+            "timestamp": "2026-06-02T09:00:00+09:00",
+            "device_id": "extruder_plc",
+            "main_pressure": 12.5,
+            "billet_length": 100,
+            "container_temp_front": 450,
+            "container_temp_rear": 440,
+            "production_counter": 7,
+            "current_speed": 8.2,
+            "extrusion_end_position": 99,
+        },
+        {
+            "timestamp": "2026-06-02T09:01:00+09:00",
+            "device_id": "extruder_plc",
+            "main_pressure": 13.5,
+            "billet_length": 101,
+            "container_temp_front": 451,
+            "container_temp_rear": 441,
+            "production_counter": 8,
+            "current_speed": 8.4,
+            "extrusion_end_position": 100,
+        },
+    ]
+    assert records == legacy_records
+    assert records == legacy_chunked_records
+    assert all(set(record).issubset(ALLOWED_METRIC_KEYS) for record in records)
+    assert collect_records_chunked(csv_path, kind="plc") == records
+
+
+def test_upload_reader_matches_legacy_temperature_korean_mapping_contract() -> None:
+    csv_path = FIXTURES / "legacy_temperature_korean.csv"
+
+    records = collect_records(csv_path, kind="temperature")
+    legacy_records = collect_legacy_records("build_records_temp", csv_path, "legacy_temperature_korean.csv")
+    legacy_chunked_records = collect_legacy_records("build_records_temp", csv_path, "legacy_temperature_korean.csv", chunksize=1)
+
+    assert records == [
+        {
+            "timestamp": "2026-06-02T09:00:00.123000+09:00",
+            "device_id": "spot_temperature_sensor",
+            "temperature": 41.5,
+        },
+        {
+            "timestamp": "2026-06-02T09:01:00.000000+09:00",
+            "device_id": "spot_temperature_sensor",
+            "temperature": 42.0,
+        },
+    ]
+    assert records == legacy_records
+    assert records == legacy_chunked_records
+    assert all(set(record).issubset(ALLOWED_METRIC_KEYS) for record in records)
+    assert collect_records_chunked(csv_path, kind="temperature") == records
 
 
 def test_upload_reader_resume_offset_skips_canonical_records(tmp_path: Path) -> None:
