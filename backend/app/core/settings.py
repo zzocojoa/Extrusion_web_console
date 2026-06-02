@@ -16,10 +16,21 @@ class Settings(BaseSettings):
     plc_data_dir: str = ""
     temperature_data_dir: str = ""
     supabase_db_url: str = ""
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_edge_url: str = ""
     cors_origins: tuple[str, ...] = (
         "http://127.0.0.1:5173",
         "http://localhost:5173",
     )
+
+    @property
+    def upload_edge_url(self) -> str:
+        if self.supabase_edge_url:
+            return self.supabase_edge_url
+        if self.supabase_url:
+            return self.supabase_url.rstrip("/") + "/functions/v1/upload-metrics"
+        return ""
 
     model_config = SettingsConfigDict(env_prefix="EWC_", env_file=".env", extra="ignore")
 

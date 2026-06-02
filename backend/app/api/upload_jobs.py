@@ -1,0 +1,341 @@
+import json
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from typing import Any
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
+from starlette.responses import StreamingResponse
+
+from backend.app.core.settings import Settings, get_settings
+from backend.app.db.upload_job_repository import (
+    ACTIVE_JOB_STATUSES,
+    UploadJobRepository,
+    decode_json,
+)
+from backend.app.schemas.upload_jobs import (
+    JobEventCursor,
+    JobEventDto,
+    JobEventLevel,
+    RetryFailedRequest,
+    UploadJobCreateRequest,
+    UploadJobCreateResponse,
+    UploadJobDetailResponse,
+    UploadJobDto,
+    UploadJobFileDto,
+    UploadJobListResponse,
+    UploadJobMode,
+    UploadJobStatus,
+    UploadJobSummary,
+)
+from backend.app.services.upload_jobs import UploadJobService
+
+router = APIRouter(prefix="/api/upload/jobs", tags=["upload-jobs"])
+executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-job")
+
+
+def get_upload_job_repository(settings: Settings = Depends(get_settings)) -> UploadJobRepository:
+    return UploadJobRepository(settings.state_db_path)
+
+
+def _dt(value: str | None) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(value)
+
+
+def job_dto(row: Any) -> UploadJobDto:
+    return UploadJobDto(
+        job_id=row["job_id"],
+        preview_run_id=row["preview_run_id"],
+        retry_of_job_id=row["retry_of_job_id"],
+        mode=UploadJobMode(row["mode"]),
+        status=UploadJobStatus(row["status"]),
+        requested_at=datetime.fromisoformat(row["requested_at"]),
+        started_at=_dt(row["started_at"]),
+        finished_at=_dt(row["finished_at"]),
+        actor=row["actor"],
+        summary=UploadJobSummary(
+            total_files=row["total_files"],
+            succeeded_files=row["succeeded_files"],
+            failed_files=row["failed_files"],
+            cancelled_files=row["cancelled_files"],
+            total_rows=row["total_rows"],
+            processed_rows=row["processed_rows"],
+            uploaded_rows=row["uploaded_rows"],
+            inserted_rows=row["inserted_rows"],
+            warning_count=row["warning_count"],
+        ),
+        error_code=row["error_code"],
+        error_message=row["error_message"],
+    )
+
+
+def file_dto(row: Any) -> UploadJobFileDto:
+    return UploadJobFileDto(
+        job_file_id=row["job_file_id"],
+        job_id=row["job_id"],
+        preview_item_id=row["preview_item_id"],
+        file_key=row["file_key"],
+        folder_label=row["folder_label"],
+        folder_path=row["folder_path"],
+        filename=row["filename"],
+        path=row["path"],
+        kind=row["kind"],
+        file_date=row["file_date"],
+        file_signature=row["file_signature"],
+        status=row["status"],
+        row_count=row["row_count"],
+        processed_rows=row["processed_rows"],
+        uploaded_rows=row["uploaded_rows"],
+        inserted_rows=row["inserted_rows"],
+        resume_offset=row["resume_offset"],
+        retry_count=row["retry_count"],
+        started_at=_dt(row["started_at"]),
+        finished_at=_dt(row["finished_at"]),
+        last_error_code=row["last_error_code"],
+        last_error_message=row["last_error_message"],
+    )
+
+
+def event_dto(row: Any) -> JobEventDto:
+    return JobEventDto(
+        event_id=row["event_id"],
+        job_id=row["job_id"],
+        seq=row["seq"],
+        ts=datetime.fromisoformat(row["ts"]),
+        level=JobEventLevel(row["level"]),
+        event_type=row["event_type"],
+        message=row["message"],
+        job_file_id=row["job_file_id"],
+        data=decode_json(row["data_json"], {}),
+    )
+
+
+def build_job_detail(
+    job_id: str,
+    repository: UploadJobRepository,
+    *,
+    event_tail: int = 100,
+) -> UploadJobDetailResponse:
+    row = repository.get_job(job_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+    latest_seq = repository.latest_event_seq(job_id)
+    after_seq = max(0, latest_seq - event_tail)
+    return UploadJobDetailResponse(
+        job=job_dto(row),
+        files=[file_dto(file_row) for file_row in repository.list_job_files(job_id)],
+        events=[event_dto(event_row) for event_row in repository.list_events(job_id, after_seq=after_seq, limit=event_tail)],
+        event_cursor=JobEventCursor(latest_seq=latest_seq),
+    )
+
+
+def _validate_upload_config(settings: Settings) -> None:
+    if not settings.upload_edge_url or not settings.supabase_anon_key:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason": "upload_config_missing"},
+        )
+
+
+def _validate_preview_uploadable(repository: UploadJobRepository, preview_run_id: str) -> None:
+    run = repository.get_preview_run(preview_run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview run not found")
+    if run["status"] != "succeeded":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason": "preview_not_uploadable", "status": run["status"]},
+        )
+    if run["db_status"] != "reachable":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason": "preview_db_not_reachable", "dbStatus": run["db_status"]},
+        )
+    if repository.count_preview_targets(preview_run_id) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason": "no_upload_targets"},
+        )
+
+
+@router.post("", response_model=UploadJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+def create_upload_job(
+    request: UploadJobCreateRequest,
+    settings: Settings = Depends(get_settings),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> UploadJobCreateResponse:
+    if request.mode != UploadJobMode.preview_targets:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Only preview_targets is supported here")
+    _validate_upload_config(settings)
+    _validate_preview_uploadable(repository, request.preview_run_id)
+    job_id = f"upl_{uuid4().hex[:12]}"
+    active_job_id = repository.create_job_from_preview(
+        job_id=job_id,
+        preview_run_id=request.preview_run_id,
+        options=request.options.model_dump(mode="json", by_alias=True),
+        config_snapshot={
+            "uploadEdgeUrlConfigured": bool(settings.upload_edge_url),
+            "supabaseAnonKeyConfigured": bool(settings.supabase_anon_key),
+            "enableSmartSync": False,
+        },
+    )
+    if active_job_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"activeJobId": active_job_id, "reason": "active_upload_job"},
+            headers={"Location": f"/api/upload/jobs/{active_job_id}"},
+        )
+    executor.submit(UploadJobService(settings, repository).run_job, job_id)
+    return UploadJobCreateResponse(
+        job_id=job_id,
+        status=UploadJobStatus.queued,
+        detail_url=f"/api/upload/jobs/{job_id}",
+        events_url=f"/api/upload/jobs/{job_id}/events",
+    )
+
+
+@router.get("", response_model=UploadJobListResponse)
+def list_upload_jobs(
+    status_filter: UploadJobStatus | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> UploadJobListResponse:
+    rows, total = repository.list_jobs(
+        status=None if status_filter is None else status_filter.value,
+        limit=limit,
+        offset=offset,
+    )
+    return UploadJobListResponse(jobs=[job_dto(row) for row in rows], total=total)
+
+
+@router.get("/latest", response_model=UploadJobDetailResponse)
+def latest_upload_job(repository: UploadJobRepository = Depends(get_upload_job_repository)) -> UploadJobDetailResponse:
+    row = repository.get_latest_job()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No upload job exists")
+    return build_job_detail(row["job_id"], repository)
+
+
+@router.get("/{jobId}", response_model=UploadJobDetailResponse)
+def upload_job_detail(
+    job_id: str = Path(alias="jobId"),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> UploadJobDetailResponse:
+    return build_job_detail(job_id, repository)
+
+
+@router.post("/{jobId}/retry", response_model=UploadJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+def retry_upload_job(
+    request: RetryFailedRequest,
+    job_id: str = Path(alias="jobId"),
+    settings: Settings = Depends(get_settings),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> UploadJobCreateResponse:
+    _validate_upload_config(settings)
+    retry_job_id = f"upl_{uuid4().hex[:12]}"
+    active_job_id, file_count = repository.create_retry_job(
+        job_id=retry_job_id,
+        source_job_id=job_id,
+        include_interrupted=request.include_interrupted,
+        include_cancelled=request.include_cancelled,
+        options=request.options.model_dump(mode="json", by_alias=True),
+        config_snapshot={
+            "uploadEdgeUrlConfigured": bool(settings.upload_edge_url),
+            "supabaseAnonKeyConfigured": bool(settings.supabase_anon_key),
+            "enableSmartSync": False,
+        },
+    )
+    if active_job_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"activeJobId": active_job_id, "reason": "active_upload_job"},
+            headers={"Location": f"/api/upload/jobs/{active_job_id}"},
+        )
+    if file_count < 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"reason": "source_job_not_retryable"})
+    if file_count == 0:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"reason": "no_retryable_files"})
+    executor.submit(UploadJobService(settings, repository).run_job, retry_job_id)
+    return UploadJobCreateResponse(
+        job_id=retry_job_id,
+        status=UploadJobStatus.queued,
+        detail_url=f"/api/upload/jobs/{retry_job_id}",
+        events_url=f"/api/upload/jobs/{retry_job_id}/events",
+    )
+
+
+@router.post("/{jobId}/pause", response_model=UploadJobDetailResponse)
+def pause_upload_job(
+    job_id: str = Path(alias="jobId"),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> UploadJobDetailResponse:
+    next_status = repository.request_pause(job_id)
+    if next_status is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+    if next_status != UploadJobStatus.pausing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"status": next_status.value})
+    return build_job_detail(job_id, repository)
+
+
+@router.post("/{jobId}/resume", response_model=UploadJobDetailResponse)
+def resume_upload_job(
+    job_id: str = Path(alias="jobId"),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> UploadJobDetailResponse:
+    next_status = repository.resume_job(job_id)
+    if next_status is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+    if next_status != UploadJobStatus.running:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"status": next_status.value})
+    return build_job_detail(job_id, repository)
+
+
+@router.post("/{jobId}/cancel", response_model=UploadJobDetailResponse)
+def cancel_upload_job(
+    job_id: str = Path(alias="jobId"),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> UploadJobDetailResponse:
+    next_status = repository.request_cancel(job_id)
+    if next_status is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+    if next_status != UploadJobStatus.cancelling:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"status": next_status.value})
+    return build_job_detail(job_id, repository)
+
+
+@router.get("/{jobId}/events")
+def upload_job_events(
+    job_id: str = Path(alias="jobId"),
+    after_seq: int = Query(default=0, ge=0, alias="afterSeq"),
+    tail: int = Query(default=100, ge=1, le=500),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    repository: UploadJobRepository = Depends(get_upload_job_repository),
+) -> StreamingResponse:
+    if repository.get_job(job_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+    start_after = after_seq
+    if last_event_id and last_event_id.isdigit():
+        start_after = max(start_after, int(last_event_id))
+
+    def stream():
+        seq = max(0, start_after)
+        sent_any = False
+        while True:
+            events = repository.list_events(job_id, after_seq=seq, limit=tail)
+            for row in events:
+                seq = int(row["seq"])
+                sent_any = True
+                payload = event_dto(row).model_dump(mode="json", by_alias=True)
+                yield f"id: {seq}\n"
+                yield f"event: {row['event_type']}\n"
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            job = repository.get_job(job_id)
+            if job is None or (job["status"] not in ACTIVE_JOB_STATUSES and sent_any and not events):
+                yield ": closed\n\n"
+                break
+            yield ": heartbeat\n\n"
+            time.sleep(1)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
