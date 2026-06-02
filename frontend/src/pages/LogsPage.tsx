@@ -90,7 +90,7 @@ function mockAuditLogs(query: AuditQuery, language: string): AuditLogListRespons
     if (query.jobId && item.jobId !== query.jobId) return false;
     if (query.requestId && item.requestId !== query.requestId) return false;
     if (query.q) {
-      const haystack = [item.action, item.targetType, item.targetId, item.jobId, item.requestId, item.errorCode, item.errorMessage]
+      const haystack = [item.auditId, item.action, item.targetType, item.targetId, item.result, item.jobId, item.requestId, item.errorCode, item.actor]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
