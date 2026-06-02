@@ -62,7 +62,11 @@ def redact_command_output(value: str | bytes | None) -> str:
     if isinstance(value, bytes):
         value = value.decode(errors="replace")
     value = re.sub(r"(?i)(authorization:\s*bearer\s+)[^\s]+", r"\1[redacted]", value)
-    value = re.sub(r"(?i)(anon[_-]?key['\"]?\s*[:=]\s*['\"]?)[A-Za-z0-9._-]+", r"\1[redacted]", value)
+    value = re.sub(
+        r"(?i)((?:anon[_-]?key|service[_-]?role|service[_-]?key|supabase_[a-z0-9_]*_key)['\"]?\s*[:=]\s*['\"]?)[A-Za-z0-9._-]+",
+        r"\1[redacted]",
+        value,
+    )
     value = re.sub(r"eyJ[A-Za-z0-9._-]{20,}", "[redacted-jwt]", value)
     return value
 

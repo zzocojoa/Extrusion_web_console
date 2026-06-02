@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from backend.app.services.command_runner import AllowedCommandRunner, CommandPolicyError
+from backend.app.services.command_runner import AllowedCommandRunner, CommandPolicyError, redact_command_output
 
 
 def runner() -> AllowedCommandRunner:
@@ -60,3 +60,25 @@ def test_command_runner_uses_subprocess_without_shell(monkeypatch: pytest.Monkey
 
     assert result.ok
     assert observed["kwargs"]["shell"] is False
+
+
+def test_command_output_redacts_supabase_keys_and_bearer_tokens() -> None:
+    value = """
+    Authorization: Bearer abc.def.ghi
+    anon_key: local-anon-secret
+    service_role: local-service-role-secret
+    service_key=local-service-key-secret
+    service-key: local-service-dash-secret
+    SUPABASE_ANON_KEY=local-anon-env-secret
+    SUPABASE_SERVICE_ROLE_KEY=local-service-env-secret
+    """
+
+    redacted = redact_command_output(value)
+
+    assert "local-anon-secret" not in redacted
+    assert "local-service-role-secret" not in redacted
+    assert "local-service-key-secret" not in redacted
+    assert "local-service-dash-secret" not in redacted
+    assert "local-anon-env-secret" not in redacted
+    assert "local-service-env-secret" not in redacted
+    assert "Bearer [redacted]" in redacted

@@ -1,12 +1,23 @@
 import json
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
 from backend.app.db.preview_repository import iso_now
 
 ACTIVE_RUNTIME_OPERATION_STATUSES = ("queued", "running")
+ACTIVE_PREVIEW_RUN_STATUSES = ("queued", "running", "cancelling")
+ACTIVE_UPLOAD_JOB_STATUSES = ("queued", "running", "pausing", "paused", "cancelling")
+
+
+@dataclass(frozen=True)
+class CreateRuntimeOperationResult:
+    created: bool
+    operation_id: str | None = None
+    conflict_reason: str | None = None
+    active_id: str | None = None
 
 
 def _json(value: Any) -> str:
@@ -141,6 +152,113 @@ class RuntimeRepository:
                 level="info",
                 message=f"Local Supabase {kind} operation queued.",
             )
+
+    def create_operation_if_no_active(
+        self,
+        operation_id: str,
+        *,
+        kind: str,
+        config_snapshot: dict[str, Any],
+        target_id: str,
+    ) -> CreateRuntimeOperationResult:
+        now = iso_now()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            active_runtime = connection.execute(
+                f"""
+                SELECT operation_id AS active_id
+                FROM runtime_operations
+                WHERE status IN ({",".join("?" for _ in ACTIVE_RUNTIME_OPERATION_STATUSES)})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                ACTIVE_RUNTIME_OPERATION_STATUSES,
+            ).fetchone()
+            if active_runtime is not None:
+                return self._blocked_operation_result(
+                    connection,
+                    kind=kind,
+                    target_id=target_id,
+                    reason="active_runtime_operation",
+                    active_id=str(active_runtime["active_id"]),
+                )
+
+            active_upload = connection.execute(
+                f"""
+                SELECT job_id AS active_id
+                FROM upload_jobs
+                WHERE status IN ({",".join("?" for _ in ACTIVE_UPLOAD_JOB_STATUSES)})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                ACTIVE_UPLOAD_JOB_STATUSES,
+            ).fetchone()
+            if active_upload is not None:
+                return self._blocked_operation_result(
+                    connection,
+                    kind=kind,
+                    target_id=target_id,
+                    reason="active_upload_job",
+                    active_id=str(active_upload["active_id"]),
+                )
+
+            active_preview = connection.execute(
+                f"""
+                SELECT preview_run_id AS active_id
+                FROM preview_runs
+                WHERE status IN ({",".join("?" for _ in ACTIVE_PREVIEW_RUN_STATUSES)})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                ACTIVE_PREVIEW_RUN_STATUSES,
+            ).fetchone()
+            if active_preview is not None:
+                return self._blocked_operation_result(
+                    connection,
+                    kind=kind,
+                    target_id=target_id,
+                    reason="active_preview_run",
+                    active_id=str(active_preview["active_id"]),
+                )
+
+            connection.execute(
+                """
+                INSERT INTO runtime_operations(
+                  operation_id, kind, status, requested_at, actor, config_snapshot_json, created_at, updated_at
+                )
+                VALUES (?, ?, 'queued', ?, 'local_operator', ?, ?, ?)
+                """,
+                (operation_id, kind, now, _json(config_snapshot), now, now),
+            )
+            self._append_event_in_connection(
+                connection,
+                operation_id,
+                event_type=f"runtime.{kind}.queued",
+                level="info",
+                message=f"Local Supabase {kind} operation queued.",
+            )
+            return CreateRuntimeOperationResult(created=True, operation_id=operation_id)
+
+    def _blocked_operation_result(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        kind: str,
+        target_id: str,
+        reason: str,
+        active_id: str,
+    ) -> CreateRuntimeOperationResult:
+        self._append_audit_in_connection(
+            connection,
+            action=f"runtime.{kind}",
+            target_type="local_supabase",
+            target_id=target_id,
+            params={"activeId": active_id},
+            result="blocked",
+            error_code=reason,
+            error_message=reason,
+        )
+        return CreateRuntimeOperationResult(created=False, conflict_reason=reason, active_id=active_id)
 
     def mark_running(self, operation_id: str) -> None:
         now = iso_now()

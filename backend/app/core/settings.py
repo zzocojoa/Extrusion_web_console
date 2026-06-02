@@ -38,9 +38,8 @@ class Settings(BaseSettings):
     def upload_edge_url(self) -> str:
         if self.supabase_edge_url:
             return self.supabase_edge_url
-        if self.supabase_url:
-            return self.supabase_url.rstrip("/") + "/functions/v1/upload-metrics"
-        return ""
+        base_url = self.supabase_url or f"http://127.0.0.1:{self.local_supabase_api_port}"
+        return base_url.rstrip("/") + "/functions/v1/upload-metrics"
 
     model_config = SettingsConfigDict(env_prefix="EWC_", env_file=".env", extra="ignore")
 

@@ -32,6 +32,7 @@ class RuntimeControlService:
     ) -> None:
         self.settings = settings
         self.runtime_repository = runtime_repository
+        # These repositories bootstrap shared SQLite tables used by the atomic runtime enqueue guard.
         self.preview_repository = preview_repository
         self.upload_repository = upload_repository
         self.runner = runner
@@ -46,9 +47,8 @@ class RuntimeControlService:
         return self.readiness.check_status(active_operation=active_operation)
 
     def queue_operation(self, kind: RuntimeOperationKind) -> str:
-        self._ensure_mutation_allowed(kind)
         operation_id = f"rt_{uuid4().hex[:12]}"
-        self.runtime_repository.create_operation(
+        result = self.runtime_repository.create_operation_if_no_active(
             operation_id,
             kind=kind.value,
             config_snapshot={
@@ -58,7 +58,10 @@ class RuntimeControlService:
                 "studioPort": self.settings.local_supabase_studio_port,
                 "edgeContainer": self.settings.local_supabase_edge_container,
             },
+            target_id=self.settings.local_supabase_project_id,
         )
+        if not result.created:
+            raise RuntimeConflictError(result.conflict_reason or "active_runtime_operation", result.active_id)
         return operation_id
 
     def run_operation(self, operation_id: str) -> None:
@@ -95,31 +98,6 @@ class RuntimeControlService:
                 error_code="runtime_operation_exception",
                 error_message=str(exc),
             )
-
-    def _ensure_mutation_allowed(self, kind: RuntimeOperationKind) -> None:
-        active_runtime = self.runtime_repository.get_active_operation_id()
-        if active_runtime:
-            self._audit_blocked(kind, "active_runtime_operation", active_runtime)
-            raise RuntimeConflictError("active_runtime_operation", active_runtime)
-        active_upload = self.upload_repository.get_active_job_id()
-        if active_upload:
-            self._audit_blocked(kind, "active_upload_job", active_upload)
-            raise RuntimeConflictError("active_upload_job", active_upload)
-        active_preview = self.preview_repository.has_active_run()
-        if active_preview:
-            self._audit_blocked(kind, "active_preview_run", active_preview)
-            raise RuntimeConflictError("active_preview_run", active_preview)
-
-    def _audit_blocked(self, kind: RuntimeOperationKind, reason: str, active_id: str | None) -> None:
-        self.runtime_repository.append_audit(
-            action=f"runtime.{kind.value}",
-            target_type="local_supabase",
-            target_id=self.settings.local_supabase_project_id,
-            params={"activeId": active_id},
-            result="blocked",
-            error_code=reason,
-            error_message=reason,
-        )
 
     def _run_start(self, operation_id: str) -> None:
         ready, missing, containers = self.readiness.required_containers_exist()
@@ -173,6 +151,21 @@ class RuntimeControlService:
 
     def _run_stop(self, operation_id: str) -> None:
         status = self.readiness.check_status()
+        if status.docker.status.value != "ready":
+            self.runtime_repository.append_event(
+                operation_id,
+                event_type="runtime.stop.docker_unavailable",
+                level="error",
+                message="Docker is unavailable; stop cannot verify local Supabase container state.",
+                data={"dockerStatus": status.docker.status.value, "detail": status.docker.detail},
+            )
+            self._finish_command_failure(
+                operation_id,
+                "runtime.stop",
+                "docker_unavailable",
+                "Docker is unavailable; stop cannot verify local Supabase container state.",
+            )
+            return
         running = [container.name for container in status.containers if container.exists and container.running]
         if not running:
             self.runtime_repository.append_event(operation_id, event_type="runtime.stop.noop", level="info", message="Local Supabase containers are already stopped.")
@@ -191,7 +184,13 @@ class RuntimeControlService:
         deadline = time.monotonic() + self.settings.runtime_readiness_timeout_seconds
         while time.monotonic() < deadline:
             status = self.readiness.check_status()
-            if expect_running and status.api.status.value == "ready" and status.db.status.value == "ready":
+            if (
+                expect_running
+                and status.api.status.value == "ready"
+                and status.db.status.value == "ready"
+                and status.studio.status.value == "ready"
+                and status.edge_runtime.status.value == "ready"
+            ):
                 self._finish_success(operation_id, action)
                 return
             if not expect_running and status.api.status.value != "ready" and status.db.status.value != "ready":
