@@ -24,6 +24,7 @@ Reference project: `C:\Users\user\Documents\GitHub\Extrusion_data`.
 - Do not run Docker prune or Docker compose destructive commands.
 - Do not clean up operational DB data.
 - Do not start Docker Desktop or install WSL/Docker from the web app. The UI reports that the operator must start/fix them manually.
+- Do not bootstrap, create, or initialize a new local Supabase stack in v1.
 - Do not iframe Grafana.
 - Do not change Upload Preview or Upload Job semantics except to block unsafe runtime stop/start conflicts.
 
@@ -47,6 +48,8 @@ Default runtime values:
 | Grafana container | `grafana_local` |
 
 `startup.sh` in the reference project is behavior reference only. The web console must not call it wholesale because it also starts Grafana, syncs Grafana assets, applies a migration, and touches cron. The web console implements a narrower allowlisted runtime controller.
+
+Start/stop control is for the existing `Extrusion_data` runtime only. If required Supabase containers do not already exist, the web console must not try to repair the environment with `supabase start`, `supabase init`, `docker compose`, or any bootstrap/create path. Missing required containers are treated as `blocked|required_container_missing` and require manual operator/developer recovery outside the web app.
 
 ## Backend Modules
 
@@ -228,10 +231,13 @@ Response `202`:
 Rules:
 
 - If an upload job is active, return `409 active_upload_job` and write audit `runtime.supabase.start` with result `blocked`.
+- If a preview run is active, return `409 active_preview_run` and write audit `runtime.supabase.start` with result `blocked`.
 - If another runtime operation is active, return `409 active_runtime_operation` and audit `blocked`.
 - If Docker daemon is unavailable, fail the operation with `docker_daemon_unavailable`.
+- Before any start command runs, exact required Supabase container existence must be checked.
+- If any required container is missing, return or persist `blocked|required_container_missing`. Do not run `supabase start` and do not create a new stack.
 - If all required services are already ready, write a `no_op` runtime event and audit success.
-- Prefer `supabase start` from the fixed `Extrusion_data` project path when Supabase CLI is available.
+- Prefer `supabase start` from the fixed `Extrusion_data` project path only when Supabase CLI is available and all required containers already exist.
 - If Supabase CLI is unavailable, only start exact existing containers in the allowlist. Do not create, remove, or reset containers.
 - If the Edge Runtime container exists but is stopped, `docker start supabase_edge_runtime_Extrusion_data` is allowed.
 - Sanitize all command output before storing events or returning API data. Never expose anon keys or service keys.
@@ -387,11 +393,13 @@ Audit rows use the existing `audit_log` schema:
 
 | Action | Result examples |
 | --- | --- |
-| `runtime.supabase.status` | `success`, `failure` |
+| `runtime.supabase.status` | `failure` for manual refresh failure only |
 | `runtime.supabase.start` | `success`, `failure`, `blocked` |
 | `runtime.supabase.stop` | `success`, `failure`, `blocked` |
 
 Every blocked mutating request writes audit before returning.
+
+Passive status polling success must not write audit rows. Dashboard polling would otherwise spam the audit log and hide operator actions. If status caching is needed, store it in runtime status/event cache only. Audit is reserved for manual start/stop, blocked mutating requests, mutating operation failures, and manual refresh failures.
 
 ## Command Allowlist
 
@@ -418,6 +426,8 @@ docker start <allowed-supabase-container>
 docker start supabase_edge_runtime_Extrusion_data
 ```
 
+`supabase start` is allowed only after the runtime controller has verified that every required `supabase_*_Extrusion_data` container already exists. It is not a bootstrap command. If a required container is missing, the command runner must reject the start flow before command execution.
+
 Allowed stop commands:
 
 ```text
@@ -442,17 +452,23 @@ supabase_analytics_Extrusion_data
 supabase_vector_Extrusion_data
 ```
 
+Required containers for the existence precheck are the full `supabase_*_Extrusion_data` allowlist above. Grafana is intentionally excluded because Grafana remains status/link-only and is not controlled by this API.
+
 Explicitly forbidden:
 
 ```text
 supabase db reset
+supabase init
 supabase stop
+docker run
+docker create
 docker rm
 docker rmi
 docker volume
 docker network rm
 docker prune
 docker system prune
+docker compose up
 docker compose down
 docker compose rm
 docker exec ... psql ... DROP/TRUNCATE/DELETE
@@ -472,17 +488,18 @@ Passive status check:
 3. Run WSL detection with `wsl -l -v`.
 4. Run Docker detection with `docker version`.
 5. List exact Supabase containers with `docker ps -a`.
-6. Inspect required container state and health.
-7. Probe TCP ports:
+6. Verify required containers already exist. Missing required containers produce `blocked|required_container_missing`.
+7. Inspect required container state and health.
+8. Probe TCP ports:
    - 127.0.0.1:25432 DB
    - 127.0.0.1:54321 API
    - 127.0.0.1:54323 Studio
-8. Probe Edge route with a safe unauthenticated request.
-   - `Missing authorization header`, `401`, or a validation error means the route exists.
+9. Probe Edge route with `POST {}` without auth and a short timeout.
+   - `401`, `Missing authorization header`, or a payload validation error means the route exists.
    - Connection refused, DNS error, or timeout means not ready.
-9. Probe Grafana link only:
+10. Probe Grafana link only:
    - TCP/HTTP to configured URL or container state.
-10. Compute operator-facing `overallStatus`, warnings, and errors.
+11. Compute operator-facing `overallStatus`, warnings, and errors.
 ```
 
 Start operation:
@@ -493,13 +510,14 @@ Start operation:
 3. Guard active upload/preview/runtime operation.
 4. Mark operation running.
 5. Run passive precheck.
-6. If already ready, mark succeeded no-op.
-7. If Docker unavailable, fail with operator message.
-8. If Supabase CLI available, run `supabase start` in the fixed reference project path.
-9. If CLI unavailable, start exact existing allowlisted containers only.
-10. If Edge Runtime exists and stopped, `docker start supabase_edge_runtime_Extrusion_data`.
-11. Poll readiness until timeout.
-12. Mark succeeded or failed; append runtime events and audit final result.
+6. If any required container is missing, mark blocked with `required_container_missing`; do not run `supabase start`.
+7. If already ready, mark succeeded no-op.
+8. If Docker unavailable, fail with operator message.
+9. If Supabase CLI available and required containers exist, run `supabase start` in the fixed reference project path.
+10. If CLI unavailable, start exact existing allowlisted containers only.
+11. If Edge Runtime exists and stopped, `docker start supabase_edge_runtime_Extrusion_data`.
+12. Poll readiness until timeout.
+13. Mark succeeded, blocked, or failed; append runtime events and audit final result.
 ```
 
 Stop operation:
@@ -545,7 +563,7 @@ Grafana is not stopped by this API.
 | Docker Desktop not running | `blocked` | `Docker Desktop을 먼저 실행해 주세요.` | failure |
 | Docker daemon unreachable | `blocked` | `Docker daemon에 연결할 수 없습니다.` | failure |
 | Supabase CLI missing | `attention` | `Supabase CLI가 없어 기존 컨테이너만 시작할 수 있습니다.` | warning event |
-| Required container missing | `blocked` | `필수 Supabase 컨테이너가 없습니다. 수동 복구가 필요합니다.` | failure |
+| Required container missing | `blocked|required_container_missing` | `필수 Supabase 컨테이너가 없습니다. 새 스택 생성은 v1에서 지원하지 않습니다.` | blocked/failure |
 | Edge Runtime stopped | `attention` then start allowed | `Edge Runtime 컨테이너를 시작할 수 있습니다.` | success/failure |
 | Port occupied by other process | `blocked` | `필수 포트가 다른 프로세스에 사용 중입니다.` | failure |
 | DB port closed | `blocked` | `DB 포트 25432가 열려 있지 않습니다.` | failure |
@@ -641,12 +659,16 @@ Backend unit tests:
 - Command output redacts JWT-like tokens, anon keys, service keys, and long bearer strings.
 - Runtime status maps Docker/port/container combinations to `ready`, `attention`, `blocked`, and `unknown`.
 - `config.toml` port mismatch becomes `blocked`.
+- Missing required container blocks start as `required_container_missing` and never calls `supabase start`.
+- Command allowlist rejects `supabase start` when required container existence precheck failed.
 - Edge Runtime stopped produces `attention` and start can call exact `docker start`.
 - Start no-op when already ready.
 - Start failure writes `runtime_events` and `audit_log`.
+- Passive status polling success does not write `audit_log`.
 - Stop no-op when already stopped.
 - Stop is blocked by active upload job.
 - Stop is blocked by active preview run.
+- Edge route probe uses unauthenticated `POST {}` with short timeout and maps `401`, `Missing authorization header`, and validation errors to reachable.
 - Runtime event seq is safe under concurrent append.
 
 Backend API tests:
@@ -654,6 +676,8 @@ Backend API tests:
 - `GET /api/runtime/local-supabase` returns expected DTO shape.
 - `POST /api/runtime/local-supabase/start` returns `202` for accepted operation.
 - start returns `409` and audit row for active upload conflict.
+- start returns `409` and audit row for active preview conflict.
+- start returns blocked/failure without command execution when required containers are missing.
 - `POST /api/runtime/local-supabase/stop` returns `202` for accepted operation.
 - stop returns `409` and audit row for active preview/upload conflict.
 - `GET /api/runtime/operations/{id}` returns operation/events.
@@ -692,19 +716,23 @@ git diff --check
 3. Add passive readiness probes for project path, config ports, WSL, Docker, containers, TCP ports, Edge route, and Grafana link.
 4. Add runtime SQLite repository and audit logging for runtime operations.
 5. Add `GET /api/runtime/local-supabase`.
-6. Add `POST /api/runtime/local-supabase/start` with background operation, no-op handling, command output redaction, and readiness polling.
-7. Add `POST /api/runtime/local-supabase/stop` with active job/preview guards and exact `docker stop` allowlist.
-8. Add operation detail endpoint.
-9. Wire Dashboard runtime panel to API status and operation polling.
-10. Add Settings Runtime section with source badges.
-11. Run backend tests, frontend typecheck/build, and browser QA.
-12. Update README with non-destructive runtime control behavior.
+6. Add required-container existence precheck and tests before wiring any start command.
+7. Add `POST /api/runtime/local-supabase/start` with active preview/upload guards, no-op handling, command output redaction, and readiness polling.
+8. Add `POST /api/runtime/local-supabase/stop` with active job/preview guards and exact `docker stop` allowlist.
+9. Add operation detail endpoint.
+10. Wire Dashboard runtime panel to API status and operation polling.
+11. Add Settings Runtime section with source badges.
+12. Run backend tests, frontend typecheck/build, and browser QA.
+13. Update README with non-destructive runtime control behavior.
 
 ## Merge Readiness Criteria
 
 - No command path can execute destructive Docker/Supabase operations.
 - Runtime start/stop failures are visible in API response, Dashboard, runtime events, and audit log.
+- Missing required containers block start before `supabase start` or `docker start`; v1 does not bootstrap/create a new stack.
+- Passive status polling success does not create audit spam.
 - Stop is blocked during active upload jobs and active preview runs.
+- Start is blocked during active upload jobs and active preview runs.
 - DB/API/Studio ports use `25432`, `54321`, and `54323`.
 - Grafana is link/status only.
 - Backend tests, frontend typecheck, frontend build, and `git diff --check` pass.
