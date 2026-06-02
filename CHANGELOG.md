@@ -23,6 +23,7 @@ All notable changes to Extrusion Web Console are documented here.
 - Backend startup now marks active upload jobs as `interrupted` so background upload failures are not silent after a restart.
 - Upload jobs now build Edge Function payload rows through the canonical legacy-compatible transform adapter instead of raw CSV normalization.
 - Legacy Korean PLC and temperature CSV columns now map to the same canonical metric keys as the legacy GUI transform path, with fixture parity coverage.
+- Upload Preview now extracts reconciliation keys through the same canonical transform path as Upload Job, preventing legacy Korean PLC/temperature CSVs from being excluded before Start Upload.
 - Upload job finalization no longer overwrites cancelled, interrupted, or otherwise terminal jobs when a late worker finishes.
 - Mutating upload APIs now audit blocked/failure paths, including missing config, invalid preview state, active job conflicts, and invalid pause/resume/cancel transitions.
 - Pause handling now records `job.paused` only on the `pausing -> paused` transition.
