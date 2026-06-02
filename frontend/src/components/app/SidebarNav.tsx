@@ -22,8 +22,16 @@ export function SidebarNav({ activePage, onNavigate }: SidebarNavProps) {
   return (
     <aside className="sidebar" aria-label={t("a11y.primaryNavigation")}>
       <div className="sidebar__brand">
-        <span className="sidebar__product">{t("app.name")}</span>
-        <span className="sidebar__subtitle">{t("app.subtitle")}</span>
+        <img
+          className="sidebar__brand-mark"
+          src="/brand/logo-mark.svg"
+          alt=""
+          aria-hidden="true"
+        />
+        <span className="sidebar__brand-copy">
+          <span className="sidebar__product">{t("app.name")}</span>
+          <span className="sidebar__subtitle">{t("app.subtitle")}</span>
+        </span>
       </div>
 
       <nav className="sidebar__nav">

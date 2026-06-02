@@ -21,13 +21,28 @@
   padding: 0 var(--space-4);
   border-bottom: 1px solid var(--color-border);
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sidebar__brand-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+}
+
+.sidebar__brand-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
 }
 
 .sidebar__product {
   font-size: var(--text-md);
   font-weight: var(--weight-semibold);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .sidebar__subtitle,
