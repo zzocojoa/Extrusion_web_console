@@ -276,7 +276,11 @@ Append-only hardening:
 
 - Application code must expose only insert/query methods.
 - `AuditRepository` must not expose update/delete methods.
-- Add SQLite triggers in v1 if tests confirm they do not break existing bootstraps:
+- v1 must add SQLite append-only triggers during `audit_log` bootstrap.
+- Existing upload/runtime audit inserts must still pass with the triggers installed.
+- If trigger installation fails, startup must fail loudly in dev/test instead of silently running without append-only protection.
+
+Required triggers:
 
 ```sql
 CREATE TRIGGER IF NOT EXISTS audit_log_no_update
@@ -692,7 +696,8 @@ Required tests:
 - API response does not include raw `params_json_redacted`.
 - API response sanitizes `errorMessage`.
 - Redaction masks secret/token/key/password/authorization/JWT/credential URL values recursively.
-- Append-only triggers reject update/delete if implemented.
+- Append-only triggers reject update/delete.
+- Existing upload/runtime audit insert paths still succeed after trigger bootstrap.
 - Existing upload/runtime audit rows remain readable.
 
 ### 14.2 Backend Regression Tests
