@@ -43,3 +43,8 @@ volumes/
 # Temporary files
 tmp/
 temp/
+
+# bkit-codex
+.bkit-codex/
+.agents/
+.codex/
