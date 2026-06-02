@@ -282,17 +282,19 @@ class AuditRepository:
             clauses.append(
                 """
                 (
-                  action LIKE ? ESCAPE '\\'
+                  CAST(audit_id AS TEXT) LIKE ? ESCAPE '\\'
+                  OR action LIKE ? ESCAPE '\\'
                   OR target_type LIKE ? ESCAPE '\\'
                   OR target_id LIKE ? ESCAPE '\\'
+                  OR result LIKE ? ESCAPE '\\'
                   OR job_id LIKE ? ESCAPE '\\'
                   OR request_id LIKE ? ESCAPE '\\'
                   OR error_code LIKE ? ESCAPE '\\'
-                  OR error_message LIKE ? ESCAPE '\\'
+                  OR actor LIKE ? ESCAPE '\\'
                 )
                 """
             )
-            params.extend([like_value] * 7)
+            params.extend([like_value] * 9)
         if not clauses:
             return "", []
         return f"WHERE {' AND '.join(clauses)}", params

@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,64 @@ def test_audit_repository_filters_sorts_and_paginates_without_searching_params(t
     scalar_search = repository.list_audit_logs(AuditLogFilters(q="docker"))
     assert scalar_search.total_items == 1
     assert scalar_search.rows[0]["error_code"] == "docker_unavailable"
+
+
+def test_audit_repository_q_search_does_not_match_raw_error_message_secrets(tmp_path: Path) -> None:
+    repository = AuditRepository(tmp_path / "state.db")
+    with repository.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO audit_log(
+              ts, actor, action, target_type, target_id, params_json_redacted,
+              result, error_code, error_message, job_id, request_id, created_at
+            )
+            VALUES (
+              '2026-01-01T00:00:00+00:00', 'local_operator', 'upload.failed',
+              'upload_job', 'upl_secret', '{}', 'failure', 'edge_call_failed',
+              'Authorization: Bearer secret-token', 'upl_secret', 'req_secret',
+              '2026-01-01T00:00:00+00:00'
+            )
+            """
+        )
+
+    secret_search = repository.list_audit_logs(AuditLogFilters(q="secret-token"))
+    assert secret_search.total_items == 0
+
+    assert repository.list_audit_logs(AuditLogFilters(q="edge_call_failed")).total_items == 1
+    assert repository.list_audit_logs(AuditLogFilters(q="upload.failed")).total_items == 1
+    assert repository.list_audit_logs(AuditLogFilters(q="upl_secret")).total_items == 1
+    assert repository.list_audit_logs(AuditLogFilters(q="req_secret")).total_items == 1
+    assert repository.list_audit_logs(AuditLogFilters(q="failure")).total_items == 1
+    assert repository.list_audit_logs(AuditLogFilters(q="local_operator")).total_items == 1
+
+
+def test_audit_repository_filters_by_timestamp_range(tmp_path: Path) -> None:
+    repository = AuditRepository(tmp_path / "state.db")
+    with repository.connect() as connection:
+        connection.executemany(
+            """
+            INSERT INTO audit_log(
+              ts, actor, action, target_type, target_id, params_json_redacted,
+              result, error_code, error_message, job_id, request_id, created_at
+            )
+            VALUES (?, 'local_operator', ?, 'upload_job', NULL, '{}', 'success', NULL, NULL, NULL, NULL, ?)
+            """,
+            [
+                ("2026-01-01T00:00:00+00:00", "upload.start", "2026-01-01T00:00:00+00:00"),
+                ("2026-01-02T00:00:00+00:00", "upload.retry", "2026-01-02T00:00:00+00:00"),
+                ("2026-01-03T00:00:00+00:00", "upload.cancel", "2026-01-03T00:00:00+00:00"),
+            ],
+        )
+
+    result = repository.list_audit_logs(
+        AuditLogFilters(
+            from_ts=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            to_ts=datetime(2026, 1, 2, 23, 59, 59, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result.total_items == 1
+    assert result.rows[0]["action"] == "upload.retry"
 
 
 def test_audit_repository_decodes_invalid_params_as_empty_object(tmp_path: Path) -> None:

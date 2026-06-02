@@ -124,15 +124,18 @@ order: desc | asc, default desc
 
 `q` searches only safe scalar columns:
 
+- `audit_id`
 - `action`
 - `target_type`
 - `target_id`
+- `result`
 - `job_id`
 - `request_id`
+- `actor`
 - `error_code`
-- sanitized `error_message`
 
 `q` must not perform deep JSON search on `params_json_redacted` in v1. JSON search is slow, hard to reason about, and easy to misuse as an arbitrary query surface.
+`q` must not search raw `error_message` in v1. API responses sanitize `errorMessage`, but searching the raw column would let an operator infer the presence of secret-bearing diagnostics that were written by older or duplicated audit writer paths.
 
 ### 4.3 Response DTO
 
