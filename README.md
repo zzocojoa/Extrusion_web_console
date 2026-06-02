@@ -118,7 +118,10 @@ Audit Logs API smoke check:
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/api/audit?limit=50"
 Invoke-RestMethod "http://127.0.0.1:8000/api/audit?result=blocked&sort=ts&order=desc"
+Invoke-RestMethod "http://127.0.0.1:8000/api/audit?q=upload.start&limit=10"
 ```
+
+The `q` parameter searches only safe scalar fields such as `auditId`, `action`, `targetType`, `targetId`, `result`, `jobId`, `requestId`, `actor`, and `errorCode`. It does not search raw `error_message` values or raw/redacted params JSON, so legacy rows containing secret-like diagnostics cannot be reverse-searched through `/api/audit`.
 
 Upload Preview API smoke check:
 
@@ -195,7 +198,7 @@ Important scaffold limitation: `?state=ready|attention|blocked|running` is imple
 
 The Upload Preview page also uses mock data by default so all five preview states can be inspected without local Supabase. To use the real backend preview API, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
 
-The Logs page shows mock audit rows by default and uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, or arbitrary SQL query controls.
+The Logs page shows mock audit rows by default and uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, raw `error_message` search, raw params JSON search, or arbitrary SQL query controls. API responses return sanitized `errorMessage` values and decoded redacted params from `params_json_redacted`.
 
 Mock Dashboard states can be checked with query strings:
 
@@ -241,8 +244,10 @@ Audit Logs QA:
 - Audit Logs table uses a light table surface with result badges, params chips, and error columns.
 - Filters work for action, result, recent window, job ID, request ID, and safe text search.
 - Pagination works without exposing delete, update, export, or arbitrary SQL controls.
-- Secret-like params and error messages are redacted before display.
-- `audit_log` update/delete attempts are blocked by append-only SQLite triggers.
+- Secret-like params and error messages are redacted before display, and `q` cannot reverse-search raw secret-bearing `error_message` rows.
+- Raw params JSON search remains unavailable; only decoded redacted params are displayed.
+- `audit_log` update/delete attempts are blocked by append-only SQLite triggers `audit_log_no_update` and `audit_log_no_delete`.
+- PR #6 QA covered backend `/api/audit`, Vite proxy `/api/audit`, Logs tab switching, Audit filters, pagination, loading/empty/error states, Korean/English i18n, and Dashboard/Upload/Settings smoke regression.
 
 Browser QA has been run against:
 

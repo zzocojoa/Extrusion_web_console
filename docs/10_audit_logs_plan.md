@@ -1,18 +1,23 @@
 # Audit Logs UI/API Implementation Plan
 
-Status: decision-complete implementation plan
-Branch: `codex/audit-logs-ui`
+Status: implemented on PR #6, with QA fix
+Branch: `codex/audit-logs-ui-impl`
 Scope: v1 Core Ops, Logs page Audit Logs tab and backend read API
 Source of truth: `docs/00_product_scope.md`, `docs/02_engineering_plan.md`, `docs/03_ui_ux_plan.md`, `docs/04_design_system.md`
 
 Implementation result on branch `codex/audit-logs-ui-impl`:
 
-- Added `GET /api/audit` with server-side pagination, safe scalar filtering, sort allowlist, and redacted response DTOs.
+- Added `GET /api/audit` with server-side pagination, filter echo, sort allowlist, and redacted response DTOs.
+- Added safe scalar `q` search for `audit_id`, `action`, `target_type`, `target_id`, `result`, `job_id`, `request_id`, `actor`, and `error_code`.
+- Kept raw `error_message` and raw params JSON out of `q` search; `params_json_redacted` is decoded for response display but is not exposed as a raw field.
+- Kept sanitized `errorMessage` responses so secret-like raw diagnostics are not displayed.
 - Added `AuditRepository` bootstrap/query/insert methods with no update/delete methods.
 - Added SQLite append-only triggers `audit_log_no_update` and `audit_log_no_delete`.
 - Added backend tests for append-only trigger enforcement, existing upload/runtime audit insert compatibility, redaction, and API contract.
 - Replaced the Logs placeholder with separate Job Logs and Audit Logs tabs.
 - Added Audit Logs table filters, result badges, params chips, pagination, loading/empty/error states, and Korean/English text.
+- QA fix `d51de36` aligned frontend mock Audit Logs search with the backend safe scalar policy so mock `q` search does not inspect `errorMessage`.
+- QA passed targeted/full backend tests, frontend typecheck/build, `git diff --check`, backend and Vite proxy `/api/audit?q=secret-token` smoke checks, and browser QA at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 - Remaining scope outside this implementation: Dashboard audit summary is still mock-backed; `settings.save` and `upload.preview` audit writer coverage remains future work where those mutating paths are implemented.
 
 ## 1. Goal
