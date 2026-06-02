@@ -79,7 +79,7 @@ Upload Preview configuration is read from environment-backed settings:
 
 ```powershell
 $env:EWC_PLC_DATA_DIR="C:\path\to\plc_csv"
-$env:EWC_SUPABASE_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+$env:EWC_SUPABASE_DB_URL="postgresql://postgres:postgres@127.0.0.1:25432/postgres"
 $env:EWC_SUPABASE_URL="http://127.0.0.1:54321"
 $env:EWC_SUPABASE_ANON_KEY="<local anon key>"
 $env:EWC_SUPABASE_EDGE_URL="http://127.0.0.1:54321/functions/v1/upload-metrics"
@@ -271,7 +271,7 @@ If the backend fails after pulling this branch with `ModuleNotFoundError: psycop
 If Upload Preview reports `partial_failed` with `risky/db_unreachable`, check:
 
 - `EWC_SUPABASE_DB_URL` is set for the backend process.
-- Local Supabase is running and its Postgres port is reachable, usually `127.0.0.1:54322`.
+- Local Supabase is running and its Postgres port is reachable. For the referenced `Extrusion_data` local stack, use `127.0.0.1:25432` from `supabase/config.toml`.
 - The local database contains `public.all_metrics` with the existing `timestamp, device_id` uniqueness policy.
 
 This failure state is expected when the DB cannot be checked. The app should show the risk in the UI instead of treating files as upload targets.
