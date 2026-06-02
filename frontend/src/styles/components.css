@@ -681,6 +681,106 @@
   overflow-wrap: anywhere;
 }
 
+.runtime-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.runtime-summary > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.runtime-summary p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.runtime-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.inline-state {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.inline-state--error {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-panel {
+  max-width: 1120px;
+}
+
+.settings-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.settings-field {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+
+.settings-field span {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.settings-field input {
+  min-width: 0;
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+  padding: 0 var(--space-2);
+}
+
+.settings-field small {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.settings-runtime-note {
+  margin: 0 var(--space-4) var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.settings-runtime-note p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 @media (max-width: 1199px) {
   .dashboard-status-matrix {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -773,5 +873,18 @@
 
   .job-log-line__type {
     display: none;
+  }
+
+  .runtime-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .runtime-actions .button {
+    flex: 1 1 140px;
+  }
+
+  .settings-readonly-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

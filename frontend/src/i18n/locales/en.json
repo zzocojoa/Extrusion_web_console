@@ -87,6 +87,45 @@
     "logs": "The Logs screen is being prepared. Check the Dashboard for recent failures and audit summary.",
     "settings": "The Settings screen is being prepared. Check the Dashboard for local runtime status."
   },
+  "runtime": {
+    "loading": "Checking local runtime status...",
+    "error": "Local Supabase runtime status could not be loaded.",
+    "overall": {
+      "ready": "Ready",
+      "running": "Operation running",
+      "attention": "Attention",
+      "blocked": "Blocked",
+      "unknown": "Unknown"
+    },
+    "services": {
+      "api": "Supabase API",
+      "db": "Supabase DB",
+      "edge": "Edge Function",
+      "wsl": "WSL",
+      "grafana": "Grafana",
+      "containers": "Containers"
+    },
+    "actions": {
+      "start": "Start",
+      "stop": "Stop",
+      "working": "Working"
+    }
+  },
+  "settings": {
+    "runtime": {
+      "title": "Local Runtime Settings",
+      "subtitle": "Read-only configuration used for local Supabase control.",
+      "error": "Runtime settings could not be loaded.",
+      "configLabel": "Runtime configuration values",
+      "source": "Source",
+      "commandPolicyTitle": "Command policy",
+      "commandPolicy": "v1 only runs allowlisted status/start/stop commands against the existing Extrusion_data Supabase stack. Bootstrap, reset, deletion, and cleanup commands are not supported."
+    },
+    "source": {
+      "default": "Default",
+      "env": "Environment"
+    }
+  },
   "upload": {
     "tabs": {
       "label": "Upload sections",

@@ -87,6 +87,45 @@
     "logs": "로그 화면은 준비 중입니다. 최근 실패와 감사 요약은 대시보드에서 확인하세요.",
     "settings": "설정 화면은 준비 중입니다. 로컬 런타임 상태는 대시보드에서 확인하세요."
   },
+  "runtime": {
+    "loading": "로컬 런타임 상태를 확인하는 중...",
+    "error": "Local Supabase 런타임 상태를 불러오지 못했습니다.",
+    "overall": {
+      "ready": "정상",
+      "running": "작업 실행 중",
+      "attention": "확인 필요",
+      "blocked": "차단됨",
+      "unknown": "정보 없음"
+    },
+    "services": {
+      "api": "Supabase API",
+      "db": "Supabase DB",
+      "edge": "Edge Function",
+      "wsl": "WSL",
+      "grafana": "Grafana",
+      "containers": "컨테이너"
+    },
+    "actions": {
+      "start": "시작",
+      "stop": "중지",
+      "working": "처리 중"
+    }
+  },
+  "settings": {
+    "runtime": {
+      "title": "로컬 런타임 설정",
+      "subtitle": "Local Supabase 제어에 사용하는 읽기 전용 설정입니다.",
+      "error": "런타임 설정을 불러오지 못했습니다.",
+      "configLabel": "런타임 설정 값",
+      "source": "출처",
+      "commandPolicyTitle": "명령 정책",
+      "commandPolicy": "v1은 기존 Extrusion_data Supabase 스택에 대해 허용된 status/start/stop 명령만 실행합니다. bootstrap, reset, 삭제, cleanup 명령은 지원하지 않습니다."
+    },
+    "source": {
+      "default": "기본값",
+      "env": "환경 변수"
+    }
+  },
   "upload": {
     "tabs": {
       "label": "업로드 섹션",

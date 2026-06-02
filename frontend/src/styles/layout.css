@@ -125,7 +125,8 @@
 }
 
 .dashboard-page,
-.page--upload {
+.page--upload,
+.settings-page {
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
@@ -233,7 +234,8 @@
 
   .topbar,
   .dashboard-page,
-  .page--upload {
+  .page--upload,
+  .settings-page {
     grid-column: 1;
   }
 
@@ -247,7 +249,8 @@
   }
 
   .dashboard-page,
-  .page--upload {
+  .page--upload,
+  .settings-page {
     grid-row: 3;
     padding: var(--space-4);
   }
