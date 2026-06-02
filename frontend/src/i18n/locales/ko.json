@@ -304,6 +304,71 @@
       }
     }
   },
+  "logs": {
+    "tabs": {
+      "label": "로그 섹션",
+      "jobLogs": "작업 로그",
+      "auditLogs": "감사 로그"
+    },
+    "job": {
+      "title": "작업 로그",
+      "subtitle": "최근 업로드 작업 이벤트입니다. 작업 제어는 Upload 화면에서 유지합니다.",
+      "loading": "작업 로그를 불러오는 중...",
+      "error": "작업 로그를 불러오지 못했습니다.",
+      "empty": "아직 업로드 작업 이벤트가 없습니다.",
+      "mockMessage": "목 데이터 작업 로그입니다. 저장된 이벤트는 API 모드에서 확인할 수 있습니다."
+    },
+    "audit": {
+      "title": "감사 로그",
+      "subtitle": "작업자 조작, 차단된 작업, 백그라운드 실패를 append-only로 추적합니다.",
+      "loading": "감사 로그를 불러오는 중...",
+      "error": "감사 로그를 불러오지 못했습니다.",
+      "empty": "현재 필터와 일치하는 감사 로그가 없습니다.",
+      "filters": {
+        "dateRange": "기간",
+        "result": "결과",
+        "action": "작업",
+        "jobId": "작업 ID",
+        "requestId": "요청 ID",
+        "search": "검색",
+        "searchPlaceholder": "작업, 대상, 작업 ID, 요청 ID, 오류",
+        "clear": "초기화"
+      },
+      "recent": {
+        "24h": "최근 24시간",
+        "7d": "최근 7일",
+        "30d": "최근 30일",
+        "all": "전체"
+      },
+      "summary": {
+        "total": "행",
+        "window": "기간",
+        "page": "페이지"
+      },
+      "columns": {
+        "time": "시간",
+        "result": "결과",
+        "action": "작업",
+        "target": "대상",
+        "actor": "작업자",
+        "jobId": "작업 ID",
+        "params": "파라미터",
+        "error": "오류"
+      },
+      "pagination": {
+        "previous": "이전",
+        "next": "다음",
+        "limit": "행 수"
+      },
+      "results": {
+        "all": "전체 결과",
+        "success": "성공",
+        "failure": "실패",
+        "blocked": "차단",
+        "cancelled": "취소"
+      }
+    }
+  },
   "status": {
     "ready": "정상",
     "running": "실행 중",

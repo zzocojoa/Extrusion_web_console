@@ -69,8 +69,9 @@ Status on branch `codex/upload-preview-reconciliation`:
 - Done: Upload page Preview UI with status summary, table, filters, polling, mock data, and Korean/English i18n.
 - Done on branch `codex/upload-job-sse`: Upload Job API, retry failed API, pause/resume/cancel API, SQLite upload job/file/file-state/event/audit persistence, Start Upload from completed Preview targets, SSE event replay, and Upload Job tab UI.
 - Done on branch `codex/local-supabase-control-impl`: Local Supabase status/start/stop API, required-container existence precheck, non-destructive command allowlist, runtime operation/event persistence, mutating-operation audit logging, Dashboard runtime module API connection, and Settings runtime config/source display.
-- Verified: backend tests, frontend typecheck/build, and browser QA for Dashboard regression plus Upload Preview responsive states.
-- Not done: full Logs/Audit pages, launcher integration.
+- Done on branch `codex/audit-logs-ui-impl`: `GET /api/audit`, append-only audit triggers, redacted audit query API, safe scalar `q` search, and Logs page Job Logs/Audit Logs tabs with filters, pagination, loading/empty/error states, and Korean/English i18n.
+- Verified: backend tests, frontend typecheck/build, and browser QA for Audit Logs UI/API, Vite proxy `/api/audit`, Dashboard/Upload/Settings regression, and responsive Logs viewports.
+- Not done: launcher integration.
 
 ## 4. Build Backend Core Ops
 
@@ -85,7 +86,7 @@ Implement backend capabilities in this order:
 7. progress and log streaming
 8. launcher integration
 
-Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, and Local Supabase runtime control APIs exist. Config write, full Logs/Audit pages, and launcher APIs remain future work.
+Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, Local Supabase runtime control APIs, and Audit Logs query APIs exist. Audit Logs query search is limited to safe scalar columns and does not search raw `error_message` or raw params JSON. Config write and launcher APIs remain future work.
 
 ## 5. Build Frontend Core Ops
 
@@ -98,7 +99,7 @@ Implement frontend screens in this order:
 
 The UI should be operational and dense, not marketing-oriented.
 
-Current implementation note: Dashboard mock UI, Upload Preview UI, Upload Job tab, and Settings runtime config/source display are implemented. Logs remains a placeholder and must not be treated as Core Ops parity yet.
+Current implementation note: Dashboard mock UI, Upload Preview UI, Upload Job tab, Settings runtime config/source display, and Logs page Job Logs/Audit Logs tabs are implemented. Audit Logs includes table filters, pagination, loading/empty/error states, redacted params display, sanitized error messages, and Korean/English labels. Job Logs remains a lightweight shell over existing upload job events.
 
 ## 6. Validate Against Legacy Behavior
 
@@ -115,7 +116,7 @@ Compare the new app against the legacy GUI for:
 Status:
 
 - Partially started: Upload Preview now uses legacy scanning/transform behavior as reference and tests exact-key reconciliation.
-- Still required: broader legacy CSV fixture coverage, local Supabase control E2E on the operator PC, and failure reporting across full Logs/Audit pages.
+- Still required: broader legacy CSV fixture coverage, local Supabase control E2E on the operator PC, and final operator validation of failure reporting across Audit Logs.
 
 ## 7. Package And Transition
 
@@ -129,4 +130,4 @@ Transition from the legacy GUI only after:
 - upload behavior is tested with representative CSV files
 - README run instructions are accurate
 
-Current transition status: blocked. Duplicate-risk preview, real upload jobs, progress/event streaming, and Local Supabase controls are implemented, but legacy GUI replacement still requires full Logs/Audit pages, launcher integration, broader runtime E2E, and final operator workflow validation.
+Current transition status: blocked. Duplicate-risk preview, real upload jobs, progress/event streaming, Local Supabase controls, and Audit Logs are implemented, but legacy GUI replacement still requires launcher integration, broader runtime E2E, and final operator workflow validation.

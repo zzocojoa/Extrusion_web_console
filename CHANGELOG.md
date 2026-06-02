@@ -12,6 +12,9 @@ All notable changes to Extrusion Web Console are documented here.
 - Backend now exposes Upload Job create, list, detail, retry, pause, resume, cancel, and event stream APIs.
 - The Upload page now has a real Job tab with Korean/English UI text and mock mode for local UI QA.
 - Project documentation now records the upload job/SSE implementation plan and shipped behavior.
+- Logs now has separate Job Logs and Audit Logs tabs with Audit table filters, pagination, loading/empty/error states, and Korean/English UI text.
+- Backend now exposes `GET /api/audit` with pagination, filter echo, sort allowlist, sanitized `errorMessage` values, and decoded redacted params.
+- SQLite audit storage now installs append-only triggers `audit_log_no_update` and `audit_log_no_delete`.
 
 ### Changed
 
@@ -29,3 +32,5 @@ All notable changes to Extrusion Web Console are documented here.
 - Pause handling now records `job.paused` only on the `pausing -> paused` transition.
 - Upload Job SSE now preserves native reconnect behavior and replays job-scoped events from the persisted sequence cursor.
 - Concurrent job event writers now append under an immediate SQLite transaction to avoid duplicate per-job sequence values.
+- Audit Logs `q` search now stays within safe scalar fields and does not search raw `error_message` or raw params JSON, preventing reverse-search of secret-bearing diagnostics.
+- Frontend mock Audit Logs search now matches the backend safe scalar search policy instead of searching sanitized `errorMessage`.

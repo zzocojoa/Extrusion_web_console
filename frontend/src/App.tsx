@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AppShell } from "./components/app/AppShell";
 import { DashboardPage } from "./pages/DashboardPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { LogsPage } from "./pages/LogsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UploadPage } from "./pages/UploadPage";
 import type { AppPage } from "./components/app/navItems";
@@ -16,6 +17,8 @@ export default function App() {
         <DashboardPage />
       ) : activePage === "upload" ? (
         <UploadPage />
+      ) : activePage === "logs" ? (
+        <LogsPage />
       ) : activePage === "settings" ? (
         <SettingsPage />
       ) : (

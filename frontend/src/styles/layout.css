@@ -141,6 +141,7 @@
 
 .dashboard-page,
 .page--upload,
+.page--logs,
 .settings-page {
   grid-column: 2;
   grid-row: 2;
@@ -250,6 +251,7 @@
   .topbar,
   .dashboard-page,
   .page--upload,
+  .page--logs,
   .settings-page {
     grid-column: 1;
   }
@@ -265,6 +267,7 @@
 
   .dashboard-page,
   .page--upload,
+  .page--logs,
   .settings-page {
     grid-row: 3;
     padding: var(--space-4);

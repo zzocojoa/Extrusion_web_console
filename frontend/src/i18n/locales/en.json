@@ -304,6 +304,71 @@
       }
     }
   },
+  "logs": {
+    "tabs": {
+      "label": "Log sections",
+      "jobLogs": "Job Logs",
+      "auditLogs": "Audit Logs"
+    },
+    "job": {
+      "title": "Job Logs",
+      "subtitle": "Recent upload job events. Full job controls remain in the Upload screen.",
+      "loading": "Loading job logs...",
+      "error": "Job logs could not be loaded.",
+      "empty": "No upload job events yet.",
+      "mockMessage": "Mock job log row. Switch to API mode to read persisted job events."
+    },
+    "audit": {
+      "title": "Audit Logs",
+      "subtitle": "Append-only operator actions, blocked operations, and background failures.",
+      "loading": "Loading audit logs...",
+      "error": "Audit logs could not be loaded.",
+      "empty": "No audit logs match the current filters.",
+      "filters": {
+        "dateRange": "Window",
+        "result": "Result",
+        "action": "Action",
+        "jobId": "Job ID",
+        "requestId": "Request ID",
+        "search": "Search",
+        "searchPlaceholder": "Action, target, job, request, error",
+        "clear": "Clear"
+      },
+      "recent": {
+        "24h": "Last 24h",
+        "7d": "Last 7d",
+        "30d": "Last 30d",
+        "all": "All"
+      },
+      "summary": {
+        "total": "Rows",
+        "window": "Window",
+        "page": "Page"
+      },
+      "columns": {
+        "time": "Time",
+        "result": "Result",
+        "action": "Action",
+        "target": "Target",
+        "actor": "Actor",
+        "jobId": "Job ID",
+        "params": "Params",
+        "error": "Error"
+      },
+      "pagination": {
+        "previous": "Previous",
+        "next": "Next",
+        "limit": "Rows"
+      },
+      "results": {
+        "all": "All results",
+        "success": "Success",
+        "failure": "Failure",
+        "blocked": "Blocked",
+        "cancelled": "Cancelled"
+      }
+    }
+  },
   "status": {
     "ready": "Ready",
     "running": "Running",

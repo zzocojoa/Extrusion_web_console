@@ -21,12 +21,12 @@ The first runnable scaffold is in place:
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
 - Dashboard runtime module connected to the runtime API in API mode.
 - Settings runtime section showing read-only local Supabase config values and their source.
+- Logs page with separate Job Logs and Audit Logs tabs.
+- Audit Logs API/UI with redacted, paginated, filtered, append-only audit rows.
 - TanStack Query mock-first Dashboard query.
 - Korean/English i18n baseline with language persistence in `localStorage`.
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
-- Logs remains a placeholder page only.
-
-Full Logs/Audit pages, launcher integration, and legacy upload state import are not implemented in this scaffold.
+Launcher integration and legacy upload state import are not implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
@@ -113,6 +113,16 @@ $runtime = Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/runtime/loca
 Invoke-RestMethod http://127.0.0.1:8000/api/runtime/operations/$($runtime.operationId)
 ```
 
+Audit Logs API smoke check:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/audit?limit=50"
+Invoke-RestMethod "http://127.0.0.1:8000/api/audit?result=blocked&sort=ts&order=desc"
+Invoke-RestMethod "http://127.0.0.1:8000/api/audit?q=upload.start&limit=10"
+```
+
+The `q` parameter searches only safe scalar fields such as `auditId`, `action`, `targetType`, `targetId`, `result`, `jobId`, `requestId`, `actor`, and `errorCode`. It does not search raw `error_message` values or raw/redacted params JSON, so legacy rows containing secret-like diagnostics cannot be reverse-searched through `/api/audit`.
+
 Upload Preview API smoke check:
 
 ```powershell
@@ -188,6 +198,8 @@ Important scaffold limitation: `?state=ready|attention|blocked|running` is imple
 
 The Upload Preview page also uses mock data by default so all five preview states can be inspected without local Supabase. To use the real backend preview API, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
 
+The Logs page shows mock audit rows by default and uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, raw `error_message` search, raw params JSON search, or arbitrary SQL query controls. API responses return sanitized `errorMessage` values and decoded redacted params from `params_json_redacted`.
+
 Mock Dashboard states can be checked with query strings:
 
 ```text
@@ -226,13 +238,24 @@ Upload Preview QA:
 - Start Upload excludes `already_in_db`, `partial_overlap`, `risky`, and `excluded` rows by default.
 - Upload Job tab shows file progress, pause/resume/cancel controls, Retry Failed, and live/persisted events.
 
+Audit Logs QA:
+
+- Logs page has separate Job Logs and Audit Logs tabs.
+- Audit Logs table uses a light table surface with result badges, params chips, and error columns.
+- Filters work for action, result, recent window, job ID, request ID, and safe text search.
+- Pagination works without exposing delete, update, export, or arbitrary SQL controls.
+- Secret-like params and error messages are redacted before display, and `q` cannot reverse-search raw secret-bearing `error_message` rows.
+- Raw params JSON search remains unavailable; only decoded redacted params are displayed.
+- `audit_log` update/delete attempts are blocked by append-only SQLite triggers `audit_log_no_update` and `audit_log_no_delete`.
+- PR #6 QA covered backend `/api/audit`, Vite proxy `/api/audit`, Logs tab switching, Audit filters, pagination, loading/empty/error states, Korean/English i18n, and Dashboard/Upload/Settings smoke regression.
+
 Browser QA has been run against:
 
 - `http://127.0.0.1:5173/?state=ready`
 - `http://127.0.0.1:5173/?state=attention`
 - `http://127.0.0.1:5173/?state=blocked`
 - `http://127.0.0.1:5173/?state=running`
-- Upload Preview, Settings runtime section, and Logs placeholder through sidebar navigation.
+- Upload Preview, Settings runtime section, and Logs page through sidebar navigation.
 
 ## Source Documents
 
@@ -248,6 +271,7 @@ Browser QA has been run against:
 - `docs/07_upload_preview_plan.md`
 - `docs/08_upload_job_sse_plan.md`
 - `docs/09_local_supabase_control_plan.md`
+- `docs/10_audit_logs_plan.md`
 
 ## Reference Project
 
@@ -276,7 +300,6 @@ Core Ops only:
 Out of scope for this scaffold:
 
 - Full legacy core extraction
-- Full Logs/Audit pages
 - Data Mgmt
 - Cycle Ops
 - Training Dataset Builder
