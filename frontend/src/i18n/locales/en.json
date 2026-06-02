@@ -105,10 +105,20 @@
       "grafana": "Grafana",
       "containers": "Containers"
     },
+    "containers": {
+      "detail": "{{running}}/{{total}} running",
+      "detailWithProblems": "{{running}}/{{total}} running, {{problemCount}} need attention"
+    },
     "actions": {
       "start": "Start",
       "stop": "Stop",
-      "working": "Working"
+      "working": "Working",
+      "apiRequired": "Runtime API mode is required.",
+      "operationActive": "A runtime operation is already active.",
+      "alreadyReady": "Local Supabase is already ready.",
+      "alreadyStopped": "Local Supabase containers are already stopped.",
+      "requiredContainerMissing": "Required containers are missing. v1 does not create a new stack.",
+      "dockerUnavailable": "Docker is unavailable."
     }
   },
   "settings": {
@@ -116,6 +126,7 @@
       "title": "Local Runtime Settings",
       "subtitle": "Read-only configuration used for local Supabase control.",
       "error": "Runtime settings could not be loaded.",
+      "unavailable": "Runtime config is unavailable until the backend runtime API is reachable.",
       "configLabel": "Runtime configuration values",
       "source": "Source",
       "commandPolicyTitle": "Command policy",

@@ -27,8 +27,12 @@ export function RuntimeCheckPanel({
   actionPending = false,
 }: RuntimeCheckPanelProps) {
   const { t, i18n } = useTranslation();
-  const tableRows = runtimeStatus ? runtimeRows(runtimeStatus, t) : rows;
-  const actionDisabled = actionPending || runtimeStatus?.overallStatus === "running";
+  const translate: Translate = (key, options) => String(t(key, options));
+  const tableRows = runtimeStatus ? runtimeRows(runtimeStatus, translate) : rows;
+  const startDisabledReason = runtimeStatus ? startDisabledReasonFor(runtimeStatus, actionPending, translate) : translate("runtime.actions.apiRequired");
+  const stopDisabledReason = runtimeStatus ? stopDisabledReasonFor(runtimeStatus, actionPending, translate) : translate("runtime.actions.apiRequired");
+  const startDisabled = Boolean(startDisabledReason);
+  const stopDisabled = Boolean(stopDisabledReason);
 
   return (
     <Panel className="runtime-check-panel" title={t("dashboard.runtime.title")} titleId="runtime-check-title">
@@ -39,10 +43,24 @@ export function RuntimeCheckPanel({
             <p>{runtimeStatus.reasonText}</p>
           </div>
           <div className="runtime-actions">
-            <button className="button button--secondary" type="button" onClick={onStart} disabled={actionDisabled}>
+            <button
+              aria-label={startDisabledReason || t("runtime.actions.start")}
+              className="button button--secondary"
+              disabled={startDisabled}
+              onClick={onStart}
+              title={startDisabledReason || undefined}
+              type="button"
+            >
               {actionPending ? t("runtime.actions.working") : t("runtime.actions.start")}
             </button>
-            <button className="button button--secondary" type="button" onClick={onStop} disabled={actionDisabled}>
+            <button
+              aria-label={stopDisabledReason || t("runtime.actions.stop")}
+              className="button button--secondary"
+              disabled={stopDisabled}
+              onClick={onStop}
+              title={stopDisabledReason || undefined}
+              type="button"
+            >
               {actionPending ? t("runtime.actions.working") : t("runtime.actions.stop")}
             </button>
           </div>
@@ -82,21 +100,23 @@ export function RuntimeCheckPanel({
   );
 }
 
-function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: (key: string) => string): RuntimeCheckRow[] {
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): RuntimeCheckRow[] {
   const checkedAt = runtimeStatus.checkedAt;
   return [
     {
       id: "supabase",
       label: t("runtime.services.api"),
       tone: toneForService(runtimeStatus.api.status),
-      detail: `${runtimeStatus.api.host}:${runtimeStatus.api.port}`,
+      detail: `${runtimeStatus.api.host}:${runtimeStatus.api.port} · ${runtimeStatus.api.detail}`,
       lastCheckedAt: checkedAt,
     },
     {
       id: "database",
       label: t("runtime.services.db"),
       tone: toneForService(runtimeStatus.db.status),
-      detail: `${runtimeStatus.db.host}:${runtimeStatus.db.port}`,
+      detail: `${runtimeStatus.db.host}:${runtimeStatus.db.port} · ${runtimeStatus.db.detail}`,
       lastCheckedAt: checkedAt,
     },
     {
@@ -124,8 +144,8 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: (key: string) => s
     {
       id: "state_store",
       label: t("runtime.services.containers"),
-      tone: runtimeStatus.containers.some((row) => row.status === "missing") ? "blocked" : "ready",
-      detail: `${runtimeStatus.containers.filter((row) => row.running).length}/${runtimeStatus.containers.length}`,
+      tone: toneForContainers(runtimeStatus.containers),
+      detail: containerDetail(runtimeStatus.containers, t),
       lastCheckedAt: checkedAt,
     },
   ];
@@ -145,4 +165,34 @@ function toneForService(status: RuntimeServiceStatus): StatusTone {
   if (status === "stopped" || status === "unreachable" || status === "unhealthy") return "attention";
   if (status === "missing") return "blocked";
   return "muted";
+}
+
+function toneForContainers(containers: RuntimeStatusResponse["containers"]): StatusTone {
+  if (containers.some((row) => row.status === "missing")) return "blocked";
+  if (containers.some((row) => row.status === "stopped" || row.status === "unreachable" || row.status === "unhealthy")) return "attention";
+  if (containers.length > 0 && containers.every((row) => row.status === "ready")) return "ready";
+  return "muted";
+}
+
+function containerDetail(containers: RuntimeStatusResponse["containers"], t: Translate): string {
+  const running = containers.filter((row) => row.running).length;
+  const problemCount = containers.filter((row) => row.status !== "ready").length;
+  return problemCount > 0
+    ? t("runtime.containers.detailWithProblems", { running, total: containers.length, problemCount })
+    : t("runtime.containers.detail", { running, total: containers.length });
+}
+
+function startDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, actionPending: boolean, t: Translate): string {
+  if (actionPending || runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
+  if (runtimeStatus.overallStatus === "ready") return t("runtime.actions.alreadyReady");
+  if (runtimeStatus.reasonCode === "required_container_missing") return t("runtime.actions.requiredContainerMissing");
+  if (runtimeStatus.docker.status !== "ready") return t("runtime.actions.dockerUnavailable");
+  return "";
+}
+
+function stopDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, actionPending: boolean, t: Translate): string {
+  if (actionPending || runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
+  if (runtimeStatus.docker.status !== "ready") return t("runtime.actions.dockerUnavailable");
+  if (!runtimeStatus.containers.some((row) => row.running)) return t("runtime.actions.alreadyStopped");
+  return "";
 }

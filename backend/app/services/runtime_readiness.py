@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,7 @@ class RuntimeReadinessService:
 
     def check_status(self, *, active_operation: Any | None = None) -> RuntimeStatusResponse:
         project_path = Path(self.settings.local_supabase_project_path)
+        config_error_code, config_error_text = self._config_error(project_path)
         docker_result = self.runner.run(["docker", "version", "--format", "{{json .}}"], timeout_seconds=5)
         docker_status = self._probe_from_result("Docker", docker_result)
         wsl_status = self._probe_from_result("WSL", self.runner.run(["wsl", "-l", "-v"], timeout_seconds=5))
@@ -87,6 +89,10 @@ class RuntimeReadinessService:
             overall = RuntimeOverallStatus.blocked
             reason_code = "project_path_missing"
             reason_text = "The configured Extrusion_data project path does not exist."
+        elif config_error_code:
+            overall = RuntimeOverallStatus.blocked
+            reason_code = config_error_code
+            reason_text = config_error_text or "The local Supabase config does not match the expected runtime settings."
         elif docker_status.status != RuntimeServiceStatus.ready:
             overall = RuntimeOverallStatus.blocked
             reason_code = "docker_unavailable"
@@ -133,6 +139,32 @@ class RuntimeReadinessService:
         containers = self._container_statuses(docker_status)
         missing = [container.name for container in containers if container.required and not container.exists]
         return not missing and docker_status.status == RuntimeServiceStatus.ready, missing, containers
+
+    def _config_error(self, project_path: Path) -> tuple[str | None, str | None]:
+        config_path = project_path / "supabase" / "config.toml"
+        if not project_path.exists():
+            return None, None
+        if not config_path.exists():
+            return "config_toml_missing", "supabase/config.toml was not found in the configured Extrusion_data project."
+        try:
+            payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            return "config_toml_unreadable", f"supabase/config.toml could not be read: {exc}"
+
+        expected_ports = {
+            "api": self.settings.local_supabase_api_port,
+            "db": self.settings.local_supabase_db_port,
+            "studio": self.settings.local_supabase_studio_port,
+        }
+        mismatches: list[str] = []
+        for section, expected in expected_ports.items():
+            section_payload = payload.get(section)
+            actual = section_payload.get("port") if isinstance(section_payload, dict) else None
+            if actual != expected:
+                mismatches.append(f"{section}:{actual}->{expected}")
+        if mismatches:
+            return "config_port_mismatch", "supabase/config.toml ports do not match expected runtime settings: " + ", ".join(mismatches)
+        return None, None
 
     def _probe_from_result(self, name: str, result: CommandResult) -> RuntimeProbeStatus:
         if result.ok:

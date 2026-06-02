@@ -443,8 +443,7 @@ supabase_auth_Extrusion_data
 supabase_rest_Extrusion_data
 supabase_realtime_Extrusion_data
 supabase_storage_Extrusion_data
-supabase_imgproxy_Extrusion_data
-supabase_meta_Extrusion_data
+supabase_pg_meta_Extrusion_data
 supabase_studio_Extrusion_data
 supabase_inbucket_Extrusion_data
 supabase_edge_runtime_Extrusion_data
@@ -452,7 +451,7 @@ supabase_analytics_Extrusion_data
 supabase_vector_Extrusion_data
 ```
 
-Required containers for the existence precheck are the full `supabase_*_Extrusion_data` allowlist above. Grafana is intentionally excluded because Grafana remains status/link-only and is not controlled by this API.
+Required containers for the existence precheck are the full `supabase_*_Extrusion_data` allowlist above. The list is pinned to the current `Extrusion_data` local Supabase CLI container names. `supabase_imgproxy_Extrusion_data` is not required because image transformation is disabled in the reference `supabase/config.toml`. Grafana is intentionally excluded because Grafana remains status/link-only and is not controlled by this API. `docker start grafana_local` and `docker stop grafana_local` are forbidden in v1.
 
 Explicitly forbidden:
 
@@ -538,9 +537,8 @@ Stop order:
 ```text
 supabase_edge_runtime_Extrusion_data
 supabase_studio_Extrusion_data
-supabase_meta_Extrusion_data
+supabase_pg_meta_Extrusion_data
 supabase_storage_Extrusion_data
-supabase_imgproxy_Extrusion_data
 supabase_realtime_Extrusion_data
 supabase_rest_Extrusion_data
 supabase_auth_Extrusion_data

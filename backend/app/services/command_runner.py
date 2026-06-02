@@ -13,8 +13,7 @@ REQUIRED_SUPABASE_CONTAINERS = (
     "supabase_rest_Extrusion_data",
     "supabase_realtime_Extrusion_data",
     "supabase_storage_Extrusion_data",
-    "supabase_imgproxy_Extrusion_data",
-    "supabase_meta_Extrusion_data",
+    "supabase_pg_meta_Extrusion_data",
     "supabase_studio_Extrusion_data",
     "supabase_inbucket_Extrusion_data",
     "supabase_edge_runtime_Extrusion_data",
@@ -22,8 +21,7 @@ REQUIRED_SUPABASE_CONTAINERS = (
     "supabase_vector_Extrusion_data",
 )
 
-OPTIONAL_RUNTIME_CONTAINERS = ("grafana_local",)
-ALLOWED_CONTAINERS = set(REQUIRED_SUPABASE_CONTAINERS).union(OPTIONAL_RUNTIME_CONTAINERS)
+ALLOWED_CONTAINERS = set(REQUIRED_SUPABASE_CONTAINERS)
 
 FORBIDDEN_WORDS = {
     "init",
@@ -108,6 +106,8 @@ class AllowedCommandRunner:
                 shell=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
                 check=False,
             )

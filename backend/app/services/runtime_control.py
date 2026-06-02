@@ -100,30 +100,25 @@ class RuntimeControlService:
             )
 
     def _run_start(self, operation_id: str) -> None:
+        status = self.readiness.check_status()
+        blocker = start_precheck_blocker(status)
+        if blocker is not None:
+            error_code, message = blocker
+            self._finish_blocked(operation_id, "runtime.start", error_code, message)
+            return
+
         ready, missing, containers = self.readiness.required_containers_exist()
         if not ready:
             error_code = "required_container_missing" if missing else "docker_unavailable"
             message = "Required local Supabase containers are missing." if missing else "Docker is unavailable."
-            self.runtime_repository.append_event(
-                operation_id,
-                event_type=f"runtime.start.{error_code}",
-                level="error",
-                message=message,
-                data={"missingContainers": missing},
-            )
-            self.runtime_repository.finish_operation(operation_id, status=RuntimeOperationStatus.blocked.value, error_code=error_code, error_message=message)
-            self.runtime_repository.append_audit(
-                action="runtime.start",
-                target_type="local_supabase",
-                target_id=self.settings.local_supabase_project_id,
-                params={"missingContainers": missing},
-                result="blocked",
-                error_code=error_code,
-                error_message=message,
-            )
+            self._finish_blocked(operation_id, "runtime.start", error_code, message, data={"missingContainers": missing})
             return
 
         stopped = [container.name for container in containers if container.exists and not container.running]
+        if not stopped and runtime_core_ready(status):
+            self.runtime_repository.append_event(operation_id, event_type="runtime.start.noop", level="info", message="Local Supabase runtime is already ready.")
+            self._finish_success(operation_id, "runtime.start")
+            return
         if stopped:
             self.runtime_repository.append_event(
                 operation_id,
@@ -151,6 +146,11 @@ class RuntimeControlService:
 
     def _run_stop(self, operation_id: str) -> None:
         status = self.readiness.check_status()
+        blocker = stop_precheck_blocker(status)
+        if blocker is not None:
+            error_code, message = blocker
+            self._finish_blocked(operation_id, "runtime.stop", error_code, message)
+            return
         if status.docker.status.value != "ready":
             self.runtime_repository.append_event(
                 operation_id,
@@ -193,7 +193,12 @@ class RuntimeControlService:
             ):
                 self._finish_success(operation_id, action)
                 return
-            if not expect_running and status.api.status.value != "ready" and status.db.status.value != "ready":
+            if (
+                not expect_running
+                and status.api.status.value != "ready"
+                and status.db.status.value != "ready"
+                and status.studio.status.value != "ready"
+            ):
                 self._finish_success(operation_id, action)
                 return
             time.sleep(1)
@@ -235,6 +240,25 @@ class RuntimeControlService:
             error_message=message,
         )
 
+    def _finish_blocked(self, operation_id: str, action: str, error_code: str, message: str, data: dict[str, Any] | None = None) -> None:
+        self.runtime_repository.append_event(
+            operation_id,
+            event_type=f"{action}.{error_code}",
+            level="error",
+            message=message,
+            data=data,
+        )
+        self.runtime_repository.finish_operation(operation_id, status=RuntimeOperationStatus.blocked.value, error_code=error_code, error_message=message)
+        self.runtime_repository.append_audit(
+            action=action,
+            target_type="local_supabase",
+            target_id=self.settings.local_supabase_project_id,
+            params=data or {},
+            result="blocked",
+            error_code=error_code,
+            error_message=message,
+        )
+
 
 def operation_dto(row: Any) -> RuntimeOperationDto:
     return RuntimeOperationDto(
@@ -254,3 +278,24 @@ def row_dt(value: str | None):
     from datetime import datetime
 
     return None if value is None else datetime.fromisoformat(value)
+
+
+def runtime_core_ready(status: RuntimeStatusResponse) -> bool:
+    return (
+        status.api.status.value == "ready"
+        and status.db.status.value == "ready"
+        and status.studio.status.value == "ready"
+        and status.edge_runtime.status.value == "ready"
+    )
+
+
+def start_precheck_blocker(status: RuntimeStatusResponse) -> tuple[str, str] | None:
+    if status.reason_code in {"project_path_missing", "config_toml_missing", "config_toml_unreadable", "config_port_mismatch", "docker_unavailable", "required_container_missing"}:
+        return status.reason_code, status.reason_text
+    return None
+
+
+def stop_precheck_blocker(status: RuntimeStatusResponse) -> tuple[str, str] | None:
+    if status.reason_code in {"project_path_missing", "config_toml_missing", "config_toml_unreadable", "config_port_mismatch", "required_container_missing"}:
+        return status.reason_code, status.reason_text
+    return None

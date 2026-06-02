@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from backend.app.api.runtime import get_command_runner
 from backend.app.core.settings import Settings, get_settings
 from backend.app.main import app
-from tests.backend.test_runtime_control import FakeRunner
+from tests.backend.test_runtime_control import FakeRunner, write_supabase_config
 
 
 def test_runtime_routes_are_registered_in_openapi() -> None:
@@ -24,7 +24,7 @@ def test_runtime_routes_are_registered_in_openapi() -> None:
 def test_runtime_status_returns_graceful_blocked_state_without_docker(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     project_path = tmp_path / "Extrusion_data"
-    project_path.mkdir()
+    write_supabase_config(project_path)
     app.dependency_overrides[get_settings] = lambda: Settings(
         state_db_path=str(db_path),
         local_supabase_project_path=str(project_path),
@@ -50,7 +50,7 @@ def test_runtime_start_blocks_active_preview_via_api(tmp_path: Path) -> None:
 
     db_path = tmp_path / "state.db"
     project_path = tmp_path / "Extrusion_data"
-    project_path.mkdir()
+    write_supabase_config(project_path)
     preview = PreviewRepository(db_path)
     preview.create_run(
         preview_run_id="prv_active",

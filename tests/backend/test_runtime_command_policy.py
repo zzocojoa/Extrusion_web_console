@@ -38,6 +38,8 @@ def test_supabase_start_requires_container_precheck() -> None:
         ["docker", "volume", "rm", "anything"],
         ["docker", "prune"],
         ["docker", "compose", "up"],
+        ["docker", "start", "grafana_local"],
+        ["docker", "stop", "grafana_local"],
         ["powershell", "-Command", "Get-Process"],
     ],
 )
@@ -60,6 +62,8 @@ def test_command_runner_uses_subprocess_without_shell(monkeypatch: pytest.Monkey
 
     assert result.ok
     assert observed["kwargs"]["shell"] is False
+    assert observed["kwargs"]["encoding"] == "utf-8"
+    assert observed["kwargs"]["errors"] == "replace"
 
 
 def test_command_output_redacts_supabase_keys_and_bearer_tokens() -> None:
