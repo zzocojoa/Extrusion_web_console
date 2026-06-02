@@ -4,6 +4,31 @@ Status: decision-complete plan for branch `codex/upload-job-sse`
 
 Scope: v1 Core Ops real upload job execution, retry failed, progress, and job log streaming
 
+## Implementation Result
+
+Implemented on branch `codex/upload-job-sse`:
+
+- Backend Upload Job API: create, list, latest/detail, retry, pause, resume, cancel, and SSE events.
+- SQLite persistence for `upload_jobs`, `upload_job_files`, `upload_file_state`, `job_events`, and minimal `audit_log`.
+- Completed Preview run `target` item snapshot into upload jobs. Non-target preview states remain excluded in v1.
+- Preview-origin upload path with legacy latest-timestamp Smart Sync disabled.
+- Cooperative pause/resume/cancel checkpoints between files and batches.
+- SSE event replay backed by persisted `job_events`.
+- Startup recovery that marks active upload jobs interrupted.
+- Upload Job frontend tab with progress summary, action buttons, file table, event viewer, mock mode, API mode, and SSE reconnect.
+
+Verified after implementation:
+
+- Backend tests: `.\.venv\Scripts\python -m pytest tests\backend`
+- Frontend typecheck: `npm run typecheck`
+- Frontend build: `npm run build`
+
+Remaining implementation risks:
+
+- Real operator-PC upload against local Supabase Edge Function still needs environment QA with representative CSVs.
+- Broader legacy `core.upload.run_upload_session` parity tests should be expanded before v1 replacement.
+- In-flight Edge HTTP cancellation is bounded by timeout; pause/cancel take effect at the next checkpoint after the HTTP call returns.
+
 This plan follows `AGENTS.md`, `docs/00_product_scope.md`, `docs/02_engineering_plan.md`, `docs/03_ui_ux_plan.md`, `docs/04_design_system.md`, and `docs/07_upload_preview_plan.md`.
 
 ## Decisions
