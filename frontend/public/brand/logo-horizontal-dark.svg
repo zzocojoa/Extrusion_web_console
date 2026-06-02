@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-labelledby="title desc">
+  <title id="title">Extrusion Console dark surface logo</title>
+  <desc id="desc">Horizontal logo lockup for Extrusion Console on dark backgrounds.</desc>
+  <rect width="760" height="180" fill="none"/>
+  <g transform="translate(16 16) scale(.58)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="72" y="32" width="88" height="29" rx="5" fill="#F8FAFC" stroke="#F8FAFC" stroke-width="6"/>
+    <path d="M58 76h116" stroke="#F8FAFC" stroke-width="10"/>
+    <path d="M86 91h61l-15 20v13h-25v-13Z" fill="#F8FAFC" stroke="#F8FAFC" stroke-width="6"/>
+    <path d="M72 169v35c0 11 23 20 52 20s52-9 52-20v-35" stroke="#F8FAFC" stroke-width="7"/>
+    <ellipse cx="124" cy="169" rx="52" ry="17" stroke="#F8FAFC" stroke-width="7"/>
+    <path d="M72 176c0 10 23 18 52 18s52-8 52-18" stroke="#F8FAFC" stroke-width="7"/>
+    <path d="M72 198c0 10 23 18 52 18s52-8 52-18" stroke="#F8FAFC" stroke-width="7"/>
+    <circle cx="154" cy="181" r="5" fill="#22D3C5"/>
+    <circle cx="154" cy="207" r="5" fill="#22D3C5"/>
+    <circle cx="108" cy="114" r="5" fill="#6BB6FF"/>
+    <circle cx="130" cy="116" r="5" fill="#22D3C5"/>
+    <circle cx="96" cy="135" r="5" fill="#6BB6FF"/>
+    <circle cx="118" cy="134" r="5" fill="#22D3C5"/>
+    <circle cx="96" cy="157" r="5" fill="#6BB6FF"/>
+    <circle cx="120" cy="157" r="5" fill="#22D3C5"/>
+    <circle cx="194" cy="136" r="18" fill="#22D3C5"/>
+    <path d="M194 146v-22" stroke="#111820" stroke-width="7"/>
+    <path d="m184 134 10-10 10 10" stroke="#111820" stroke-width="7"/>
+    <path d="M224 98c10 13 15 29 15 46s-5 33-15 46" stroke="#F7B23B" stroke-width="7"/>
+    <path d="M209 112c7 9 10 20 10 32s-3 23-10 32" stroke="#F7B23B" stroke-width="7"/>
+  </g>
+  <path d="M184 38v104" stroke="#8A929A" stroke-width="3"/>
+  <text x="222" y="84" fill="#F8FAFC" font-family="Inter, Arial, sans-serif" font-size="50" font-weight="750" letter-spacing="2">EXTRUSION</text>
+  <text x="222" y="134" fill="#6BB6FF" font-family="Inter, Arial, sans-serif" font-size="50" font-weight="750" letter-spacing="2">CONSOLE</text>
+</svg>

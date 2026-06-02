@@ -443,8 +443,7 @@ supabase_auth_Extrusion_data
 supabase_rest_Extrusion_data
 supabase_realtime_Extrusion_data
 supabase_storage_Extrusion_data
-supabase_imgproxy_Extrusion_data
-supabase_meta_Extrusion_data
+supabase_pg_meta_Extrusion_data
 supabase_studio_Extrusion_data
 supabase_inbucket_Extrusion_data
 supabase_edge_runtime_Extrusion_data
@@ -452,7 +451,7 @@ supabase_analytics_Extrusion_data
 supabase_vector_Extrusion_data
 ```
 
-Required containers for the existence precheck are the full `supabase_*_Extrusion_data` allowlist above. Grafana is intentionally excluded because Grafana remains status/link-only and is not controlled by this API.
+Required containers for the existence precheck are the full `supabase_*_Extrusion_data` allowlist above. The list is pinned to the current `Extrusion_data` local Supabase CLI container names. `supabase_imgproxy_Extrusion_data` is not required because image transformation is disabled in the reference `supabase/config.toml`. Grafana is intentionally excluded because Grafana remains status/link-only and is not controlled by this API. `docker start grafana_local` and `docker stop grafana_local` are forbidden in v1.
 
 Explicitly forbidden:
 
@@ -538,9 +537,8 @@ Stop order:
 ```text
 supabase_edge_runtime_Extrusion_data
 supabase_studio_Extrusion_data
-supabase_meta_Extrusion_data
+supabase_pg_meta_Extrusion_data
 supabase_storage_Extrusion_data
-supabase_imgproxy_Extrusion_data
 supabase_realtime_Extrusion_data
 supabase_rest_Extrusion_data
 supabase_auth_Extrusion_data
@@ -737,3 +735,29 @@ git diff --check
 - Grafana is link/status only.
 - Backend tests, frontend typecheck, frontend build, and `git diff --check` pass.
 - Local operator-PC E2E confirms start/status/stop without data loss or container/volume deletion.
+
+## Implementation Result
+
+Implemented on branch `codex/local-supabase-control-impl`:
+
+- Added `GET /api/runtime/local-supabase`, `POST /api/runtime/local-supabase/start`, `POST /api/runtime/local-supabase/stop`, and `GET /api/runtime/operations/{operationId}`.
+- Added strict `AllowedCommandRunner` policy with `shell=False`, exact read/start/stop command allowlist, and forbidden destructive command coverage.
+- Added required-container existence precheck. Missing required Supabase containers block start as `required_container_missing`; v1 still does not bootstrap or create a local stack.
+- Added runtime operation/event SQLite persistence and startup interruption marking.
+- Added audit rows for manual start/stop success/failure/blocked paths while leaving passive status polling success out of `audit_log`.
+- Added readiness checks for Docker, WSL, Supabase CLI, required containers, API `54321`, DB `25432`, Studio `54323`, Edge Function unauthenticated `POST {}`, and Grafana status/link.
+- Connected the Dashboard runtime panel to the runtime API in API mode with Start/Stop controls.
+- Replaced the Settings placeholder with a read-only runtime config/source section.
+- Added Korean/English runtime and settings UI text.
+
+Verification completed during implementation:
+
+- `.\.venv\Scripts\python -m pytest tests\backend --basetemp C:\tmp\ewc-pytest`
+- `npm run typecheck`
+- `npm run build`
+
+Remaining risks:
+
+- Operator-PC E2E for actual Docker Desktop/WSL/local Supabase start-stop needs to be run before merge confidence is final.
+- Runtime command output is captured only for operation events/audit summaries; future Logs/Audit pages should expose it with redaction.
+- Settings remains read-only. Config write/save workflow is still out of scope.

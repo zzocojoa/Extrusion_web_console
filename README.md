@@ -18,12 +18,15 @@ The first runnable scaffold is in place:
 - Dashboard Variant D mock UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
 - Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, and SSE event replay.
+- Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
+- Dashboard runtime module connected to the runtime API in API mode.
+- Settings runtime section showing read-only local Supabase config values and their source.
 - TanStack Query mock-first Dashboard query.
 - Korean/English i18n baseline with language persistence in `localStorage`.
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
-- Logs and Settings are placeholder pages only.
+- Logs remains a placeholder page only.
 
-Local Supabase control, full Logs/Audit pages, launcher integration, and legacy upload state import are not implemented in this scaffold.
+Full Logs/Audit pages, launcher integration, and legacy upload state import are not implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
@@ -55,7 +58,7 @@ docs/
 - Node.js 20 or newer
 - npm
 
-Local Supabase, WSL, Docker, and Grafana are not required for the mock Dashboard and mock Upload Preview paths. Local Supabase is required only when testing real reachable Upload Preview reconciliation against `all_metrics`.
+Local Supabase, WSL, Docker, and Grafana are not required for the mock Dashboard and mock Upload Preview paths. Local Supabase is required when testing real reachable Upload Preview reconciliation, Upload Job execution, or Local Supabase runtime controls.
 
 ## Backend Development
 
@@ -89,6 +92,26 @@ $env:EWC_STATE_DB_PATH="C:\tmp\ExtrusionWebConsole\web_console_state.db"
 `EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB is unreachable, preview runs still persist and DB-dependent CSV candidates are shown as `risky/db_unreachable` under a `partial_failed` run.
 
 `EWC_SUPABASE_ANON_KEY` and either `EWC_SUPABASE_EDGE_URL` or `EWC_SUPABASE_URL` are required for real Start Upload and Retry Failed execution. Preview-origin upload disables the legacy latest-timestamp Smart Sync filter and relies on the existing `all_metrics(timestamp, device_id)` upsert safety for final duplicate protection.
+
+Local Supabase runtime control uses the existing `Extrusion_data` local stack by default:
+
+```powershell
+$env:EWC_LOCAL_SUPABASE_PROJECT_PATH="C:\Users\user\Documents\GitHub\Extrusion_data"
+$env:EWC_LOCAL_SUPABASE_PROJECT_ID="Extrusion_data"
+$env:EWC_LOCAL_SUPABASE_API_PORT="54321"
+$env:EWC_LOCAL_SUPABASE_DB_PORT="25432"
+$env:EWC_LOCAL_SUPABASE_STUDIO_PORT="54323"
+```
+
+Runtime control is intentionally non-destructive. It does not run bootstrap, reset, cleanup, Docker delete, volume delete, prune, `supabase init`, `supabase db reset`, `docker run/create/rm`, or `docker compose up/down`. If required Supabase containers are missing, start is blocked as `required_container_missing`; v1 does not create a new local Supabase stack.
+
+Runtime API smoke check. Run the start/stop calls only when no upload job or preview run is active:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/runtime/local-supabase
+$runtime = Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/runtime/local-supabase/start
+Invoke-RestMethod http://127.0.0.1:8000/api/runtime/operations/$($runtime.operationId)
+```
 
 Upload Preview API smoke check:
 
@@ -209,7 +232,7 @@ Browser QA has been run against:
 - `http://127.0.0.1:5173/?state=attention`
 - `http://127.0.0.1:5173/?state=blocked`
 - `http://127.0.0.1:5173/?state=running`
-- Upload Preview plus Logs and Settings placeholders through sidebar navigation.
+- Upload Preview, Settings runtime section, and Logs placeholder through sidebar navigation.
 
 ## Source Documents
 
@@ -223,6 +246,8 @@ Browser QA has been run against:
 - `docs/05_dashboard_design_review.md`
 - `docs/06_dashboard_implementation_spec.md`
 - `docs/07_upload_preview_plan.md`
+- `docs/08_upload_job_sse_plan.md`
+- `docs/09_local_supabase_control_plan.md`
 
 ## Reference Project
 
@@ -250,8 +275,6 @@ Core Ops only:
 
 Out of scope for this scaffold:
 
-- Actual Supabase start/stop
-- Actual local Supabase status probing
 - Full legacy core extraction
 - Full Logs/Audit pages
 - Data Mgmt

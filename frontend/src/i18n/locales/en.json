@@ -87,6 +87,56 @@
     "logs": "The Logs screen is being prepared. Check the Dashboard for recent failures and audit summary.",
     "settings": "The Settings screen is being prepared. Check the Dashboard for local runtime status."
   },
+  "runtime": {
+    "loading": "Checking local runtime status...",
+    "error": "Local Supabase runtime status could not be loaded.",
+    "overall": {
+      "ready": "Ready",
+      "running": "Operation running",
+      "attention": "Attention",
+      "blocked": "Blocked",
+      "unknown": "Unknown"
+    },
+    "services": {
+      "api": "Supabase API",
+      "db": "Supabase DB",
+      "edge": "Edge Function",
+      "wsl": "WSL",
+      "grafana": "Grafana",
+      "containers": "Containers"
+    },
+    "containers": {
+      "detail": "{{running}}/{{total}} running",
+      "detailWithProblems": "{{running}}/{{total}} running, {{problemCount}} need attention"
+    },
+    "actions": {
+      "start": "Start",
+      "stop": "Stop",
+      "working": "Working",
+      "apiRequired": "Runtime API mode is required.",
+      "operationActive": "A runtime operation is already active.",
+      "alreadyReady": "Local Supabase is already ready.",
+      "alreadyStopped": "Local Supabase containers are already stopped.",
+      "requiredContainerMissing": "Required containers are missing. v1 does not create a new stack.",
+      "dockerUnavailable": "Docker is unavailable."
+    }
+  },
+  "settings": {
+    "runtime": {
+      "title": "Local Runtime Settings",
+      "subtitle": "Read-only configuration used for local Supabase control.",
+      "error": "Runtime settings could not be loaded.",
+      "unavailable": "Runtime config is unavailable until the backend runtime API is reachable.",
+      "configLabel": "Runtime configuration values",
+      "source": "Source",
+      "commandPolicyTitle": "Command policy",
+      "commandPolicy": "v1 only runs allowlisted status/start/stop commands against the existing Extrusion_data Supabase stack. Bootstrap, reset, deletion, and cleanup commands are not supported."
+    },
+    "source": {
+      "default": "Default",
+      "env": "Environment"
+    }
+  },
   "upload": {
     "tabs": {
       "label": "Upload sections",
