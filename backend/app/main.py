@@ -7,9 +7,11 @@ from starlette.responses import JSONResponse
 
 from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.health import router as health_router
+from backend.app.api.upload_jobs import router as upload_jobs_router
 from backend.app.api.upload_preview import router as upload_preview_router
 from backend.app.core.settings import get_settings
 from backend.app.db.preview_repository import PreviewRepository
+from backend.app.db.upload_job_repository import UploadJobRepository
 
 
 def is_loopback_host(host: str | None) -> bool:
@@ -24,6 +26,7 @@ def is_loopback_host(host: str | None) -> bool:
 def create_app() -> FastAPI:
     settings = get_settings()
     PreviewRepository(settings.state_db_path).mark_interrupted_active_runs()
+    UploadJobRepository(settings.state_db_path).mark_interrupted_active_jobs()
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
@@ -51,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(dashboard_router)
     app.include_router(upload_preview_router)
+    app.include_router(upload_jobs_router)
     return app
 
 

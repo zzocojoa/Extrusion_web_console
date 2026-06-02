@@ -18,6 +18,9 @@ from backend.app.services.upload_preview import (
 )
 
 
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
 class FakeReconciler:
     def __init__(self, matched_keys: set[tuple[str, str]] | None = None, fail: bool = False) -> None:
         self.matched_keys = matched_keys or set()
@@ -35,6 +38,12 @@ def write_csv(path: Path, rows: list[str]) -> None:
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
     old_mtime = datetime.now().timestamp() - 600
     os.utime(path, (old_mtime, old_mtime))
+
+
+def copy_fixture(source_name: str, destination: Path) -> None:
+    destination.write_text((FIXTURES / source_name).read_text(encoding="utf-8"), encoding="utf-8")
+    old_mtime = datetime.now().timestamp() - 600
+    os.utime(destination, (old_mtime, old_mtime))
 
 
 def test_date_window_modes_are_exact_kst_days() -> None:
@@ -146,8 +155,72 @@ def test_csv_key_extractor_streams_integrated_plc_keys(tmp_path: Path) -> None:
     assert result.sample_row_count == 2
     assert result.device_ids == ["extruder_integrated"]
     assert result.local_keys == {
-        ("2026-06-01T09:00:00+09:00", "extruder_integrated"),
-        ("2026-06-01T09:01:00+09:00", "extruder_integrated"),
+        ("2026-06-01T09:00:00.000000+09:00", "extruder_integrated"),
+        ("2026-06-01T09:01:00.000000+09:00", "extruder_integrated"),
+    }
+
+
+def test_csv_key_extractor_streams_legacy_korean_plc_keys(tmp_path: Path) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    csv_path = plc_dir / "260602_legacy_plc.csv"
+    copy_fixture("legacy_plc_korean.csv", csv_path)
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-02",
+            "endDate": "2026-06-02",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(plc_data_dir=str(plc_dir))).scan(request)[0][0]
+
+    result = CsvKeyExtractor().extract(
+        candidate,
+        max_file_seconds=5,
+        sample_rows=2,
+        force_full_scan=False,
+    )
+
+    assert result.row_count == 2
+    assert result.sample_row_count == 2
+    assert result.device_ids == ["extruder_plc"]
+    assert result.local_keys == {
+        ("2026-06-02T09:00:00+09:00", "extruder_plc"),
+        ("2026-06-02T09:01:00+09:00", "extruder_plc"),
+    }
+
+
+def test_csv_key_extractor_streams_legacy_korean_temperature_keys(tmp_path: Path) -> None:
+    temperature_dir = tmp_path / "temperature"
+    temperature_dir.mkdir()
+    csv_path = temperature_dir / "temperature_2026-06-02.csv"
+    copy_fixture("legacy_temperature_korean.csv", csv_path)
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-02",
+            "endDate": "2026-06-02",
+            "sources": ["temperature"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(temperature_data_dir=str(temperature_dir))).scan(request)[0][0]
+
+    result = CsvKeyExtractor().extract(
+        candidate,
+        max_file_seconds=5,
+        sample_rows=2,
+        force_full_scan=False,
+    )
+
+    assert result.row_count == 2
+    assert result.sample_row_count == 2
+    assert result.device_ids == ["spot_temperature_sensor"]
+    assert result.local_keys == {
+        ("2026-06-02T09:00:00.123000+09:00", "spot_temperature_sensor"),
+        ("2026-06-02T09:01:00.000000+09:00", "spot_temperature_sensor"),
     }
 
 

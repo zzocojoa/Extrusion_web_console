@@ -350,6 +350,11 @@
   background: var(--color-surface);
 }
 
+.button--danger {
+  color: var(--color-text-inverse);
+  background: var(--color-danger);
+}
+
 .upload-tabs {
   display: flex;
   gap: var(--space-1);
@@ -544,6 +549,138 @@
   font-variant-numeric: tabular-nums;
 }
 
+.upload-job {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.upload-job__header {
+  overflow: visible;
+}
+
+.upload-job__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.upload-job__summary {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.upload-job__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.upload-job__identity code {
+  font-family: var(--font-data);
+  color: var(--color-text);
+}
+
+.progress--job .progress__track {
+  height: 12px;
+}
+
+.upload-job__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
+.upload-job__metric {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+
+.upload-job__metric span {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.upload-job__metric strong {
+  font-size: var(--text-body);
+}
+
+.mini-progress {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+}
+
+.mini-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-running);
+}
+
+.job-log-viewer {
+  max-height: 260px;
+  overflow: auto;
+  padding: var(--space-3);
+  border-top: 1px solid #263241;
+  background: #101820;
+  color: #e6edf3;
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.job-log-line {
+  display: grid;
+  grid-template-columns: 160px 72px 150px minmax(260px, 1fr);
+  gap: var(--space-2);
+  min-height: 24px;
+  align-items: start;
+  border-bottom: 1px solid rgba(147, 164, 183, 0.12);
+}
+
+.job-log-line__time {
+  color: #93a4b7;
+}
+
+.job-log-line__level {
+  text-transform: uppercase;
+}
+
+.job-log-line--info .job-log-line__level,
+.job-log-line--debug .job-log-line__level {
+  color: #9ed0ea;
+}
+
+.job-log-line--warning .job-log-line__level {
+  color: #ffd27a;
+}
+
+.job-log-line--error .job-log-line__level {
+  color: #ff9b95;
+}
+
+.job-log-line--muted {
+  color: #93a4b7;
+}
+
+.job-log-line__message {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1199px) {
   .dashboard-status-matrix {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -611,5 +748,30 @@
 
   .upload-preview__actions .button {
     flex: 1 1 150px;
+  }
+
+  .upload-job__actions {
+    width: 100%;
+  }
+
+  .upload-job__actions .button {
+    flex: 1 1 130px;
+  }
+
+  .upload-job__metrics {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .upload-job__metric {
+    min-width: 148px;
+  }
+
+  .job-log-line {
+    grid-template-columns: 136px 64px minmax(120px, 1fr);
+  }
+
+  .job-log-line__type {
+    display: none;
   }
 }

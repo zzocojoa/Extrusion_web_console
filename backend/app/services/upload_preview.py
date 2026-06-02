@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
 from backend.app.core.settings import Settings
+from backend.app.core.transform_core import canonical_record_from_row
 from backend.app.db.preview_repository import PreviewRepository, iso_now
 from backend.app.schemas.upload_preview import (
     PreviewCreateRequest,
@@ -379,32 +380,19 @@ class CsvKeyExtractor:
             yield from reader
 
     def _extract_key(self, candidate: CandidateFile, row: dict[str, str]) -> tuple[str | None, str | None]:
-        timestamp = clean(row.get("timestamp")) or clean(row.get("Timestamp"))
-        device_id = clean(row.get("device_id")) or clean(row.get("Device ID"))
-        if timestamp and device_id:
-            return timestamp, device_id
-
-        if candidate.source.kind == "plc":
-            if {"Date", "Time"}.issubset(row.keys()):
-                timestamp = build_integrated_timestamp(row.get("Date"), row.get("Time"))
-                return timestamp, INTEGRATED_PLC_DEVICE_ID
-            time_value = clean(row.get("Time")) or clean(row.get("time"))
-            if time_value and candidate.file_date:
-                return f"{candidate.file_date.isoformat()}T{time_value}+09:00", PLC_DEVICE_ID
-
-        if candidate.source.kind == "temperature":
-            timestamp = (
-                clean(row.get("datetime"))
-                or clean(row.get("Datetime"))
-                or clean(row.get("date_time"))
-            )
-            if timestamp:
-                return timestamp, TEMPERATURE_DEVICE_ID
-            date_value = clean(row.get("date")) or clean(row.get("Date"))
-            time_value = clean(row.get("time")) or clean(row.get("Time"))
-            if date_value and time_value:
-                return f"{date_value}T{time_value}+09:00", TEMPERATURE_DEVICE_ID
-
+        record = canonical_record_from_row(
+            {
+                "kind": candidate.source.kind,
+                "path": str(candidate.path),
+                "file_date": "" if candidate.file_date is None else candidate.file_date.isoformat(),
+            },
+            row,
+        )
+        if record is not None:
+            timestamp = clean(record.get("timestamp"))
+            device_id = clean(record.get("device_id"))
+            if timestamp and device_id:
+                return timestamp, device_id
         return None, None
 
 

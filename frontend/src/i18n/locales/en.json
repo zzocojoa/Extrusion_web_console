@@ -105,8 +105,9 @@
     "actions": {
       "runPreview": "Preview",
       "startUpload": "Start Upload",
+      "startingUpload": "Starting",
       "startUploadUnavailable": "Not implemented",
-      "startUploadDisabledReason": "Upload job execution is not implemented in this phase.",
+      "startUploadDisabledReason": "Start Upload requires a succeeded preview with reachable DB and target rows.",
       "cancelPreview": "Cancel",
       "cancelling": "Cancelling"
     },
@@ -190,7 +191,67 @@
     },
     "job": {
       "title": "Upload Job",
-      "placeholder": "Upload job execution is not implemented in this phase. Review Preview results first."
+      "placeholder": "No upload job yet. Run Preview and start from target rows.",
+      "loading": "Loading upload job...",
+      "loadError": "Upload job could not be loaded.",
+      "startError": "Start Upload failed",
+      "jobId": "Job",
+      "mode": "Mode",
+      "started": "Started",
+      "progress": "Progress",
+      "filesTitle": "Job files",
+      "eventsTitle": "Live job events",
+      "emptyFiles": "No job files are attached.",
+      "emptyEvents": "No job events yet.",
+      "actions": {
+        "pause": "Pause",
+        "resume": "Resume",
+        "cancel": "Cancel",
+        "retry": "Retry Failed"
+      },
+      "metrics": {
+        "files": "Files",
+        "rows": "Rows",
+        "inserted": "Inserted",
+        "failures": "Failures"
+      },
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "succeeded": "Succeeded",
+        "partial_failed": "Partial failed",
+        "failed": "Failed",
+        "pausing": "Pausing",
+        "paused": "Paused",
+        "cancelling": "Cancelling",
+        "cancelled": "Cancelled",
+        "interrupted": "Interrupted"
+      },
+      "fileStatus": {
+        "queued": "Queued",
+        "running": "Running",
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "skipped": "Skipped",
+        "cancelled": "Cancelled",
+        "interrupted": "Interrupted"
+      },
+      "modeValue": {
+        "preview_targets": "Preview targets",
+        "retry_failed": "Retry failed"
+      },
+      "table": {
+        "status": "Status",
+        "filename": "Filename",
+        "kind": "Kind",
+        "progress": "Progress",
+        "rows": "Rows",
+        "uploaded": "Uploaded",
+        "inserted": "Inserted",
+        "resume": "Resume",
+        "retry": "Retry",
+        "error": "Last error"
+      }
     }
   },
   "status": {

@@ -17,12 +17,13 @@ The first runnable scaffold is in place:
 - React + Vite + TypeScript frontend.
 - Dashboard Variant D mock UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
+- Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, and SSE event replay.
 - TanStack Query mock-first Dashboard query.
 - Korean/English i18n baseline with language persistence in `localStorage`.
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
 - Logs and Settings are placeholder pages only.
 
-No real upload job, Supabase control, SSE upload progress, audit log persistence, or legacy upload state import is implemented in this scaffold.
+Local Supabase control, full Logs/Audit pages, launcher integration, and legacy upload state import are not implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
@@ -78,11 +79,16 @@ Upload Preview configuration is read from environment-backed settings:
 
 ```powershell
 $env:EWC_PLC_DATA_DIR="C:\path\to\plc_csv"
-$env:EWC_SUPABASE_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+$env:EWC_SUPABASE_DB_URL="postgresql://postgres:postgres@127.0.0.1:25432/postgres"
+$env:EWC_SUPABASE_URL="http://127.0.0.1:54321"
+$env:EWC_SUPABASE_ANON_KEY="<local anon key>"
+$env:EWC_SUPABASE_EDGE_URL="http://127.0.0.1:54321/functions/v1/upload-metrics"
 $env:EWC_STATE_DB_PATH="C:\tmp\ExtrusionWebConsole\web_console_state.db"
 ```
 
 `EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB is unreachable, preview runs still persist and DB-dependent CSV candidates are shown as `risky/db_unreachable` under a `partial_failed` run.
+
+`EWC_SUPABASE_ANON_KEY` and either `EWC_SUPABASE_EDGE_URL` or `EWC_SUPABASE_URL` are required for real Start Upload and Retry Failed execution. Preview-origin upload disables the legacy latest-timestamp Smart Sync filter and relies on the existing `all_metrics(timestamp, device_id)` upsert safety for final duplicate protection.
 
 Upload Preview API smoke check:
 
@@ -109,6 +115,18 @@ $preview = Invoke-RestMethod -Method Post `
 
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/$($preview.previewRunId)
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/latest
+```
+
+Upload Job API smoke check after a successful preview with target rows:
+
+```powershell
+$job = Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/upload/jobs `
+  -ContentType "application/json" `
+  -Body (@{ previewRunId = $preview.previewRunId } | ConvertTo-Json)
+
+Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/$($job.jobId)
+Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/latest
 ```
 
 Backend tests:
@@ -181,7 +199,9 @@ Upload Preview QA:
 - Preview status table shows `target`, `already_in_db`, `partial_overlap`, `risky`, and `excluded`.
 - Status uses icon + label + semantic color, not color alone.
 - DB unreachable is visible in the run status strip and risky rows.
-- Start Upload is present but disabled because actual upload job execution is not implemented in this phase.
+- Start Upload is enabled only for a succeeded preview with reachable DB and `target` rows.
+- Start Upload excludes `already_in_db`, `partial_overlap`, `risky`, and `excluded` rows by default.
+- Upload Job tab shows file progress, pause/resume/cancel controls, Retry Failed, and live/persisted events.
 
 Browser QA has been run against:
 
@@ -230,12 +250,10 @@ Core Ops only:
 
 Out of scope for this scaffold:
 
-- Actual upload job execution
 - Actual Supabase start/stop
 - Actual local Supabase status probing
 - Full legacy core extraction
-- SSE progress/log streaming
-- Audit log persistence
+- Full Logs/Audit pages
 - Data Mgmt
 - Cycle Ops
 - Training Dataset Builder
@@ -253,7 +271,7 @@ If the backend fails after pulling this branch with `ModuleNotFoundError: psycop
 If Upload Preview reports `partial_failed` with `risky/db_unreachable`, check:
 
 - `EWC_SUPABASE_DB_URL` is set for the backend process.
-- Local Supabase is running and its Postgres port is reachable, usually `127.0.0.1:54322`.
+- Local Supabase is running and its Postgres port is reachable. For the referenced `Extrusion_data` local stack, use `127.0.0.1:25432` from `supabase/config.toml`.
 - The local database contains `public.all_metrics` with the existing `timestamp, device_id` uniqueness policy.
 
 This failure state is expected when the DB cannot be checked. The app should show the risk in the UI instead of treating files as upload targets.

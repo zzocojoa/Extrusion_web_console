@@ -67,9 +67,9 @@ Status on branch `codex/upload-preview-reconciliation`:
 - Done: exact Supabase reconciliation when `EWC_SUPABASE_DB_URL` is configured.
 - Done: DB unreachable path persists run `partial_failed` and item `risky/db_unreachable`.
 - Done: Upload page Preview UI with status summary, table, filters, polling, mock data, and Korean/English i18n.
-- Done: Upload Job tab placeholder remains scoped to future upload execution.
+- Done on branch `codex/upload-job-sse`: Upload Job API, retry failed API, pause/resume/cancel API, SQLite upload job/file/file-state/event/audit persistence, Start Upload from completed Preview targets, SSE event replay, and Upload Job tab UI.
 - Verified: backend tests, frontend typecheck/build, and browser QA for Dashboard regression plus Upload Preview responsive states.
-- Not done: real Start Upload execution, Retry Failed execution, SSE progress/log streaming, local Supabase start/stop/status, audit log persistence, launcher integration.
+- Not done: local Supabase start/stop/status, full Logs/Audit pages, launcher integration.
 
 ## 4. Build Backend Core Ops
 
@@ -84,7 +84,7 @@ Implement backend capabilities in this order:
 7. progress and log streaming
 8. launcher integration
 
-Current implementation note: mock Dashboard aggregation endpoints and Upload Preview APIs exist. Config write, audit, runtime Supabase/Grafana status, upload job execution, retry, SSE, and launcher APIs remain future work.
+Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, and Upload Job APIs exist. Config write, runtime Supabase/Grafana status, full Logs/Audit pages, and launcher APIs remain future work.
 
 ## 5. Build Frontend Core Ops
 
@@ -97,7 +97,7 @@ Implement frontend screens in this order:
 
 The UI should be operational and dense, not marketing-oriented.
 
-Current implementation note: Dashboard mock UI and Upload Preview UI are implemented. Upload Job, Logs, and Settings remain placeholders and must not be treated as Core Ops parity yet. Real Start Upload and Retry Failed behavior is not implemented.
+Current implementation note: Dashboard mock UI, Upload Preview UI, and Upload Job tab are implemented. Logs and Settings remain placeholders and must not be treated as Core Ops parity yet.
 
 ## 6. Validate Against Legacy Behavior
 
