@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     port: int = 8000
     grafana_url: str = "http://localhost:3001"
     state_db_path: str = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "web_console_state.db")
+    config_file_path: str = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "config.json")
     plc_data_dir: str = ""
     temperature_data_dir: str = ""
     supabase_db_url: str = ""
