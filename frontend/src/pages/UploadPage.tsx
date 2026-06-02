@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -9,6 +9,7 @@ import {
   createUploadJob,
   fetchLatestUploadJob,
   fetchUploadJob,
+  getUploadJobEventsUrl,
   normalizeJobEvent,
   retryUploadJob,
   type JobEvent,
@@ -106,6 +107,7 @@ function mockRunId() {
 
 export function UploadPage() {
   const { i18n, t } = useTranslation();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"preview" | "job">("preview");
   const [rangeMode, setRangeMode] = useState<PreviewRangeMode>("today");
   const [startDate, setStartDate] = useState<string>("");
@@ -203,19 +205,30 @@ export function UploadPage() {
   const currentJob = useMemo(() => {
     const detail = jobId ? jobQuery.data ?? null : latestJobQuery.data ?? null;
     if (!detail || sseEvents.length === 0 || !jobId || detail.job.jobId !== jobId) return detail;
+    const relevantEvents = sseEvents.filter((event) => event.jobId === detail.job.jobId);
+    if (relevantEvents.length === 0) return detail;
     const bySeq = new Map<number, JobEvent>();
     for (const event of detail.events) bySeq.set(event.seq, event);
-    for (const event of sseEvents) bySeq.set(event.seq, event);
+    for (const event of relevantEvents) bySeq.set(event.seq, event);
+    const latestSseSeq = relevantEvents.reduce((latest, event) => Math.max(latest, event.seq), 0);
     return {
       ...detail,
       events: [...bySeq.values()].sort((a, b) => a.seq - b.seq),
-      eventCursor: { latestSeq: Math.max(detail.eventCursor.latestSeq, ...sseEvents.map((event) => event.seq)) },
+      eventCursor: { latestSeq: Math.max(detail.eventCursor.latestSeq, latestSseSeq) },
     };
   }, [jobId, jobQuery.data, latestJobQuery.data, sseEvents]);
 
   useEffect(() => {
+    latestSeqRef.current = 0;
+    setSseEvents([]);
+  }, [jobId]);
+
+  useEffect(() => {
     if (!API_MODE || !jobId || activeTab !== "job") return;
-    const source = new EventSource(`/api/upload/jobs/${jobId}/events?afterSeq=${latestSeqRef.current}`);
+    const streamJobId = jobId;
+    const afterSeq = Math.max(latestSeqRef.current, jobQuery.data?.eventCursor.latestSeq ?? 0);
+    latestSeqRef.current = afterSeq;
+    const source = new EventSource(getUploadJobEventsUrl(streamJobId, afterSeq));
     const eventTypes = [
       "job.created",
       "job.started",
@@ -240,20 +253,27 @@ export function UploadPage() {
       "log.error",
       "audit.recorded",
     ];
-    const onEvent = (event: MessageEvent) => {
-      const parsed = normalizeJobEvent(JSON.parse(event.data));
+    const onEvent: EventListener = (event) => {
+      const message = event as MessageEvent<string>;
+      let parsed: JobEvent;
+      try {
+        parsed = normalizeJobEvent(JSON.parse(message.data));
+      } catch {
+        return;
+      }
+      if (parsed.jobId !== streamJobId) return;
       latestSeqRef.current = Math.max(latestSeqRef.current, parsed.seq);
       setSseEvents((previous) => {
         if (previous.some((item) => item.seq === parsed.seq)) return previous;
         return [...previous, parsed].slice(-300);
       });
+      if (parsed.eventType.startsWith("job.") || ["file.succeeded", "file.failed", "file.cancelled"].includes(parsed.eventType)) {
+        void queryClient.invalidateQueries({ queryKey: ["upload-job", streamJobId] });
+      }
     };
-    for (const eventType of eventTypes) source.addEventListener(eventType, onEvent as EventListener);
-    source.onerror = () => {
-      source.close();
-    };
+    for (const eventType of eventTypes) source.addEventListener(eventType, onEvent);
     return () => source.close();
-  }, [activeTab, jobId]);
+  }, [activeTab, jobId, jobQuery.data?.eventCursor.latestSeq, queryClient]);
 
   const createMutation = useMutation({
     mutationFn: async () => {

@@ -1,4 +1,3 @@
-import csv
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -8,17 +7,10 @@ from typing import Any
 import httpx
 
 from backend.app.core.settings import Settings
+from backend.app.core.transform_core import count_canonical_records, iter_canonical_record_chunks
 from backend.app.db.upload_job_repository import UploadJobRepository, decode_json
 from backend.app.schemas.upload_jobs import UploadJobOptions, UploadJobStatus
-from backend.app.services.upload_preview import (
-    INTEGRATED_PLC_DEVICE_ID,
-    KST,
-    PLC_DEVICE_ID,
-    TEMPERATURE_DEVICE_ID,
-    build_file_signature,
-    build_integrated_timestamp,
-    clean,
-)
+from backend.app.services.upload_preview import build_file_signature, is_file_locked
 
 
 class UploadJobCancelled(RuntimeError):
@@ -42,86 +34,10 @@ def build_upload_headers(anon_key: str) -> dict[str, str]:
 
 class CsvUploadRecordReader:
     def iter_records(self, file_row: Any, chunk_rows: int, start_offset: int = 0) -> Iterable[list[dict[str, Any]]]:
-        path = Path(file_row["path"])
-        encoding = "utf-8-sig"
-        try:
-            yield from self._iter_records_with_encoding(file_row, path, encoding, chunk_rows, start_offset)
-        except UnicodeDecodeError:
-            yield from self._iter_records_with_encoding(file_row, path, "cp949", chunk_rows, start_offset)
-
-    def _iter_records_with_encoding(
-        self,
-        file_row: Any,
-        path: Path,
-        encoding: str,
-        chunk_rows: int,
-        start_offset: int,
-    ) -> Iterable[list[dict[str, Any]]]:
-        chunk: list[dict[str, Any]] = []
-        seen = 0
-        with path.open("r", encoding=encoding, newline="") as handle:
-            reader = csv.DictReader(handle)
-            for row in reader:
-                record = self._row_to_record(file_row, row)
-                if record is None:
-                    continue
-                if seen < start_offset:
-                    seen += 1
-                    continue
-                chunk.append(record)
-                seen += 1
-                if len(chunk) >= chunk_rows:
-                    yield chunk
-                    chunk = []
-        if chunk:
-            yield chunk
+        yield from iter_canonical_record_chunks(file_row, chunk_rows=chunk_rows, start_offset=start_offset)
 
     def count_records(self, file_row: Any) -> int:
-        count = 0
-        for chunk in self.iter_records(file_row, chunk_rows=10_000, start_offset=0):
-            count += len(chunk)
-        return count
-
-    def _row_to_record(self, file_row: Any, row: dict[str, str]) -> dict[str, Any] | None:
-        timestamp, device_id = self._extract_key(file_row, row)
-        if not timestamp or not device_id:
-            return None
-        record: dict[str, Any] = {"timestamp": timestamp, "device_id": device_id}
-        for key, value in row.items():
-            normalized_key = normalize_column_name(key)
-            if normalized_key in {"timestamp", "device_id"}:
-                continue
-            clean_value = clean(value)
-            if clean_value is None:
-                record[normalized_key] = None
-            else:
-                record[normalized_key] = coerce_value(clean_value)
-        return record
-
-    def _extract_key(self, file_row: Any, row: dict[str, str]) -> tuple[str | None, str | None]:
-        timestamp = clean(row.get("timestamp")) or clean(row.get("Timestamp"))
-        device_id = clean(row.get("device_id")) or clean(row.get("Device ID"))
-        if timestamp and device_id:
-            return timestamp, device_id
-
-        kind = str(file_row["kind"])
-        if kind == "plc":
-            if {"Date", "Time"}.issubset(row.keys()):
-                return build_integrated_timestamp(row.get("Date"), row.get("Time")), INTEGRATED_PLC_DEVICE_ID
-            time_value = clean(row.get("Time")) or clean(row.get("time"))
-            file_date = clean(file_row["file_date"])
-            if time_value and file_date:
-                return f"{file_date}T{time_value}+09:00", PLC_DEVICE_ID
-
-        if kind == "temperature":
-            timestamp = clean(row.get("datetime")) or clean(row.get("Datetime")) or clean(row.get("date_time"))
-            if timestamp:
-                return timestamp, TEMPERATURE_DEVICE_ID
-            date_value = clean(row.get("date")) or clean(row.get("Date"))
-            time_value = clean(row.get("time")) or clean(row.get("Time"))
-            if date_value and time_value:
-                return f"{date_value}T{time_value}+09:00", TEMPERATURE_DEVICE_ID
-        return None, None
+        return count_canonical_records(file_row)
 
 
 class EdgeUploader:
@@ -231,6 +147,11 @@ class UploadJobService:
             if not path.exists():
                 self.repository.mark_file_failed(job_file_id, "file_missing", "File is missing after preview.", row["resume_offset"])
                 return
+            path_error = validate_upload_path(path, Path(row["folder_path"]))
+            if path_error is not None:
+                code, message = path_error
+                self.repository.mark_file_failed(job_file_id, code, message, row["resume_offset"])
+                return
             stat = path.stat()
             signature = build_file_signature(path, stat)
             if signature != row["file_signature"]:
@@ -296,17 +217,19 @@ class UploadJobService:
         return UploadJobOptions.model_validate(decode_json(row["options_json"], {}))
 
 
-def normalize_column_name(value: str) -> str:
-    normalized = "".join(ch if ch.isalnum() else "_" for ch in value.strip().lower())
-    while "__" in normalized:
-        normalized = normalized.replace("__", "_")
-    return normalized.strip("_") or "value"
-
-
-def coerce_value(value: str) -> str | int | float:
+def validate_upload_path(path: Path, folder_path: Path) -> tuple[str, str] | None:
+    if path.suffix.lower() != ".csv":
+        return "unsupported_extension", "Upload target is not a CSV file."
+    if not path.is_file():
+        return "file_not_regular", "Upload target is not a regular file."
     try:
-        if "." not in value:
-            return int(value)
-        return float(value)
+        resolved_path = path.resolve()
+        resolved_folder = folder_path.resolve()
+        resolved_path.relative_to(resolved_folder)
     except ValueError:
-        return value
+        return "file_outside_source", "Upload target is outside the preview source folder."
+    except OSError as error:
+        return "file_path_error", f"Could not validate upload target path: {error}"
+    if is_file_locked(path):
+        return "file_locked", "Upload target is locked by another process."
+    return None

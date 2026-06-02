@@ -21,3 +21,9 @@ All notable changes to Extrusion Web Console are documented here.
 ### Fixed
 
 - Backend startup now marks active upload jobs as `interrupted` so background upload failures are not silent after a restart.
+- Upload jobs now build Edge Function payload rows through the canonical legacy-compatible transform adapter instead of raw CSV normalization.
+- Upload job finalization no longer overwrites cancelled, interrupted, or otherwise terminal jobs when a late worker finishes.
+- Mutating upload APIs now audit blocked/failure paths, including missing config, invalid preview state, active job conflicts, and invalid pause/resume/cancel transitions.
+- Pause handling now records `job.paused` only on the `pausing -> paused` transition.
+- Upload Job SSE now preserves native reconnect behavior and replays job-scoped events from the persisted sequence cursor.
+- Concurrent job event writers now append under an immediate SQLite transaction to avoid duplicate per-job sequence values.

@@ -138,24 +138,65 @@ def _validate_upload_config(settings: Settings) -> None:
         )
 
 
-def _validate_preview_uploadable(repository: UploadJobRepository, preview_run_id: str) -> None:
-    run = repository.get_preview_run(preview_run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview run not found")
-    if run["status"] != "succeeded":
-        raise HTTPException(
+def audit_blocked(
+    repository: UploadJobRepository,
+    *,
+    action: str,
+    target_type: str,
+    target_id: str | None,
+    reason: str,
+    params: dict[str, Any] | None = None,
+    job_id: str | None = None,
+    message: str | None = None,
+) -> None:
+    repository.append_audit(
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        params=params or {},
+        result="blocked",
+        error_code=reason,
+        error_message=message or reason,
+        job_id=job_id,
+    )
+
+
+def reject_with_audit(
+    repository: UploadJobRepository,
+    *,
+    status_code: int,
+    action: str,
+    target_type: str,
+    target_id: str | None,
+    reason: str,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    detail_extra: dict[str, Any] | None = None,
+) -> None:
+    audit_blocked(
+        repository,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        reason=reason,
+        params=params,
+    )
+    detail = {"reason": reason}
+    if detail_extra:
+        detail.update(detail_extra)
+    raise HTTPException(status_code=status_code, detail=detail, headers=headers)
+
+
+def ensure_upload_config(settings: Settings, repository: UploadJobRepository, action: str, params: dict[str, Any]) -> None:
+    if not settings.upload_edge_url or not settings.supabase_anon_key:
+        reject_with_audit(
+            repository,
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"reason": "preview_not_uploadable", "status": run["status"]},
-        )
-    if run["db_status"] != "reachable":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"reason": "preview_db_not_reachable", "dbStatus": run["db_status"]},
-        )
-    if repository.count_preview_targets(preview_run_id) <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"reason": "no_upload_targets"},
+            action=action,
+            target_type="upload_job",
+            target_id=None,
+            reason="upload_config_missing",
+            params=params,
         )
 
 
@@ -166,11 +207,18 @@ def create_upload_job(
     repository: UploadJobRepository = Depends(get_upload_job_repository),
 ) -> UploadJobCreateResponse:
     if request.mode != UploadJobMode.preview_targets:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Only preview_targets is supported here")
-    _validate_upload_config(settings)
-    _validate_preview_uploadable(repository, request.preview_run_id)
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action="upload.start",
+            target_type="preview_run",
+            target_id=request.preview_run_id,
+            reason="unsupported_upload_mode",
+            params={"previewRunId": request.preview_run_id, "mode": request.mode.value},
+        )
+    ensure_upload_config(settings, repository, "upload.start", {"previewRunId": request.preview_run_id})
     job_id = f"upl_{uuid4().hex[:12]}"
-    active_job_id = repository.create_job_from_preview(
+    result = repository.create_job_from_preview(
         job_id=job_id,
         preview_run_id=request.preview_run_id,
         options=request.options.model_dump(mode="json", by_alias=True),
@@ -180,11 +228,35 @@ def create_upload_job(
             "enableSmartSync": False,
         },
     )
-    if active_job_id is not None:
-        raise HTTPException(
+    if result.active_job_id is not None:
+        reject_with_audit(
+            repository,
             status_code=status.HTTP_409_CONFLICT,
-            detail={"activeJobId": active_job_id, "reason": "active_upload_job"},
-            headers={"Location": f"/api/upload/jobs/{active_job_id}"},
+            action="upload.start",
+            target_type="preview_run",
+            target_id=request.preview_run_id,
+            reason="active_upload_job",
+            params={"previewRunId": request.preview_run_id, "activeJobId": result.active_job_id},
+            headers={"Location": f"/api/upload/jobs/{result.active_job_id}"},
+            detail_extra={"activeJobId": result.active_job_id},
+        )
+    if not result.created:
+        reason = result.rejection_reason or "preview_not_uploadable"
+        status_code = status.HTTP_404_NOT_FOUND if reason == "preview_missing" else status.HTTP_422_UNPROCESSABLE_ENTITY
+        detail_extra: dict[str, Any] = {}
+        if result.rejection_status:
+            detail_extra["status"] = result.rejection_status
+        if result.db_status:
+            detail_extra["dbStatus"] = result.db_status
+        reject_with_audit(
+            repository,
+            status_code=status_code,
+            action="upload.start",
+            target_type="preview_run",
+            target_id=request.preview_run_id,
+            reason=reason,
+            params={"previewRunId": request.preview_run_id},
+            detail_extra=detail_extra,
         )
     executor.submit(UploadJobService(settings, repository).run_job, job_id)
     return UploadJobCreateResponse(
@@ -233,7 +305,7 @@ def retry_upload_job(
     settings: Settings = Depends(get_settings),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
 ) -> UploadJobCreateResponse:
-    _validate_upload_config(settings)
+    ensure_upload_config(settings, repository, "upload.retry", {"retryOfJobId": job_id})
     retry_job_id = f"upl_{uuid4().hex[:12]}"
     active_job_id, file_count = repository.create_retry_job(
         job_id=retry_job_id,
@@ -248,15 +320,37 @@ def retry_upload_job(
         },
     )
     if active_job_id is not None:
-        raise HTTPException(
+        reject_with_audit(
+            repository,
             status_code=status.HTTP_409_CONFLICT,
-            detail={"activeJobId": active_job_id, "reason": "active_upload_job"},
+            action="upload.retry",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="active_upload_job",
+            params={"retryOfJobId": job_id, "activeJobId": active_job_id},
             headers={"Location": f"/api/upload/jobs/{active_job_id}"},
+            detail_extra={"activeJobId": active_job_id},
         )
     if file_count < 0:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"reason": "source_job_not_retryable"})
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_409_CONFLICT,
+            action="upload.retry",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="source_job_not_retryable",
+            params={"retryOfJobId": job_id},
+        )
     if file_count == 0:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"reason": "no_retryable_files"})
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action="upload.retry",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="no_retryable_files",
+            params={"retryOfJobId": job_id},
+        )
     executor.submit(UploadJobService(settings, repository).run_job, retry_job_id)
     return UploadJobCreateResponse(
         job_id=retry_job_id,
@@ -273,9 +367,25 @@ def pause_upload_job(
 ) -> UploadJobDetailResponse:
     next_status = repository.request_pause(job_id)
     if next_status is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
-    if next_status != UploadJobStatus.pausing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"status": next_status.value})
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_404_NOT_FOUND,
+            action="upload.pause",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="upload_job_not_found",
+        )
+    if next_status not in {UploadJobStatus.pausing, UploadJobStatus.paused}:
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_409_CONFLICT,
+            action="upload.pause",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="invalid_upload_job_state",
+            params={"status": next_status.value},
+            detail_extra={"status": next_status.value},
+        )
     return build_job_detail(job_id, repository)
 
 
@@ -286,9 +396,25 @@ def resume_upload_job(
 ) -> UploadJobDetailResponse:
     next_status = repository.resume_job(job_id)
     if next_status is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_404_NOT_FOUND,
+            action="upload.resume",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="upload_job_not_found",
+        )
     if next_status != UploadJobStatus.running:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"status": next_status.value})
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_409_CONFLICT,
+            action="upload.resume",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="invalid_upload_job_state",
+            params={"status": next_status.value},
+            detail_extra={"status": next_status.value},
+        )
     return build_job_detail(job_id, repository)
 
 
@@ -299,9 +425,25 @@ def cancel_upload_job(
 ) -> UploadJobDetailResponse:
     next_status = repository.request_cancel(job_id)
     if next_status is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_404_NOT_FOUND,
+            action="upload.cancel",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="upload_job_not_found",
+        )
     if next_status != UploadJobStatus.cancelling:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"status": next_status.value})
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_409_CONFLICT,
+            action="upload.cancel",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="invalid_upload_job_state",
+            params={"status": next_status.value},
+            detail_extra={"status": next_status.value},
+        )
     return build_job_detail(job_id, repository)
 
 

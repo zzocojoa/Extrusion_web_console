@@ -1,4 +1,5 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
@@ -79,14 +80,14 @@ def test_create_job_from_preview_snapshots_only_target_items(tmp_path: Path) -> 
     create_preview_with_items(db_path)
     repository = UploadJobRepository(db_path)
 
-    active = repository.create_job_from_preview(
+    result = repository.create_job_from_preview(
         job_id="upl_test",
         preview_run_id="prv_done",
         options={},
         config_snapshot={},
     )
 
-    assert active is None
+    assert result.created is True
     job = repository.get_job("upl_test")
     files = repository.list_job_files("upl_test")
     events = repository.list_events("upl_test")
@@ -102,15 +103,33 @@ def test_active_job_guard_blocks_second_job(tmp_path: Path) -> None:
     repository = UploadJobRepository(db_path)
     repository.create_job_from_preview(job_id="upl_active", preview_run_id="prv_done", options={}, config_snapshot={})
 
-    active = repository.create_job_from_preview(
+    result = repository.create_job_from_preview(
         job_id="upl_new",
         preview_run_id="prv_done",
         options={},
         config_snapshot={},
     )
 
-    assert active == "upl_active"
+    assert result.active_job_id == "upl_active"
     assert repository.get_job("upl_new") is None
+
+
+def test_create_job_from_preview_revalidates_preview_state_inside_transaction(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    PreviewRepository(str(db_path)).update_run("prv_done", status="partial_failed", db_status="unreachable")
+
+    result = repository.create_job_from_preview(
+        job_id="upl_blocked",
+        preview_run_id="prv_done",
+        options={},
+        config_snapshot={},
+    )
+
+    assert result.created is False
+    assert result.rejection_reason == "preview_not_uploadable"
+    assert repository.get_job("upl_blocked") is None
 
 
 def test_startup_marks_active_upload_job_interrupted(tmp_path: Path) -> None:
@@ -129,6 +148,77 @@ def test_startup_marks_active_upload_job_interrupted(tmp_path: Path) -> None:
     assert job["status"] == "interrupted"
     assert files[0]["status"] == "interrupted"
     assert events[-1]["event_type"] == "job.interrupted"
+
+
+def test_finish_job_does_not_overwrite_cancel_requested_job(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(job_id="upl_cancel", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.start_job("upl_cancel")
+    repository.request_cancel("upl_cancel")
+
+    changed = repository.finish_job("upl_cancel", UploadJobStatus.succeeded)
+
+    job = repository.get_job("upl_cancel")
+    assert changed is True
+    assert job["status"] == "cancelled"
+
+
+def test_finish_job_does_not_overwrite_terminal_interrupted_job(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(job_id="upl_interrupted", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.start_job("upl_interrupted")
+    repository.mark_interrupted_active_jobs()
+
+    changed = repository.finish_job("upl_interrupted", UploadJobStatus.succeeded)
+
+    job = repository.get_job("upl_interrupted")
+    assert changed is False
+    assert job["status"] == "interrupted"
+
+
+def test_mark_paused_is_idempotent_and_does_not_duplicate_events(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(job_id="upl_pause", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.start_job("upl_pause")
+    repository.request_pause("upl_pause")
+
+    repository.mark_paused("upl_pause")
+    repository.mark_paused("upl_pause")
+
+    events = repository.list_events("upl_pause")
+    paused_events = [event for event in events if event["event_type"] == "job.paused"]
+    assert len(paused_events) == 1
+    assert repository.request_pause("upl_pause") == UploadJobStatus.paused
+
+
+def test_append_event_assigns_unique_monotonic_seq_under_concurrent_writers(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(job_id="upl_events", preview_run_id="prv_done", options={}, config_snapshot={})
+
+    def append(index: int) -> int:
+        return repository.append_event(
+            "upl_events",
+            event_type="log.info",
+            level="info",
+            message=f"event {index}",
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        seqs = list(pool.map(append, range(40)))
+
+    events = repository.list_events("upl_events", after_seq=0, limit=100)
+    all_seqs = [event["seq"] for event in events]
+    assert len(seqs) == 40
+    assert len(all_seqs) == len(set(all_seqs))
+    assert all_seqs == sorted(all_seqs)
 
 
 def test_retry_job_snapshots_failed_files_only(tmp_path: Path) -> None:

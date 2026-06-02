@@ -1,6 +1,7 @@
 import json
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -10,6 +11,16 @@ from backend.app.schemas.upload_jobs import UploadJobFileStatus, UploadJobMode, 
 
 ACTIVE_JOB_STATUSES = ("queued", "running", "pausing", "paused", "cancelling")
 TERMINAL_JOB_STATUSES = ("succeeded", "partial_failed", "failed", "cancelled", "interrupted")
+
+
+@dataclass(frozen=True)
+class CreateJobFromPreviewResult:
+    created: bool
+    active_job_id: str | None = None
+    rejection_reason: str | None = None
+    rejection_status: str | None = None
+    db_status: str | None = None
+    file_count: int = 0
 
 
 def _json(value: Any) -> str:
@@ -224,7 +235,7 @@ class UploadJobRepository:
         preview_run_id: str,
         options: dict[str, Any],
         config_snapshot: dict[str, Any],
-    ) -> str | None:
+    ) -> CreateJobFromPreviewResult:
         now = iso_now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -239,7 +250,36 @@ class UploadJobRepository:
                 ACTIVE_JOB_STATUSES,
             ).fetchone()
             if active is not None:
-                return str(active["job_id"])
+                return CreateJobFromPreviewResult(created=False, active_job_id=str(active["job_id"]))
+            preview = connection.execute(
+                "SELECT * FROM preview_runs WHERE preview_run_id = ?",
+                (preview_run_id,),
+            ).fetchone()
+            if preview is None:
+                return CreateJobFromPreviewResult(created=False, rejection_reason="preview_missing")
+            if preview["status"] != "succeeded":
+                return CreateJobFromPreviewResult(
+                    created=False,
+                    rejection_reason="preview_not_uploadable",
+                    rejection_status=str(preview["status"]),
+                )
+            if preview["db_status"] != "reachable":
+                return CreateJobFromPreviewResult(
+                    created=False,
+                    rejection_reason="preview_db_not_reachable",
+                    db_status=str(preview["db_status"]),
+                )
+            target_count_row = connection.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM preview_items
+                WHERE preview_run_id = ? AND status = 'target'
+                """,
+                (preview_run_id,),
+            ).fetchone()
+            target_count = int(target_count_row["count"] if target_count_row else 0)
+            if target_count <= 0:
+                return CreateJobFromPreviewResult(created=False, rejection_reason="no_upload_targets")
 
             connection.execute(
                 """
@@ -295,7 +335,7 @@ class UploadJobRepository:
                 result="success",
                 job_id=job_id,
             )
-        return None
+        return CreateJobFromPreviewResult(created=True, file_count=target_count)
 
     def create_retry_job(
         self,
@@ -420,7 +460,8 @@ class UploadJobRepository:
     def start_job(self, job_id: str) -> None:
         now = iso_now()
         with self.connect() as connection:
-            connection.execute(
+            connection.execute("BEGIN IMMEDIATE")
+            updated = connection.execute(
                 """
                 UPDATE upload_jobs
                 SET status = 'running', started_at = COALESCE(started_at, ?), updated_at = ?
@@ -428,37 +469,65 @@ class UploadJobRepository:
                 """,
                 (now, now, job_id),
             )
+            if updated.rowcount <= 0:
+                return
             self._append_event_in_connection(
                 connection, job_id, event_type="job.started", level="info", message="Upload job started."
             )
 
-    def finish_job(self, job_id: str, status: UploadJobStatus, error_code: str | None = None, error_message: str | None = None) -> None:
+    def finish_job(self, job_id: str, status: UploadJobStatus, error_code: str | None = None, error_message: str | None = None) -> bool:
         now = iso_now()
-        result = "success" if status == UploadJobStatus.succeeded else "cancelled" if status == UploadJobStatus.cancelled else "failure"
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                "SELECT status, cancel_requested FROM upload_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if current is None or current["status"] in TERMINAL_JOB_STATUSES:
+                return False
+            final_status = status
+            if (current["cancel_requested"] or current["status"] == UploadJobStatus.cancelling.value) and status == UploadJobStatus.succeeded:
+                final_status = UploadJobStatus.cancelled
+                error_code = "cancelled"
+                error_message = "Upload job was cancelled before finalization."
+            result = (
+                "success"
+                if final_status == UploadJobStatus.succeeded
+                else "cancelled"
+                if final_status == UploadJobStatus.cancelled
+                else "failure"
+            )
             self._recompute_job_summary(connection, job_id)
-            connection.execute(
+            updated = connection.execute(
                 """
                 UPDATE upload_jobs
                 SET status = ?, finished_at = COALESCE(finished_at, ?),
                     error_code = ?, error_message = ?, updated_at = ?
-                WHERE job_id = ?
+                WHERE job_id = ? AND status NOT IN ('succeeded','partial_failed','failed','cancelled','interrupted')
                 """,
-                (status.value, now, error_code, error_message, now, job_id),
+                (final_status.value, now, error_code, error_message, now, job_id),
             )
-            event_type = f"job.{status.value}"
-            level = "info" if status == UploadJobStatus.succeeded else "warning" if status in {UploadJobStatus.partial_failed, UploadJobStatus.cancelled} else "error"
+            if updated.rowcount <= 0:
+                return False
+            event_type = f"job.{final_status.value}"
+            level = (
+                "info"
+                if final_status == UploadJobStatus.succeeded
+                else "warning"
+                if final_status in {UploadJobStatus.partial_failed, UploadJobStatus.cancelled}
+                else "error"
+            )
             self._append_event_in_connection(
                 connection,
                 job_id,
                 event_type=event_type,
                 level=level,
-                message=f"Upload job finished with status {status.value}.",
+                message=f"Upload job finished with status {final_status.value}.",
                 data={"errorCode": error_code, "errorMessage": error_message},
             )
             self._append_audit_in_connection(
                 connection,
-                action=f"upload.{status.value}",
+                action=f"upload.{final_status.value}",
                 target_type="upload_job",
                 target_id=job_id,
                 params={},
@@ -467,13 +536,19 @@ class UploadJobRepository:
                 error_message=error_message,
                 job_id=job_id,
             )
+        return True
 
     def request_pause(self, job_id: str) -> UploadJobStatus | None:
+        with self.connect() as connection:
+            row = connection.execute("SELECT status FROM upload_jobs WHERE job_id = ?", (job_id,)).fetchone()
+        if row is not None and row["status"] == UploadJobStatus.paused.value:
+            return UploadJobStatus.paused
         return self._set_control_flag(job_id, "pause_requested", UploadJobStatus.pausing, ("queued", "running"), "upload.pause")
 
     def resume_job(self, job_id: str) -> UploadJobStatus | None:
         now = iso_now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT status FROM upload_jobs WHERE job_id = ?", (job_id,)).fetchone()
             if row is None:
                 return None
@@ -520,6 +595,7 @@ class UploadJobRepository:
     ) -> UploadJobStatus | None:
         now = iso_now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT status FROM upload_jobs WHERE job_id = ?", (job_id,)).fetchone()
             if row is None:
                 return None
@@ -549,6 +625,12 @@ class UploadJobRepository:
 
     def mark_paused(self, job_id: str) -> None:
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT status FROM upload_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None or row["status"] == UploadJobStatus.paused.value:
+                return
+            if row["status"] != UploadJobStatus.pausing.value:
+                return
             connection.execute(
                 "UPDATE upload_jobs SET status = 'paused', updated_at = ? WHERE job_id = ?",
                 (iso_now(), job_id),
@@ -597,6 +679,7 @@ class UploadJobRepository:
     def mark_file_running(self, job_file_id: int) -> None:
         now = iso_now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT * FROM upload_job_files WHERE job_file_id = ?",
                 (job_file_id,),
@@ -633,6 +716,7 @@ class UploadJobRepository:
     ) -> None:
         now = iso_now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT * FROM upload_job_files WHERE job_file_id = ?",
                 (job_file_id,),
@@ -668,6 +752,7 @@ class UploadJobRepository:
     def mark_file_completed(self, job_file_id: int, uploaded_rows: int, inserted_rows: int) -> None:
         now = iso_now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM upload_job_files WHERE job_file_id = ?", (job_file_id,)).fetchone()
             if row is None:
                 return
@@ -697,6 +782,7 @@ class UploadJobRepository:
     def mark_file_failed(self, job_file_id: int, error_code: str, error_message: str, resume_offset: int | None = None) -> None:
         now = iso_now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM upload_job_files WHERE job_file_id = ?", (job_file_id,)).fetchone()
             if row is None:
                 return
@@ -725,6 +811,7 @@ class UploadJobRepository:
     def mark_remaining_cancelled(self, job_id: str) -> None:
         now = iso_now()
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             rows = connection.execute(
                 """
                 SELECT *
@@ -751,9 +838,10 @@ class UploadJobRepository:
         now = iso_now()
         changed = 0
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             jobs = connection.execute(
                 f"""
-                SELECT job_id
+                SELECT job_id, status, cancel_requested
                 FROM upload_jobs
                 WHERE status IN ({",".join("?" for _ in ACTIVE_JOB_STATUSES)})
                 """,
@@ -761,6 +849,7 @@ class UploadJobRepository:
             ).fetchall()
             for job in jobs:
                 job_id = str(job["job_id"])
+                was_cancelling = bool(job["cancel_requested"]) or str(job["status"]) == UploadJobStatus.cancelling.value
                 connection.execute(
                     """
                     UPDATE upload_jobs
@@ -771,6 +860,13 @@ class UploadJobRepository:
                     WHERE job_id = ?
                     """,
                     (now, now, job_id),
+                )
+                pending_file_status = "cancelled" if was_cancelling else "interrupted"
+                pending_error = "cancelled" if pending_file_status == "cancelled" else "interrupted"
+                pending_message = (
+                    "Upload job was cancelled before shutdown completed."
+                    if pending_file_status == "cancelled"
+                    else "Upload job was interrupted before completion."
                 )
                 file_rows = connection.execute(
                     """
@@ -784,21 +880,21 @@ class UploadJobRepository:
                     connection.execute(
                         """
                         UPDATE upload_job_files
-                        SET status = 'interrupted', finished_at = COALESCE(finished_at, ?),
-                            last_error_code = 'interrupted',
-                            last_error_message = 'Upload job was interrupted before completion.',
+                            SET status = ?, finished_at = COALESCE(finished_at, ?),
+                            last_error_code = ?,
+                            last_error_message = ?,
                             updated_at = ?
                         WHERE job_file_id = ?
                         """,
-                        (now, now, file_row["job_file_id"]),
+                        (pending_file_status, now, pending_error, pending_message, now, file_row["job_file_id"]),
                     )
                     self._upsert_file_state_in_connection(
                         connection,
                         file_row,
-                        "interrupted",
+                        pending_file_status,
                         file_row["resume_offset"],
-                        "interrupted",
-                        "Upload job was interrupted before completion.",
+                        pending_error,
+                        pending_message,
                     )
                 self._append_event_in_connection(
                     connection,
@@ -806,6 +902,7 @@ class UploadJobRepository:
                     event_type="job.interrupted",
                     level="error",
                     message="Upload job was interrupted before completion.",
+                    data={"wasCancelling": was_cancelling},
                 )
                 self._append_audit_in_connection(
                     connection,
@@ -883,6 +980,7 @@ class UploadJobRepository:
         data: dict[str, Any] | None = None,
     ) -> int:
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             return self._append_event_in_connection(
                 connection,
                 job_id,
@@ -918,6 +1016,32 @@ class UploadJobRepository:
             (job_id, seq, now, level, event_type, message, job_file_id, _json(data or {}), now),
         )
         return seq
+
+    def append_audit(
+        self,
+        *,
+        action: str,
+        target_type: str,
+        target_id: str | None,
+        params: dict[str, Any],
+        result: str,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        job_id: str | None = None,
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._append_audit_in_connection(
+                connection,
+                action=action,
+                target_type=target_type,
+                target_id=target_id,
+                params=params,
+                result=result,
+                error_code=error_code,
+                error_message=error_message,
+                job_id=job_id,
+            )
 
     def _append_audit_in_connection(
         self,

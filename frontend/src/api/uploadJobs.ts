@@ -180,6 +180,11 @@ export async function controlUploadJob(
   return normalizeJobDetail(await response.json());
 }
 
+export function getUploadJobEventsUrl(jobId: string, afterSeq: number): string {
+  const params = new URLSearchParams({ afterSeq: String(Math.max(0, afterSeq)) });
+  return `/api/upload/jobs/${encodeURIComponent(jobId)}/events?${params.toString()}`;
+}
+
 function normalizeCreateResponse(raw: any): UploadJobCreateResponse {
   return {
     jobId: raw.jobId ?? raw.job_id,
