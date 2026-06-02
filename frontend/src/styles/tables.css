@@ -47,6 +47,10 @@
   --table-min-width: 1500px;
 }
 
+.data-table--job-files {
+  --table-min-width: 1320px;
+}
+
 .data-table--preview th:nth-child(1),
 .data-table--preview td:nth-child(1) {
   width: 130px;
@@ -99,6 +103,45 @@
 .data-table--preview th:nth-child(10),
 .data-table--preview td:nth-child(10) {
   width: 240px;
+}
+
+.data-table--job-files th:nth-child(1),
+.data-table--job-files td:nth-child(1) {
+  width: 130px;
+}
+
+.data-table--job-files th:nth-child(2),
+.data-table--job-files td:nth-child(2) {
+  width: 260px;
+}
+
+.data-table--job-files th:nth-child(3),
+.data-table--job-files td:nth-child(3) {
+  width: 72px;
+}
+
+.data-table--job-files th:nth-child(4),
+.data-table--job-files td:nth-child(4) {
+  width: 140px;
+}
+
+.data-table--job-files th:nth-child(5),
+.data-table--job-files td:nth-child(5),
+.data-table--job-files th:nth-child(6),
+.data-table--job-files td:nth-child(6),
+.data-table--job-files th:nth-child(7),
+.data-table--job-files td:nth-child(7),
+.data-table--job-files th:nth-child(8),
+.data-table--job-files td:nth-child(8),
+.data-table--job-files th:nth-child(9),
+.data-table--job-files td:nth-child(9) {
+  width: 96px;
+  text-align: right;
+}
+
+.data-table--job-files th:nth-child(10),
+.data-table--job-files td:nth-child(10) {
+  width: 280px;
 }
 
 .data-table--runtime th:nth-child(1),
