@@ -5,6 +5,16 @@ Branch: `codex/audit-logs-ui`
 Scope: v1 Core Ops, Logs page Audit Logs tab and backend read API
 Source of truth: `docs/00_product_scope.md`, `docs/02_engineering_plan.md`, `docs/03_ui_ux_plan.md`, `docs/04_design_system.md`
 
+Implementation result on branch `codex/audit-logs-ui-impl`:
+
+- Added `GET /api/audit` with server-side pagination, safe scalar filtering, sort allowlist, and redacted response DTOs.
+- Added `AuditRepository` bootstrap/query/insert methods with no update/delete methods.
+- Added SQLite append-only triggers `audit_log_no_update` and `audit_log_no_delete`.
+- Added backend tests for append-only trigger enforcement, existing upload/runtime audit insert compatibility, redaction, and API contract.
+- Replaced the Logs placeholder with separate Job Logs and Audit Logs tabs.
+- Added Audit Logs table filters, result badges, params chips, pagination, loading/empty/error states, and Korean/English text.
+- Remaining scope outside this implementation: Dashboard audit summary is still mock-backed; `settings.save` and `upload.preview` audit writer coverage remains future work where those mutating paths are implemented.
+
 ## 1. Goal
 
 Audit Logs must make operator actions and critical background failures traceable from the web console.
@@ -39,7 +49,7 @@ Implemented audit writers already exist in upload/runtime paths:
 - Upload job/retry/pause/resume/cancel paths write some audit rows.
 - Runtime start/stop success/failure/blocked paths write audit rows.
 - Passive runtime status polling success does not write audit rows.
-- The Logs page is still a placeholder.
+- Before `codex/audit-logs-ui-impl`, the Logs page was still a placeholder. The implementation branch replaces it with Job Logs and Audit Logs tabs.
 - Dashboard shows a mock/recent audit summary, not a real audit query.
 
 Current `audit_log` shape exists in both upload and runtime repository bootstraps:

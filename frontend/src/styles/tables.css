@@ -43,6 +43,10 @@
   --table-min-width: 720px;
 }
 
+.data-table--audit-logs {
+  --table-min-width: 1420px;
+}
+
 .data-table--preview {
   --table-min-width: 1500px;
 }
@@ -142,6 +146,46 @@
 .data-table--job-files th:nth-child(10),
 .data-table--job-files td:nth-child(10) {
   width: 280px;
+}
+
+.data-table--audit-logs th:nth-child(1),
+.data-table--audit-logs td:nth-child(1) {
+  width: 170px;
+}
+
+.data-table--audit-logs th:nth-child(2),
+.data-table--audit-logs td:nth-child(2) {
+  width: 132px;
+}
+
+.data-table--audit-logs th:nth-child(3),
+.data-table--audit-logs td:nth-child(3) {
+  width: 180px;
+}
+
+.data-table--audit-logs th:nth-child(4),
+.data-table--audit-logs td:nth-child(4) {
+  width: 230px;
+}
+
+.data-table--audit-logs th:nth-child(5),
+.data-table--audit-logs td:nth-child(5) {
+  width: 130px;
+}
+
+.data-table--audit-logs th:nth-child(6),
+.data-table--audit-logs td:nth-child(6) {
+  width: 170px;
+}
+
+.data-table--audit-logs th:nth-child(7),
+.data-table--audit-logs td:nth-child(7) {
+  width: 280px;
+}
+
+.data-table--audit-logs th:nth-child(8),
+.data-table--audit-logs td:nth-child(8) {
+  width: 260px;
 }
 
 .data-table--runtime th:nth-child(1),
