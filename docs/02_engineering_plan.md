@@ -147,6 +147,16 @@ built-in defaults
 ```
 UI 저장은 `config.json`만 갱신한다. env override가 있는 key는 UI에서 “overridden”으로 표시한다. secrets는 audit/log에서 redaction한다. 기존 `compute_edge_url`, `validate_config` 로직은 재사용한다.
 
+Implementation status on PR #8:
+
+- `GET /api/config` returns known config keys with source metadata and hides secret values.
+- `PUT /api/config` saves allowed keys to config JSON and records `settings.save` audit rows for success, validation failure, malformed JSON/body failure, and env override blocked attempts.
+- Settings load reads config JSON after built-in defaults and before repo `.env` / launcher env and process environment; env/process overrides still win.
+- Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, `validationReason`, and `configPathConfigured`, not raw config values.
+- Secret/config raw values, DB URLs, tokens, anon keys, service role values, and malformed request bodies must not appear in responses, audit params, or logs.
+- Config writes use a per-config-file in-process lock, unique temp filename, and atomic replace.
+- Settings UI remains read-only; save UI integration is still future work.
+
 **Local Supabase**
 Backend가 고정 allowlist command만 실행한다.
 - status: `wsl.exe ... supabase status`, Docker container health, Edge runtime probe, DB `pg_isready`

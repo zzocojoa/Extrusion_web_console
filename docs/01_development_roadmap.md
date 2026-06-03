@@ -70,7 +70,9 @@ Status on branch `codex/upload-preview-reconciliation`:
 - Done on branch `codex/upload-job-sse`: Upload Job API, retry failed API, pause/resume/cancel API, SQLite upload job/file/file-state/event/audit persistence, Start Upload from completed Preview targets, SSE event replay, and Upload Job tab UI.
 - Done on branch `codex/local-supabase-control-impl`: Local Supabase status/start/stop API, required-container existence precheck, non-destructive command allowlist, runtime operation/event persistence, mutating-operation audit logging, Dashboard runtime module API connection, and Settings runtime config/source display.
 - Done on branch `codex/audit-logs-ui-impl`: `GET /api/audit`, append-only audit triggers, redacted audit query API, safe scalar `q` search, and Logs page Job Logs/Audit Logs tabs with filters, pagination, loading/empty/error states, and Korean/English i18n.
+- Done on branch `codex/settings-save-audit-writer`: `GET /api/config`, `PUT /api/config`, config JSON loading into `Settings`, env/process precedence over config JSON, and `settings.save` success/failure/blocked audit writer coverage.
 - Verified: backend tests, frontend typecheck/build, and browser QA for Audit Logs UI/API, Vite proxy `/api/audit`, Dashboard/Upload/Settings regression, and responsive Logs viewports.
+- Verified: PR #8 targeted/full backend tests, frontend typecheck/build, direct config API smoke, and Settings/Dashboard/Upload/Logs browser smoke. Vite proxy `/api/config` was not fully verified against the PR head because an older uvicorn process occupied port `8000`.
 - Not done: launcher integration.
 
 ## 4. Build Backend Core Ops
@@ -86,7 +88,7 @@ Implement backend capabilities in this order:
 7. progress and log streaming
 8. launcher integration
 
-Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, Local Supabase runtime control APIs, and Audit Logs query APIs exist. Audit Logs query search is limited to safe scalar columns and does not search raw `error_message` or raw params JSON. Config write and launcher APIs remain future work.
+Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, Local Supabase runtime control APIs, Config APIs, and Audit Logs query APIs exist. `PUT /api/config` writes only allowed config keys to config JSON, blocks env-overridden keys, records `settings.save` success/failure/blocked audit rows, and keeps raw values, secrets, DB URLs, tokens, anon keys, service role values, and malformed request bodies out of audit params. Audit Logs query search is limited to safe scalar columns and does not search raw `error_message` or raw params JSON. Launcher APIs remain future work.
 
 ## 5. Build Frontend Core Ops
 
@@ -99,7 +101,7 @@ Implement frontend screens in this order:
 
 The UI should be operational and dense, not marketing-oriented.
 
-Current implementation note: Dashboard mock UI, Upload Preview UI, Upload Job tab, Settings runtime config/source display, and Logs page Job Logs/Audit Logs tabs are implemented. Audit Logs includes table filters, pagination, loading/empty/error states, redacted params display, sanitized error messages, and Korean/English labels. Job Logs remains a lightweight shell over existing upload job events.
+Current implementation note: Dashboard mock UI, Upload Preview UI, Upload Job tab, Settings runtime config/source display, and Logs page Job Logs/Audit Logs tabs are implemented. Settings remains read-only; the backend save API exists for future UI integration. Audit Logs includes table filters, pagination, loading/empty/error states, redacted params display, sanitized error messages, and Korean/English labels. Job Logs remains a lightweight shell over existing upload job events.
 
 ## 6. Validate Against Legacy Behavior
 

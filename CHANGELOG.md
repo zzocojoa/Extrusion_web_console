@@ -15,6 +15,8 @@ All notable changes to Extrusion Web Console are documented here.
 - Logs now has separate Job Logs and Audit Logs tabs with Audit table filters, pagination, loading/empty/error states, and Korean/English UI text.
 - Backend now exposes `GET /api/audit` with pagination, filter echo, sort allowlist, sanitized `errorMessage` values, and decoded redacted params.
 - SQLite audit storage now installs append-only triggers `audit_log_no_update` and `audit_log_no_delete`.
+- Backend now exposes `GET /api/config` and `PUT /api/config` for safe config reads and saves while the Settings page remains read-only.
+- Settings saves now write `settings.save` audit rows for success, failure, malformed request validation, and env override blocked paths.
 
 ### Changed
 
@@ -34,3 +36,6 @@ All notable changes to Extrusion Web Console are documented here.
 - Concurrent job event writers now append under an immediate SQLite transaction to avoid duplicate per-job sequence values.
 - Audit Logs `q` search now stays within safe scalar fields and does not search raw `error_message` or raw params JSON, preventing reverse-search of secret-bearing diagnostics.
 - Frontend mock Audit Logs search now matches the backend safe scalar search policy instead of searching sanitized `errorMessage`.
+- Saved config JSON now loads into new `Settings` instances while repo `.env`, launcher env, and process environment overrides still take precedence.
+- Config save audit params now record safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason` instead of raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies.
+- Config file writes now use a per-config-file lock, a unique temp filename, and atomic replace.
