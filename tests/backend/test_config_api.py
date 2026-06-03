@@ -104,6 +104,31 @@ def test_config_save_validation_failure_writes_failure_audit(tmp_path: Path, mon
     assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["localSupabaseApiPort"]
 
 
+def test_config_save_malformed_json_body_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    client, audit_repository, config_path = _client(tmp_path)
+
+    try:
+        response = client.put(
+            "/api/config",
+            content=b'{"values": ',
+            headers={"Content-Type": "application/json"},
+        )
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "config_request_json_invalid"
+    assert not config_path.exists()
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
+    assert row["result"] == AuditResult.failure.value
+    assert row["error_code"] == "config_request_json_invalid"
+    params = decode_params_json(row["params_json_redacted"])
+    assert params["validationReason"] == "config_request_json_invalid"
+    assert params["rejectedSettings"] == []
+    assert '{"values": ' not in row["params_json_redacted"]
+
+
 def test_config_save_malformed_values_request_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
     client, audit_repository, config_path = _client(tmp_path)
