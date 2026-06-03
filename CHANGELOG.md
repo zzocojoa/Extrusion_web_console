@@ -17,6 +17,7 @@ All notable changes to Extrusion Web Console are documented here.
 - SQLite audit storage now installs append-only triggers `audit_log_no_update` and `audit_log_no_delete`.
 - Backend now exposes `GET /api/config` and `PUT /api/config` for safe config reads and saves while the Settings page remains read-only.
 - Settings saves now write `settings.save` audit rows for success, failure, malformed request validation, and env override blocked paths.
+- Upload Preview now writes `upload.preview` audit rows for success, DB unreachable, missing source, malformed request validation, and active preview conflict paths.
 
 ### Changed
 
@@ -39,3 +40,4 @@ All notable changes to Extrusion Web Console are documented here.
 - Saved config JSON now loads into new `Settings` instances while repo `.env`, launcher env, and process environment overrides still take precedence.
 - Config save audit params now record safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason` instead of raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies.
 - Config file writes now use a per-config-file lock, a unique temp filename, and atomic replace.
+- Upload Preview audit params now record safe metadata such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters` instead of raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed request bodies.

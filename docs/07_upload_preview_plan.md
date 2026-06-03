@@ -38,6 +38,9 @@ Implemented on branch `codex/upload-preview-reconciliation`:
   - mock data covering `target`, `already_in_db`, `partial_overlap`, `risky`, and `excluded`
   - mock DB unreachable and cancel states
   - Korean/English i18n entries
+- `upload.preview` audit writer coverage for preview success, DB unreachable failure, missing source failure, malformed JSON and validation failures, and active preview conflict blocked paths.
+- `/api/audit?action=upload.preview` queryability through the Audit Logs API.
+- Safe preview audit params using `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`; raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
 - Start Upload remains visible but disabled because real upload execution is not implemented in this phase.
 
 Still not implemented:
@@ -46,7 +49,6 @@ Still not implemented:
 - Retry Failed execution.
 - SSE upload progress/log streaming.
 - Local Supabase start/stop/status controls.
-- Audit log persistence.
 - Legacy `uploader_state.db` import.
 - Data Mgmt, Cycle Ops, Training Dataset Builder, cloud migration, multi-user LAN access, or Grafana iframe.
 
@@ -68,6 +70,13 @@ Verified after implementation and QA:
   - cancelled mock state
   - Korean/English language switch
   - responsive widths `1440x900`, `1366x768`, `1024x768`, and `720x900`
+- PR #9 API-centered audit QA:
+  - targeted preview/audit backend tests
+  - full backend tests
+  - frontend typecheck/build
+  - `git diff --check`
+  - direct API smoke for `POST /api/upload/preview`, `GET /api/upload/preview/{id}`, `GET /api/upload/preview/latest`, and `/api/audit?action=upload.preview`
+  - Vite/backend HTTP smoke for the running shell and API proxy
 
 No browser console errors, page errors, or unexpected failed requests were observed during the QA pass.
 
@@ -80,7 +89,8 @@ No browser console errors, page errors, or unexpected failed requests were obser
 - Cancel and deadline checks are wired before scanning, during CSV row extraction, and between DB batches. A single in-flight DB statement is bounded by Postgres `statement_timeout`, but true mid-statement cancellation still depends on the DB driver/network path.
 - Timeout behavior is bounded and persisted, but it should still be rechecked with larger real CSV files on the operator PC.
 - Preview retry creates new run state, but the full operator retry workflow should be revisited when real upload jobs and audit logs exist.
-- Audit logging is planned but not yet implemented, so preview failures are visible in UI/DB/log output but not yet in the future audit table.
+- Browser screenshot QA for PR #9 was not completed because `node_repl` failed with a kernel asset path error; HTTP smoke covered the running Vite shell and backend proxy instead.
+- Large real CSV preview soak remains a separate operator-environment validation item.
 
 ## Goals
 
@@ -617,7 +627,7 @@ If local Supabase DB cannot be reached:
 - Local excluded items remain `excluded`.
 - The UI shows a top warning and disables upload start.
 - The failure is stored in `preview_runs.error_code/error_message`.
-- When audit logging exists, the preview failure is also written to audit log as `upload.preview` result `failure`.
+- The failure is also written to audit log as `upload.preview` result `failure`.
 
 No path may silently mark DB-dependent files as `target` when DB is unreachable.
 
@@ -743,7 +753,8 @@ No silent failures:
 - UI shows run-level failures in the status strip.
 - UI shows file-level failures in the table reason column.
 - Backend logs include run id, file key, reason code, and exception class.
-- When audit logging is available, preview start/success/failure is audit logged.
+- Preview success, DB unreachable, missing source, malformed JSON, and validation failures are audit logged as `upload.preview` success or failure rows. Active preview conflicts are audit logged as `upload.preview` blocked rows.
+- `upload.preview` audit params store safe summary fields such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`; raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
 
 Failure modes:
 

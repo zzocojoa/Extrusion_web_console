@@ -1,12 +1,16 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import json
 from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from pydantic import ValidationError
 
 from backend.app.core.settings import Settings, get_settings
+from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
+from backend.app.schemas.audit import AuditResult
 from backend.app.schemas.upload_preview import (
     PreviewCancelResponse,
     PreviewCreateRequest,
@@ -28,6 +32,10 @@ executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-preview"
 
 def get_preview_repository(settings: Settings = Depends(get_settings)) -> PreviewRepository:
     return PreviewRepository(settings.state_db_path)
+
+
+def get_preview_audit_repository(settings: Settings = Depends(get_settings)) -> AuditRepository:
+    return AuditRepository(settings.state_db_path)
 
 
 def parse_json_list(value: str | None) -> list[Any]:
@@ -92,11 +100,38 @@ def item_dto(row: Any) -> PreviewItemDto:
 
 
 @router.post("", response_model=PreviewCreateResponse, status_code=status.HTTP_202_ACCEPTED)
-def create_preview(
-    request: PreviewCreateRequest,
+async def create_preview(
+    raw_request: Request,
     settings: Settings = Depends(get_settings),
     repository: PreviewRepository = Depends(get_preview_repository),
+    audit_repository: AuditRepository = Depends(get_preview_audit_repository),
 ) -> PreviewCreateResponse:
+    try:
+        payload = await raw_request.json()
+    except json.JSONDecodeError as exc:
+        audit_preview_request_failure(
+            audit_repository,
+            validation_reason="preview_request_json_invalid",
+            rejected_fields=[],
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={"reason": "preview_request_json_invalid", "keys": []},
+        ) from exc
+    try:
+        request = PreviewCreateRequest.model_validate(payload)
+    except ValidationError as exc:
+        rejected_fields = preview_validation_fields(exc)
+        audit_preview_request_failure(
+            audit_repository,
+            validation_reason="preview_request_validation_failed",
+            rejected_fields=rejected_fields,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={"reason": "preview_request_validation_failed", "keys": rejected_fields},
+        ) from exc
+
     preview_run_id = f"prv_{uuid4().hex[:12]}"
     active_run_id = repository.create_run_if_no_active(
         preview_run_id=preview_run_id,
@@ -113,17 +148,92 @@ def create_preview(
         retry_of_run_id=request.retry_of_run_id,
     )
     if active_run_id is not None:
+        audit_repository.insert_audit(
+            action="upload.preview",
+            target_type="preview_run",
+            target_id=active_run_id,
+            params={
+                "previewRunId": active_run_id,
+                "candidateCount": 0,
+                "targetCount": 0,
+                "alreadyInDbCount": 0,
+                "partialOverlapCount": 0,
+                "riskyCount": 0,
+                "excludedCount": 0,
+                "dbStatus": "not_checked",
+                "reasonCode": "active_preview_run",
+                "requestedFilters": safe_requested_filters(request),
+            },
+            result=AuditResult.blocked,
+            error_code="active_preview_run",
+            error_message="Another preview run is already active.",
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"activePreviewRunId": active_run_id},
             headers={"Location": f"/api/upload/preview/{active_run_id}"},
         )
-    service = PreviewService(settings, repository)
+    service = PreviewService(settings, repository, audit_repository=audit_repository)
     executor.submit(service.run_preview, preview_run_id, request)
     return PreviewCreateResponse(
         preview_run_id=preview_run_id,
         status=PreviewRunStatus.queued,
         poll_url=f"/api/upload/preview/{preview_run_id}",
+    )
+
+
+def preview_validation_fields(error: ValidationError) -> list[str]:
+    fields: set[str] = set()
+    for item in error.errors():
+        loc = item.get("loc", ())
+        if loc:
+            fields.add(str(loc[0]))
+            continue
+        message = str(item.get("msg", ""))
+        if "startDate" in message:
+            fields.add("startDate")
+        if "endDate" in message:
+            fields.add("endDate")
+    return sorted(fields)
+
+
+def safe_requested_filters(request: PreviewCreateRequest) -> dict[str, Any]:
+    return {
+        "rangeMode": request.range_mode.value,
+        "startDate": request.start_date.isoformat() if request.start_date else None,
+        "endDate": request.end_date.isoformat() if request.end_date else None,
+        "sources": [source.value for source in request.sources],
+        "retryOfRunId": request.retry_of_run_id,
+        "optionKeys": sorted(request.options.model_dump(mode="json", by_alias=True).keys()),
+    }
+
+
+def audit_preview_request_failure(
+    audit_repository: AuditRepository,
+    *,
+    validation_reason: str,
+    rejected_fields: list[str],
+) -> None:
+    audit_repository.insert_audit(
+        action="upload.preview",
+        target_type="preview_run",
+        target_id=None,
+        params={
+            "previewRunId": None,
+            "candidateCount": 0,
+            "targetCount": 0,
+            "alreadyInDbCount": 0,
+            "partialOverlapCount": 0,
+            "riskyCount": 0,
+            "excludedCount": 0,
+            "dbStatus": "not_checked",
+            "reasonCode": validation_reason,
+            "rejectedFields": sorted(rejected_fields),
+            "requestedFilters": {},
+        },
+        result=AuditResult.failure,
+        error_code=validation_reason,
+        error_message="Upload Preview request failed validation.",
     )
 
 

@@ -6,11 +6,13 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Protocol
+from typing import Any, Callable, Iterable, Protocol
 
 from backend.app.core.settings import Settings
 from backend.app.core.transform_core import canonical_record_from_row
+from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository, iso_now
+from backend.app.schemas.audit import AuditResult
 from backend.app.schemas.upload_preview import (
     PreviewCreateRequest,
     PreviewDbStatus,
@@ -470,19 +472,22 @@ class PreviewService:
         settings: Settings,
         repository: PreviewRepository,
         reconciler: ExactReconciler | None = None,
+        audit_repository: AuditRepository | None = None,
     ) -> None:
         self.settings = settings
         self.repository = repository
         self.scanner = CandidateScanner(settings)
         self.extractor = CsvKeyExtractor()
         self.reconciler = reconciler or SupabaseExactReconciler(settings.supabase_db_url)
+        self.audit_repository = audit_repository
 
     def run_preview(self, preview_run_id: str, request: PreviewCreateRequest) -> None:
         run_started = time.monotonic()
         run_deadline = run_started + request.options.max_run_seconds
         if self.repository.is_cancel_requested(preview_run_id):
-            self.repository.recompute_summary(
+            self._finish_preview(
                 preview_run_id,
+                request,
                 status=PreviewRunStatus.cancelled,
                 db_status=PreviewDbStatus.not_checked,
             )
@@ -497,8 +502,9 @@ class PreviewService:
             for item in local_items:
                 self.repository.insert_item(preview_run_id, item)
             if self.repository.is_cancel_requested(preview_run_id):
-                self.repository.recompute_summary(
+                self._finish_preview(
                     preview_run_id,
+                    request,
                     status=PreviewRunStatus.cancelled,
                     db_status=PreviewDbStatus.not_checked,
                 )
@@ -517,8 +523,9 @@ class PreviewService:
             )
             for index, candidate in enumerate(candidates):
                 if self.repository.is_cancel_requested(preview_run_id):
-                    self.repository.recompute_summary(
+                    self._finish_preview(
                         preview_run_id,
+                        request,
                         status=PreviewRunStatus.cancelled,
                         db_status=PreviewDbStatus.not_checked,
                     )
@@ -533,8 +540,9 @@ class PreviewService:
                                 "Preview run exceeded the configured time limit.",
                             ),
                         )
-                    self.repository.recompute_summary(
+                    self._finish_preview(
                         preview_run_id,
+                        request,
                         status=PreviewRunStatus.timed_out,
                         db_status=(
                             PreviewDbStatus.unreachable
@@ -559,8 +567,9 @@ class PreviewService:
                             preview_run_id,
                             build_error_item(candidate, "cancelled", "Preview run was cancelled."),
                         )
-                        self.repository.recompute_summary(
+                        self._finish_preview(
                             preview_run_id,
+                            request,
                             status=PreviewRunStatus.cancelled,
                             db_status=PreviewDbStatus.not_checked,
                         )
@@ -591,8 +600,9 @@ class PreviewService:
                                 preview_run_id,
                                 build_error_item(candidate, "cancelled", "Preview run was cancelled."),
                             )
-                            self.repository.recompute_summary(
+                            self._finish_preview(
                                 preview_run_id,
+                                request,
                                 status=PreviewRunStatus.cancelled,
                                 db_status=PreviewDbStatus.not_checked,
                             )
@@ -639,8 +649,9 @@ class PreviewService:
                         preview_run_id,
                         build_error_item(candidate, "cancelled", "Preview run was cancelled."),
                     )
-                    self.repository.recompute_summary(
+                    self._finish_preview(
                         preview_run_id,
+                        request,
                         status=PreviewRunStatus.cancelled,
                         db_status=PreviewDbStatus.not_checked,
                     )
@@ -657,43 +668,130 @@ class PreviewService:
                     )
 
             if any_db_unreachable:
-                self.repository.recompute_summary(
+                self._finish_preview(
                     preview_run_id,
+                    request,
                     status=PreviewRunStatus.partial_failed,
                     db_status=PreviewDbStatus.unreachable,
                     error_code="db_unreachable",
                     error_message=db_error,
                 )
             elif timed_out:
-                self.repository.recompute_summary(
+                self._finish_preview(
                     preview_run_id,
+                    request,
                     status=PreviewRunStatus.timed_out,
                     db_status=PreviewDbStatus.not_checked,
                     error_code="timeout",
                     error_message="Preview run exceeded the configured time limit.",
                 )
             elif source_error is not None and not candidates:
-                self.repository.recompute_summary(
+                self._finish_preview(
                     preview_run_id,
+                    request,
                     status=PreviewRunStatus.failed,
                     db_status=PreviewDbStatus.not_checked,
                     error_code=str(source_error.get("reason_code")),
                     error_message=str(source_error.get("reason_text")),
                 )
             else:
-                self.repository.recompute_summary(
+                self._finish_preview(
                     preview_run_id,
+                    request,
                     status=PreviewRunStatus.succeeded,
                     db_status=PreviewDbStatus.reachable if candidates else PreviewDbStatus.not_checked,
                 )
         except Exception as error:
-            self.repository.recompute_summary(
+            self._finish_preview(
                 preview_run_id,
+                request,
                 status=PreviewRunStatus.failed,
                 db_status=PreviewDbStatus.not_checked,
                 error_code="preview_failed",
                 error_message=str(error),
             )
+
+    def _finish_preview(
+        self,
+        preview_run_id: str,
+        request: PreviewCreateRequest,
+        *,
+        status: PreviewRunStatus,
+        db_status: PreviewDbStatus,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        self.repository.recompute_summary(
+            preview_run_id,
+            status=status,
+            db_status=db_status,
+            error_code=error_code,
+            error_message=error_message,
+        )
+        self._audit_preview(
+            preview_run_id,
+            request,
+            status=status,
+            error_code=error_code,
+            error_message=error_message,
+        )
+
+    def _audit_preview(
+        self,
+        preview_run_id: str,
+        request: PreviewCreateRequest,
+        *,
+        status: PreviewRunStatus,
+        error_code: str | None,
+        error_message: str | None,
+    ) -> None:
+        if self.audit_repository is None:
+            return
+        row = self.repository.get_run(preview_run_id)
+        if row is None:
+            return
+        result = audit_result_for_preview_status(status)
+        reason_code = error_code or (str(row["error_code"]) if row["error_code"] else None)
+        params = {
+            "previewRunId": preview_run_id,
+            "candidateCount": int(row["total_files"]),
+            "targetCount": int(row["target_count"]),
+            "alreadyInDbCount": int(row["already_in_db_count"]),
+            "partialOverlapCount": int(row["partial_overlap_count"]),
+            "riskyCount": int(row["risky_count"]),
+            "excludedCount": int(row["excluded_count"]),
+            "dbStatus": str(row["db_status"]),
+            "reasonCode": reason_code,
+            "requestedFilters": safe_requested_filters(request),
+        }
+        self.audit_repository.insert_audit(
+            action="upload.preview",
+            target_type="preview_run",
+            target_id=preview_run_id,
+            params=params,
+            result=result,
+            error_code=reason_code,
+            error_message=error_message or (str(row["error_message"]) if row["error_message"] else None),
+        )
+
+
+def audit_result_for_preview_status(status: PreviewRunStatus) -> AuditResult:
+    if status == PreviewRunStatus.succeeded:
+        return AuditResult.success
+    if status == PreviewRunStatus.cancelled:
+        return AuditResult.cancelled
+    return AuditResult.failure
+
+
+def safe_requested_filters(request: PreviewCreateRequest) -> dict[str, Any]:
+    return {
+        "rangeMode": request.range_mode.value,
+        "startDate": request.start_date.isoformat() if request.start_date else None,
+        "endDate": request.end_date.isoformat() if request.end_date else None,
+        "sources": [source.value for source in request.sources],
+        "retryOfRunId": request.retry_of_run_id,
+        "optionKeys": sorted(request.options.model_dump(mode="json", by_alias=True).keys()),
+    }
 
 
 def classify_keys(local_key_count: int, db_match_count: int) -> tuple[PreviewItemStatus, str, str]:

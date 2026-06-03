@@ -18,7 +18,7 @@ Implementation result on branch `codex/audit-logs-ui-impl`:
 - Added Audit Logs table filters, result badges, params chips, pagination, loading/empty/error states, and Korean/English text.
 - QA fix `d51de36` aligned frontend mock Audit Logs search with the backend safe scalar policy so mock `q` search does not inspect `errorMessage`.
 - QA passed targeted/full backend tests, frontend typecheck/build, `git diff --check`, backend and Vite proxy `/api/audit?q=secret-token` smoke checks, and browser QA at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
-- Remaining scope outside this implementation: Dashboard audit summary is still mock-backed; `upload.preview` audit writer coverage remains future work where that mutating path is implemented. `settings.save` audit writer coverage was added later on PR #8.
+- Remaining scope outside this implementation: Dashboard audit summary is still mock-backed. `settings.save` audit writer coverage was added later on PR #8, and `upload.preview` audit writer coverage was added later on PR #9.
 
 Follow-up implementation on branch `codex/settings-save-audit-writer`:
 
@@ -29,6 +29,18 @@ Follow-up implementation on branch `codex/settings-save-audit-writer`:
 - Added config JSON as a `Settings` source below repo `.env` / launcher env and process environment, so saved values load into new `Settings` instances while env/process overrides still win.
 - Hardened config writes with a per-config-file lock, unique temp filename, and atomic replace.
 - QA passed targeted/full backend tests, frontend typecheck/build, `git diff --check`, direct config API smoke, and Settings/Dashboard/Upload/Logs browser smoke. Vite proxy `/api/config` was not fully verified against the PR head because an older uvicorn process occupied port `8000`; direct PR API smoke covered endpoint behavior.
+
+Follow-up implementation on branch `codex/upload-preview-audit-writer`:
+
+- Added `upload.preview` success/failure/blocked audit writer coverage for Upload Preview requests.
+- Preview success writes `upload.preview` result `success`.
+- DB unreachable and missing source write `upload.preview` result `failure`.
+- Malformed JSON, request validation failures, and active preview conflict paths are audit logged; active conflicts use result `blocked`.
+- `/api/audit?action=upload.preview` can query these rows through the existing Audit Logs API.
+- Stored audit params as safe metadata (`previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`) instead of raw file/config data.
+- Kept raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies out of audit params.
+- Kept Preview reconciliation behavior, Upload Job/Retry/SSE behavior, Runtime command policy, AuditRepository append-only behavior, and Audit Logs query/search policy unchanged.
+- QA passed twice with targeted preview/audit backend tests, full backend tests, frontend typecheck/build, `git diff --check`, direct Upload Preview API smoke, and Vite/backend HTTP smoke. Browser screenshot QA was not completed because `node_repl` failed with a kernel asset path error; large real CSV preview soak remains a follow-up operator-environment validation item.
 
 ## 1. Goal
 
@@ -93,7 +105,7 @@ Compatibility risks to preserve in the plan:
 - `request_id` exists but is nullable and often not populated in v1.
 - `params_json_redacted` is already redacted, but upload/runtime redaction code is not yet unified.
 - `error_message` can contain unsafe diagnostic detail if future writers do not sanitize it before insert.
-- Product scope requires `settings.save` and `upload.preview` audit records. `settings.save` is implemented for backend config saves on PR #8; `upload.preview` audit writer coverage remains future work.
+- Product scope requires `settings.save` and `upload.preview` audit records. `settings.save` is implemented for backend config saves on PR #8; `upload.preview` is implemented for Upload Preview success, failure, and blocked start paths on PR #9.
 
 ## 4. Backend API
 
@@ -421,7 +433,7 @@ runtime.interrupted
 settings.save
 ```
 
-`settings.save` and `upload.preview` are product-required audit actions. `settings.save` is implemented for `PUT /api/config` success, failure, and blocked paths. `upload.preview` remains a documented writer gap.
+`settings.save` and `upload.preview` are product-required audit actions. `settings.save` is implemented for `PUT /api/config` success, failure, and blocked paths. `upload.preview` is implemented for Preview success, DB unreachable, missing source, malformed JSON, validation failure, and active preview conflict paths.
 
 ### 7.2 Result Mapping
 
@@ -728,6 +740,7 @@ Required tests:
 - Existing upload/runtime audit insert paths still succeed after trigger bootstrap.
 - Existing upload/runtime audit rows remain readable.
 - Config save success, malformed JSON/body validation failure, values/actor/extra field validation failure, env override blocked behavior, config redaction, config JSON precedence, and `/api/audit?action=settings.save` queryability are covered by `tests/backend/test_config_api.py`.
+- Upload Preview success, DB unreachable, missing source, malformed JSON, request validation failure, active preview conflict, safe audit params, redaction, and `/api/audit?action=upload.preview` queryability are covered by `tests/backend/test_upload_preview_api_contract.py` and `tests/backend/test_upload_preview_reconciliation.py`.
 
 ### 14.2 Backend Regression Tests
 
