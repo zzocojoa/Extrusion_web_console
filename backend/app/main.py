@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse
 
 from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.audit import router as audit_router
+from backend.app.api.config import router as config_router
 from backend.app.api.health import router as health_router
 from backend.app.api.runtime import router as runtime_router
 from backend.app.api.upload_jobs import router as upload_jobs_router
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(dashboard_router)
+    app.include_router(config_router)
     app.include_router(audit_router)
     app.include_router(upload_preview_router)
     app.include_router(upload_jobs_router)

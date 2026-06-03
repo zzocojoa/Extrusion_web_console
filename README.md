@@ -21,6 +21,8 @@ The first runnable scaffold is in place:
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
 - Dashboard runtime module connected to the runtime API in API mode.
 - Settings runtime section showing read-only local Supabase config values and their source.
+- Config API with `GET /api/config` and `PUT /api/config`; Settings UI is still read-only and does not expose a save form yet.
+- Settings saves persist to `%APPDATA%\ExtrusionWebConsole\config.json`, are loaded by new `Settings` instances, and write `settings.save` success/failure/blocked audit rows.
 - Logs page with separate Job Logs and Audit Logs tabs.
 - Audit Logs API/UI with redacted, paginated, filtered, append-only audit rows.
 - TanStack Query mock-first Dashboard query.
@@ -104,6 +106,28 @@ $env:EWC_LOCAL_SUPABASE_STUDIO_PORT="54323"
 ```
 
 Runtime control is intentionally non-destructive. It does not run bootstrap, reset, cleanup, Docker delete, volume delete, prune, `supabase init`, `supabase db reset`, `docker run/create/rm`, or `docker compose up/down`. If required Supabase containers are missing, start is blocked as `required_container_missing`; v1 does not create a new local Supabase stack.
+
+Config API smoke check:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/config
+
+$body = @{
+  values = @{
+    grafanaUrl = "http://localhost:3001"
+    localSupabaseApiPort = 54321
+  }
+} | ConvertTo-Json -Depth 4
+
+Invoke-RestMethod -Method Put `
+  -Uri http://127.0.0.1:8000/api/config `
+  -ContentType "application/json" `
+  -Body $body
+
+Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=settings.save&limit=20"
+```
+
+`PUT /api/config` accepts only known config keys. It rejects environment-overridden keys, writes blocked audit rows for those attempts, and writes failure audit rows for validation failures including malformed JSON bodies. Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason`; they do not store raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies. Config writes use a per-config-file lock, a unique temp filename, and atomic replace. Settings precedence is built-in defaults, then config JSON, then repo `.env` or launcher env, then process environment.
 
 Runtime API smoke check. Run the start/stop calls only when no upload job or preview run is active:
 
@@ -248,6 +272,12 @@ Audit Logs QA:
 - Raw params JSON search remains unavailable; only decoded redacted params are displayed.
 - `audit_log` update/delete attempts are blocked by append-only SQLite triggers `audit_log_no_update` and `audit_log_no_delete`.
 - PR #6 QA covered backend `/api/audit`, Vite proxy `/api/audit`, Logs tab switching, Audit filters, pagination, loading/empty/error states, Korean/English i18n, and Dashboard/Upload/Settings smoke regression.
+
+Settings Save Audit QA:
+
+- PR #8 QA passed targeted config/audit backend tests, full backend tests, frontend typecheck/build, `git diff --check`, and direct API smoke for `GET /api/config`, `PUT /api/config`, and `/api/audit?action=settings.save`.
+- QA confirmed success, failure, and blocked `settings.save` audit rows, malformed JSON failure audit, env override blocking, config JSON loading into new `Settings`, env/process precedence over config JSON, and non-exposure of raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies.
+- Remaining risk: Settings page is still read-only and has no save UI. Vite proxy `/api/config` was not fully verified against the PR head during QA because an older uvicorn process already occupied port `8000`; direct PR API smoke covered the endpoint behavior instead.
 
 Browser QA has been run against:
 

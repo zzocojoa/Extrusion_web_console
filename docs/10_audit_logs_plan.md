@@ -18,7 +18,17 @@ Implementation result on branch `codex/audit-logs-ui-impl`:
 - Added Audit Logs table filters, result badges, params chips, pagination, loading/empty/error states, and Korean/English text.
 - QA fix `d51de36` aligned frontend mock Audit Logs search with the backend safe scalar policy so mock `q` search does not inspect `errorMessage`.
 - QA passed targeted/full backend tests, frontend typecheck/build, `git diff --check`, backend and Vite proxy `/api/audit?q=secret-token` smoke checks, and browser QA at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
-- Remaining scope outside this implementation: Dashboard audit summary is still mock-backed; `settings.save` and `upload.preview` audit writer coverage remains future work where those mutating paths are implemented.
+- Remaining scope outside this implementation: Dashboard audit summary is still mock-backed; `upload.preview` audit writer coverage remains future work where that mutating path is implemented. `settings.save` audit writer coverage was added later on PR #8.
+
+Follow-up implementation on branch `codex/settings-save-audit-writer`:
+
+- Added `GET /api/config` and `PUT /api/config` while keeping the Settings page read-only.
+- Added `settings.save` success/failure/blocked audit writer coverage for config saves, validation failures, malformed JSON/body failures, and env override blocked attempts.
+- Stored audit params as safe metadata (`savedSettings`, `rejectedSettings`, `validationReason`, `configPathConfigured`) instead of raw config values.
+- Kept secret/config raw values, DB URLs, tokens, anon keys, service role values, and malformed request bodies out of API responses and audit params.
+- Added config JSON as a `Settings` source below repo `.env` / launcher env and process environment, so saved values load into new `Settings` instances while env/process overrides still win.
+- Hardened config writes with a per-config-file lock, unique temp filename, and atomic replace.
+- QA passed targeted/full backend tests, frontend typecheck/build, `git diff --check`, direct config API smoke, and Settings/Dashboard/Upload/Logs browser smoke. Vite proxy `/api/config` was not fully verified against the PR head because an older uvicorn process occupied port `8000`; direct PR API smoke covered endpoint behavior.
 
 ## 1. Goal
 
@@ -83,7 +93,7 @@ Compatibility risks to preserve in the plan:
 - `request_id` exists but is nullable and often not populated in v1.
 - `params_json_redacted` is already redacted, but upload/runtime redaction code is not yet unified.
 - `error_message` can contain unsafe diagnostic detail if future writers do not sanitize it before insert.
-- Product scope requires `settings.save` and `upload.preview` audit records, but they are not fully implemented yet.
+- Product scope requires `settings.save` and `upload.preview` audit records. `settings.save` is implemented for backend config saves on PR #8; `upload.preview` audit writer coverage remains future work.
 
 ## 4. Backend API
 
@@ -411,7 +421,7 @@ runtime.interrupted
 settings.save
 ```
 
-`settings.save` and `upload.preview` are product-required audit actions. If implementation begins before those writers exist, the Audit Logs page must still support their display shape and tests must document the gap.
+`settings.save` and `upload.preview` are product-required audit actions. `settings.save` is implemented for `PUT /api/config` success, failure, and blocked paths. `upload.preview` remains a documented writer gap.
 
 ### 7.2 Result Mapping
 
@@ -717,6 +727,7 @@ Required tests:
 - Append-only triggers reject update/delete.
 - Existing upload/runtime audit insert paths still succeed after trigger bootstrap.
 - Existing upload/runtime audit rows remain readable.
+- Config save success, malformed JSON/body validation failure, values/actor/extra field validation failure, env override blocked behavior, config redaction, config JSON precedence, and `/api/audit?action=settings.save` queryability are covered by `tests/backend/test_config_api.py`.
 
 ### 14.2 Backend Regression Tests
 
