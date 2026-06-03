@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from backend.app.core.settings import Settings
+from backend.app.db.audit_repository import AuditLogFilters, AuditRepository, decode_params_json
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.schemas.upload_preview import PreviewCreateRequest, PreviewOptions
 from backend.app.services.upload_preview import (
@@ -356,6 +357,167 @@ def test_preview_service_marks_db_unreachable_candidates_risky(tmp_path: Path) -
     assert items[0]["status"] == "risky"
     assert items[0]["reason_code"] == "db_unreachable"
     assert items[0]["upload_row_estimate"] == 0
+
+
+def test_preview_service_success_writes_upload_preview_audit_without_raw_values(
+    tmp_path: Path,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        ["Date,Time,Mold1", "2026-06-01,09:00:00,1"],
+    )
+    db_path = tmp_path / "state.db"
+    repository = PreviewRepository(str(db_path))
+    audit_repository = AuditRepository(str(db_path))
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": PreviewOptions(stable_lag_minutes=0).model_dump(by_alias=True),
+        }
+    )
+    repository.create_run(
+        preview_run_id="prv_success",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={"supabaseDbUrl": "postgresql://user:secret-token@localhost/db"},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(
+            plc_data_dir=str(plc_dir),
+            supabase_db_url="postgresql://user:secret-token@localhost/db",
+        ),
+        repository,
+        reconciler=FakeReconciler(),
+        audit_repository=audit_repository,
+    )
+    service.run_preview("prv_success", request)
+
+    page = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview"))
+    assert page.total_items == 1
+    row = page.rows[0]
+    params = decode_params_json(row["params_json_redacted"])
+
+    assert row["result"] == "success"
+    assert row["target_id"] == "prv_success"
+    assert params["previewRunId"] == "prv_success"
+    assert params["candidateCount"] == 1
+    assert params["targetCount"] == 1
+    assert params["dbStatus"] == "reachable"
+    assert params["requestedFilters"]["sources"] == ["plc"]
+    assert str(plc_dir) not in row["params_json_redacted"]
+    assert "Factory_Integrated_Log_20260601_090000.csv" not in row["params_json_redacted"]
+    assert "secret-token" not in row["params_json_redacted"]
+    assert "postgresql://user" not in row["params_json_redacted"]
+
+
+def test_preview_service_db_unreachable_writes_failure_audit_without_raw_values(
+    tmp_path: Path,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        ["Date,Time,Mold1", "2026-06-01,09:00:00,1"],
+    )
+    db_path = tmp_path / "state.db"
+    repository = PreviewRepository(str(db_path))
+    audit_repository = AuditRepository(str(db_path))
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": PreviewOptions(stable_lag_minutes=0).model_dump(by_alias=True),
+        }
+    )
+    repository.create_run(
+        preview_run_id="prv_db_down",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(
+            plc_data_dir=str(plc_dir),
+            supabase_db_url="postgresql://user:secret-token@localhost/db",
+        ),
+        repository,
+        reconciler=FakeReconciler(fail=True),
+        audit_repository=audit_repository,
+    )
+    service.run_preview("prv_db_down", request)
+
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
+    params = decode_params_json(row["params_json_redacted"])
+
+    assert row["result"] == "failure"
+    assert row["error_code"] == "db_unreachable"
+    assert params["previewRunId"] == "prv_db_down"
+    assert params["dbStatus"] == "unreachable"
+    assert params["reasonCode"] == "db_unreachable"
+    assert params["riskyCount"] == 1
+    assert str(plc_dir) not in row["params_json_redacted"]
+    assert "secret-token" not in row["params_json_redacted"]
+    assert "postgresql://user" not in row["params_json_redacted"]
+
+
+def test_preview_service_missing_source_writes_failure_audit_without_raw_path(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "state.db"
+    repository = PreviewRepository(str(db_path))
+    audit_repository = AuditRepository(str(db_path))
+    missing_dir = tmp_path / "missing"
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "today",
+            "sources": ["plc"],
+            "options": PreviewOptions(stable_lag_minutes=0).model_dump(by_alias=True),
+        }
+    )
+    repository.create_run(
+        preview_run_id="prv_missing_audit",
+        range_mode=request.range_mode.value,
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(plc_data_dir=str(missing_dir)),
+        repository,
+        reconciler=FakeReconciler(),
+        audit_repository=audit_repository,
+    )
+    service.run_preview("prv_missing_audit", request)
+
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
+    params = decode_params_json(row["params_json_redacted"])
+
+    assert row["result"] == "failure"
+    assert row["error_code"] == "source_missing"
+    assert params["previewRunId"] == "prv_missing_audit"
+    assert params["reasonCode"] == "source_missing"
+    assert str(missing_dir) not in row["params_json_redacted"]
 
 
 def test_preview_service_marks_missing_source_as_failed(tmp_path: Path) -> None:
