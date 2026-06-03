@@ -14,6 +14,7 @@ The first runnable scaffold is in place:
   - `GET /api/upload/preview/latest`
   - `GET /api/upload/preview/{previewRunId}`
   - `POST /api/upload/preview/{previewRunId}/cancel`
+- Upload Preview now writes `upload.preview` audit rows for success, DB unreachable, missing source, malformed request validation, and active preview conflict paths.
 - React + Vite + TypeScript frontend.
 - Dashboard Variant D mock UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
@@ -31,6 +32,8 @@ The first runnable scaffold is in place:
 Launcher integration and legacy upload state import are not implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
+
+Preview requests are audit logged as `upload.preview`. Successful previews write `success` rows; DB unreachable, missing source, malformed JSON, and validation failures write `failure` rows; active preview conflicts write `blocked` rows. Audit params use safe summary fields such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`. Raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
 
 The Dashboard scaffold has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 
@@ -172,6 +175,7 @@ $preview = Invoke-RestMethod -Method Post `
 
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/$($preview.previewRunId)
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/latest
+Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=upload.preview&limit=20"
 ```
 
 Upload Job API smoke check after a successful preview with target rows:
@@ -258,6 +262,8 @@ Upload Preview QA:
 - Preview status table shows `target`, `already_in_db`, `partial_overlap`, `risky`, and `excluded`.
 - Status uses icon + label + semantic color, not color alone.
 - DB unreachable is visible in the run status strip and risky rows.
+- Preview success, DB unreachable, missing source, malformed JSON, validation failure, and active preview conflict paths write `upload.preview` audit rows.
+- Preview audit params expose safe summary fields only and do not include raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed raw request bodies.
 - Start Upload is enabled only for a succeeded preview with reachable DB and `target` rows.
 - Start Upload excludes `already_in_db`, `partial_overlap`, `risky`, and `excluded` rows by default.
 - Upload Job tab shows file progress, pause/resume/cancel controls, Retry Failed, and live/persisted events.
@@ -278,6 +284,13 @@ Settings Save Audit QA:
 - PR #8 QA passed targeted config/audit backend tests, full backend tests, frontend typecheck/build, `git diff --check`, and direct API smoke for `GET /api/config`, `PUT /api/config`, and `/api/audit?action=settings.save`.
 - QA confirmed success, failure, and blocked `settings.save` audit rows, malformed JSON failure audit, env override blocking, config JSON loading into new `Settings`, env/process precedence over config JSON, and non-exposure of raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies.
 - Remaining risk: Settings page is still read-only and has no save UI. Vite proxy `/api/config` was not fully verified against the PR head during QA because an older uvicorn process already occupied port `8000`; direct PR API smoke covered the endpoint behavior instead.
+
+Upload Preview Audit QA:
+
+- PR #9 QA passed twice: targeted preview/audit backend tests, full backend tests, frontend typecheck/build, `git diff --check`, and direct API smoke for `POST /api/upload/preview`, `GET /api/upload/preview/{id}`, `GET /api/upload/preview/latest`, and `/api/audit?action=upload.preview`.
+- QA confirmed `upload.preview` success, failure, and blocked audit rows for preview success, DB unreachable, missing source, malformed JSON, validation failure, and active preview conflict paths.
+- QA confirmed audit params use `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`, without raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed raw request bodies.
+- Remaining risk: Browser screenshot QA for PR #9 was not completed because `node_repl` failed with a kernel asset path error; Vite/backend HTTP smoke covered the running shell and proxy instead. Large real CSV preview soak remains a separate operator-environment validation item.
 
 Browser QA has been run against:
 

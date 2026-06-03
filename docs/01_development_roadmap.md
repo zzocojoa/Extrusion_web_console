@@ -71,8 +71,10 @@ Status on branch `codex/upload-preview-reconciliation`:
 - Done on branch `codex/local-supabase-control-impl`: Local Supabase status/start/stop API, required-container existence precheck, non-destructive command allowlist, runtime operation/event persistence, mutating-operation audit logging, Dashboard runtime module API connection, and Settings runtime config/source display.
 - Done on branch `codex/audit-logs-ui-impl`: `GET /api/audit`, append-only audit triggers, redacted audit query API, safe scalar `q` search, and Logs page Job Logs/Audit Logs tabs with filters, pagination, loading/empty/error states, and Korean/English i18n.
 - Done on branch `codex/settings-save-audit-writer`: `GET /api/config`, `PUT /api/config`, config JSON loading into `Settings`, env/process precedence over config JSON, and `settings.save` success/failure/blocked audit writer coverage.
+- Done on branch `codex/upload-preview-audit-writer`: `upload.preview` audit writer coverage for preview success, DB unreachable, missing source, malformed JSON, validation failure, and active preview conflict paths.
 - Verified: backend tests, frontend typecheck/build, and browser QA for Audit Logs UI/API, Vite proxy `/api/audit`, Dashboard/Upload/Settings regression, and responsive Logs viewports.
 - Verified: PR #8 targeted/full backend tests, frontend typecheck/build, direct config API smoke, and Settings/Dashboard/Upload/Logs browser smoke. Vite proxy `/api/config` was not fully verified against the PR head because an older uvicorn process occupied port `8000`.
+- Verified: PR #9 review approved and QA passed twice with targeted preview/audit backend tests, full backend tests, frontend typecheck/build, `git diff --check`, direct Upload Preview API smoke, and Vite/backend HTTP smoke. Browser screenshot QA was not completed because `node_repl` failed with a kernel asset path error.
 - Not done: launcher integration.
 
 ## 4. Build Backend Core Ops
@@ -88,7 +90,7 @@ Implement backend capabilities in this order:
 7. progress and log streaming
 8. launcher integration
 
-Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, Local Supabase runtime control APIs, Config APIs, and Audit Logs query APIs exist. `PUT /api/config` writes only allowed config keys to config JSON, blocks env-overridden keys, records `settings.save` success/failure/blocked audit rows, and keeps raw values, secrets, DB URLs, tokens, anon keys, service role values, and malformed request bodies out of audit params. Audit Logs query search is limited to safe scalar columns and does not search raw `error_message` or raw params JSON. Launcher APIs remain future work.
+Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, Local Supabase runtime control APIs, Config APIs, and Audit Logs query APIs exist. `PUT /api/config` writes only allowed config keys to config JSON, blocks env-overridden keys, records `settings.save` success/failure/blocked audit rows, and keeps raw values, secrets, DB URLs, tokens, anon keys, service role values, and malformed request bodies out of audit params. `POST /api/upload/preview` records `upload.preview` success/failure/blocked audit rows with safe metadata only, including `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`; it does not store raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed raw bodies in audit params. Audit Logs query search is limited to safe scalar columns and does not search raw `error_message` or raw params JSON. Launcher APIs remain future work.
 
 ## 5. Build Frontend Core Ops
 
@@ -118,7 +120,7 @@ Compare the new app against the legacy GUI for:
 Status:
 
 - Partially started: Upload Preview now uses legacy scanning/transform behavior as reference and tests exact-key reconciliation.
-- Still required: broader legacy CSV fixture coverage, local Supabase control E2E on the operator PC, and final operator validation of failure reporting across Audit Logs.
+- Still required: broader legacy CSV fixture coverage, large real CSV Upload Preview soak, local Supabase control E2E on the operator PC, and final operator validation of failure reporting across Audit Logs.
 
 ## 7. Package And Transition
 
