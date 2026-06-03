@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -41,6 +43,8 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
 )
 
 FIELDS_BY_KEY = {field.key: field for field in CONFIG_FIELDS}
+_CONFIG_FILE_LOCKS: dict[Path, threading.Lock] = {}
+_CONFIG_FILE_LOCKS_GUARD = threading.Lock()
 
 
 class ConfigSaveError(Exception):
@@ -64,6 +68,16 @@ def _field_names_from_validation_error(error: ValidationError) -> list[str]:
         else:
             fields.add(str(first))
     return sorted(fields)
+
+
+def _get_config_file_lock(path: Path) -> threading.Lock:
+    lock_key = path.resolve(strict=False)
+    with _CONFIG_FILE_LOCKS_GUARD:
+        lock = _CONFIG_FILE_LOCKS.get(lock_key)
+        if lock is None:
+            lock = threading.Lock()
+            _CONFIG_FILE_LOCKS[lock_key] = lock
+        return lock
 
 
 class ConfigService:
@@ -135,17 +149,18 @@ class ConfigService:
                     message="Environment-overridden settings cannot be saved.",
                     keys=blocked_keys,
                 )
-            saved = self._read_config_file()
-            saved.update(normalized)
-            try:
-                self._write_config_file(saved)
-            except OSError as exc:
-                raise ConfigSaveError(
-                    status_code=500,
-                    error_code="config_write_failed",
-                    message="Config file could not be written.",
-                    keys=sorted(normalized.keys()),
-                ) from exc
+            with _get_config_file_lock(self.config_path):
+                saved = self._read_config_file()
+                saved.update(normalized)
+                try:
+                    self._write_config_file(saved)
+                except OSError as exc:
+                    raise ConfigSaveError(
+                        status_code=500,
+                        error_code="config_write_failed",
+                        message="Config file could not be written.",
+                        keys=sorted(normalized.keys()),
+                    ) from exc
         except ConfigSaveError as exc:
             self._audit_save(
                 actor=actor,
@@ -232,9 +247,13 @@ class ConfigService:
 
     def _write_config_file(self, payload: dict[str, Any]) -> None:
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.config_path.with_suffix(self.config_path.suffix + ".tmp")
+        tmp_path = self.config_path.with_name(f".{self.config_path.name}.{uuid.uuid4().hex}.tmp")
         tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        tmp_path.replace(self.config_path)
+        try:
+            tmp_path.replace(self.config_path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
 
     def _audit_save(
         self,
