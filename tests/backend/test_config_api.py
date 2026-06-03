@@ -104,6 +104,76 @@ def test_config_save_validation_failure_writes_failure_audit(tmp_path: Path, mon
     assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["localSupabaseApiPort"]
 
 
+def test_config_save_malformed_values_request_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    client, audit_repository, config_path = _client(tmp_path)
+
+    try:
+        response = client.put("/api/config", json={"values": []})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "config_request_validation_failed"
+    assert not config_path.exists()
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
+    assert row["result"] == AuditResult.failure.value
+    assert row["error_code"] == "config_request_validation_failed"
+    params = decode_params_json(row["params_json_redacted"])
+    assert params["validationReason"] == "config_request_validation_failed"
+    assert params["rejectedSettings"] == ["values"]
+
+
+def test_config_save_actor_validation_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    client, audit_repository, config_path = _client(tmp_path)
+
+    try:
+        response = client.put("/api/config", json={"actor": "", "values": {"plcDataDir": "C:/data/plc"}})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 422
+    assert not config_path.exists()
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
+    assert row["error_code"] == "config_request_validation_failed"
+    assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["actor"]
+
+
+def test_config_save_actor_type_validation_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    client, audit_repository, config_path = _client(tmp_path)
+
+    try:
+        response = client.put("/api/config", json={"actor": ["local_operator"], "values": {"plcDataDir": "C:/data/plc"}})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 422
+    assert not config_path.exists()
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
+    assert row["error_code"] == "config_request_validation_failed"
+    assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["actor"]
+
+
+def test_config_save_extra_field_validation_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    client, audit_repository, config_path = _client(tmp_path)
+
+    try:
+        response = client.put("/api/config", json={"values": {"plcDataDir": "C:/data/plc"}, "unexpected": "secret-token"})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 422
+    assert not config_path.exists()
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
+    params = decode_params_json(row["params_json_redacted"])
+    assert row["error_code"] == "config_request_validation_failed"
+    assert params["rejectedSettings"] == ["unexpected"]
+    assert "secret-token" not in row["params_json_redacted"]
+
+
 def test_config_save_env_override_is_blocked_and_audited(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
     monkeypatch.setenv("EWC_GRAFANA_URL", "http://env.example")
@@ -123,6 +193,37 @@ def test_config_save_env_override_is_blocked_and_audited(tmp_path: Path, monkeyp
     assert row["result"] == AuditResult.blocked.value
     assert row["error_code"] == "config_env_override"
     assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["grafanaUrl"]
+
+
+def test_saved_config_json_is_loaded_by_new_settings_instance(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    client, _, config_path = _client(tmp_path)
+
+    try:
+        response = client.put(
+            "/api/config",
+            json={"values": {"grafanaUrl": "http://localhost:4000", "localSupabaseApiPort": 54322}},
+        )
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    monkeypatch.setenv("EWC_CONFIG_FILE_PATH", str(config_path))
+    loaded = Settings()
+    assert loaded.grafana_url == "http://localhost:4000"
+    assert loaded.local_supabase_api_port == 54322
+
+
+def test_environment_overrides_saved_config_json(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"grafanaUrl": "http://config.example"}), encoding="utf-8")
+    monkeypatch.setenv("EWC_CONFIG_FILE_PATH", str(config_path))
+    monkeypatch.setenv("EWC_GRAFANA_URL", "http://env.example")
+
+    loaded = Settings()
+
+    assert loaded.grafana_url == "http://env.example"
 
 
 def test_config_get_hides_secret_values_and_reports_sources(tmp_path: Path, monkeypatch) -> None:

@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from backend.app.core.settings import Settings
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.schemas.audit import AuditResult
-from backend.app.schemas.config import ConfigItemDto, ConfigResponse, ConfigSaveResponse
+from backend.app.schemas.config import ConfigItemDto, ConfigResponse, ConfigSaveRequest, ConfigSaveResponse
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,20 @@ class ConfigSaveError(Exception):
         self.keys = keys
 
 
+def _field_names_from_validation_error(error: ValidationError) -> list[str]:
+    fields: set[str] = set()
+    for item in error.errors():
+        loc = item.get("loc", ())
+        if not loc:
+            continue
+        first = loc[0]
+        if first == "values" and len(loc) > 1:
+            fields.add(str(loc[1]))
+        else:
+            fields.add(str(first))
+    return sorted(fields)
+
+
 class ConfigService:
     def __init__(self, settings: Settings, audit_repository: AuditRepository) -> None:
         self.settings = settings
@@ -78,6 +94,35 @@ class ConfigService:
                 )
             )
         return ConfigResponse(config_file_path=str(self.config_path), items=items)
+
+    def save_config_payload(self, payload: Any) -> ConfigSaveResponse:
+        try:
+            request = ConfigSaveRequest.model_validate(payload)
+        except ValidationError as exc:
+            rejected_fields = _field_names_from_validation_error(exc)
+            error = self.audit_request_validation_failure(
+                keys=rejected_fields,
+                validation_reason="config_request_validation_failed",
+            )
+            raise error from exc
+        return self.save_config(request.values, actor=request.actor)
+
+    def audit_request_validation_failure(self, *, keys: list[str], validation_reason: str) -> ConfigSaveError:
+        error = ConfigSaveError(
+            status_code=422,
+            error_code=validation_reason,
+            message="Settings save request failed validation.",
+            keys=keys,
+        )
+        self._audit_save(
+            actor="local_operator",
+            result=AuditResult.failure,
+            error_code=error.error_code,
+            error_message=error.message,
+            keys=error.keys,
+            validation_reason=error.error_code,
+        )
+        return error
 
     def save_config(self, values: dict[str, Any], *, actor: str) -> ConfigSaveResponse:
         try:
@@ -108,6 +153,7 @@ class ConfigService:
                 error_code=exc.error_code,
                 error_message=exc.message,
                 keys=exc.keys,
+                validation_reason=exc.error_code if exc.status_code == 422 else None,
             )
             raise
 
@@ -198,12 +244,15 @@ class ConfigService:
         keys: list[str],
         error_code: str | None = None,
         error_message: str | None = None,
+        validation_reason: str | None = None,
     ) -> None:
         params: dict[str, Any] = {
             "savedSettings": sorted(keys) if result == AuditResult.success else [],
             "rejectedSettings": sorted(keys) if result != AuditResult.success else [],
             "configPathConfigured": bool(self.settings.config_file_path),
         }
+        if validation_reason:
+            params["validationReason"] = validation_reason
         self.audit_repository.insert_audit(
             action="settings.save",
             target_type="settings",

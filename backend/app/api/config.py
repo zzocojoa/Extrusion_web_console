@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from backend.app.core.settings import Settings, get_settings
 from backend.app.db.audit_repository import AuditRepository
-from backend.app.schemas.config import ConfigResponse, ConfigSaveRequest, ConfigSaveResponse
+from backend.app.schemas.config import ConfigResponse, ConfigSaveResponse
 from backend.app.services.config_service import ConfigSaveError, ConfigService
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -25,9 +27,17 @@ def get_config(service: ConfigService = Depends(get_config_service)) -> ConfigRe
 
 
 @router.put("", response_model=ConfigSaveResponse)
-def save_config(request: ConfigSaveRequest, service: ConfigService = Depends(get_config_service)) -> ConfigSaveResponse:
+async def save_config(request: Request, service: ConfigService = Depends(get_config_service)) -> ConfigSaveResponse:
     try:
-        return service.save_config(request.values, actor=request.actor)
+        payload = await request.json()
+    except json.JSONDecodeError as exc:
+        service.audit_request_validation_failure(keys=[], validation_reason="config_request_json_invalid")
+        raise HTTPException(
+            status_code=422,
+            detail={"reason": "config_request_json_invalid", "keys": []},
+        ) from exc
+    try:
+        return service.save_config_payload(payload)
     except ConfigSaveError as exc:
         raise HTTPException(
             status_code=exc.status_code,
