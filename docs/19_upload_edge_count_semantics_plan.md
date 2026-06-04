@@ -1,20 +1,30 @@
 # Upload Edge Count Semantics Plan
 
-Status: decision-complete plan for branch `codex/upload-edge-inserted-count-semantics`
+Status: implemented on branch `codex/upload-edge-accepted-rows-ui-api`
 
 Date: 2026-06-04
 
 Scope: clarify Upload Job row count terminology across Edge Function, backend DTOs, job events, audit params, Upload UI, tests, and documentation.
 
+Implementation result:
+
+- `acceptedRows` is now the canonical Upload Job API/UI field and label for Edge/Supabase upsert-accepted rows.
+- `insertedRows` remains available as a deprecated v1 compatibility alias.
+- API detail responses, file rows, job events, and SSE replay payloads include `acceptedRows`.
+- Frontend API normalization prefers `acceptedRows` and falls back to legacy `insertedRows`.
+- Upload Job UI labels now display `Accepted` / `수락`; the Korean Upload Preview `already_in_db` label now reads `DB에 있음`.
+- SQLite `inserted_rows` columns were not renamed or migrated.
+- QA passed targeted upload job backend tests, full backend tests, API/SSE smoke, frontend typecheck/build, `git diff --check`, Vite/backend HTTP smoke, and wording checks. Browser screenshot QA remains limited by the local `node_repl` asset-path issue and missing local Playwright install.
+
 ## Summary
 
-The authenticated real Edge smoke in `docs/18_upload_job_real_supabase_edge_auth_ready_env_rerun.md` proved that duplicate rerun DB row count delta was `0`, while the current Upload Job summary still reported `insertedRows=12` for the duplicate rerun.
+The authenticated real Edge smoke in `docs/18_upload_job_real_supabase_edge_auth_ready_env_rerun.md` proved that duplicate rerun DB row count delta was `0`, while the pre-PR #19 Upload Job summary still reported `insertedRows=12` for the duplicate rerun.
 
-The current `insertedRows` label is misleading. In the current Edge implementation, the returned `inserted` value is the number of rows returned by Supabase `upsert(...).select("timestamp,device_id")`. Supabase upsert performs insert or conflict update based on `onConflict`; returned rows are modified/upserted rows, not net-new inserted rows.
+The pre-PR #19 `insertedRows` label was misleading. In the current Edge implementation, the returned `inserted` value is the number of rows returned by Supabase `upsert(...).select("timestamp,device_id")`. Supabase upsert performs insert or conflict update based on `onConflict`; returned rows are modified/upserted rows, not net-new inserted rows.
 
-Decision: v1 should rename operator-facing semantics from `Inserted` to `Accepted` / `Accepted by Edge`. Keep the existing SQLite `inserted_rows` storage and `insertedRows` DTO as a deprecated compatibility alias until a later migration. Add `acceptedRows` as the canonical API/UI field mapped from the current Edge-reported upsert count.
+Decision implemented in PR #19: v1 renamed operator-facing semantics from `Inserted` to `Accepted` / `수락`. The existing SQLite `inserted_rows` storage and `insertedRows` DTO remain as deprecated compatibility aliases until a later migration. `acceptedRows` is the canonical API/UI field mapped from the current Edge-reported upsert count.
 
-## Current Behavior Analysis
+## Pre-Implementation Behavior Analysis
 
 ### Edge Function
 
@@ -59,9 +69,9 @@ Source references:
 
 Implication: current `inserted` is not a reliable net-new insert count. It is better described as Edge-reported accepted/upserted rows.
 
-### Backend
+### Backend Before PR #19
 
-Current backend flow:
+Pre-implementation backend flow:
 
 - `EdgeUploader.upload_batch()` parses `payload.get("inserted", 0)`.
 - `UploadCounters.inserted_rows` accumulates that value.
@@ -73,9 +83,9 @@ Current backend flow:
 
 The backend currently treats Edge-reported `inserted` as `inserted_rows` without differentiating insert vs update.
 
-### Frontend
+### Frontend Before PR #19
 
-Current Upload UI:
+Pre-implementation Upload UI:
 
 - Summary metric label: English `Inserted`, Korean equivalent.
 - File table column: English `Inserted`, Korean equivalent.
@@ -236,11 +246,12 @@ Recommended English labels:
 - File table column: `Accepted`
 - Tooltip/help text if needed: `Rows accepted by Edge upsert. Duplicate-safe reruns may not create new DB rows.`
 
-Recommended Korean labels:
+Implemented Korean labels:
 
 - Summary metric: `수락`
 - File table column: `수락`
-- Tooltip/help text if needed: `Edge upsert가 수락한 행입니다. 중복 안전 재실행에서는 DB 신규 행이 늘지 않을 수 있습니다.`
+- Upload Preview `already_in_db` status: `DB에 있음`
+- Tooltip/help text if needed: `Edge upsert가 수락한 행입니다. 중복 재실행에서는 DB 신규 행이 늘지 않을 수 있습니다.`
 
 Keep `Rows` as `processedRows / totalRows`.
 Keep `Uploaded` as rows submitted to Edge.
@@ -282,14 +293,14 @@ If upload completion audit params are added later, use:
 
 Do not audit raw file paths, filenames, DB URLs, auth keys, service role values, tokens, Authorization headers, CSV contents, row contents, or raw Edge request/response bodies.
 
-## Documentation Updates Needed
+## Documentation Updates
 
-Update:
+Updated:
 
 - `README.md`
 - `docs/08_upload_job_sse_plan.md`
 - `docs/18_upload_job_real_supabase_edge_auth_ready_env_rerun.md` or a follow-up note
-- Any future release note or changelog convention if introduced
+- `CHANGELOG.md`
 
 Documentation wording:
 
@@ -301,7 +312,7 @@ Documentation wording:
 
 ### Backend Unit Tests
 
-Add or update tests to prove:
+Implemented tests prove:
 
 - `EdgeUploader.upload_batch()` reads `accepted` when present.
 - `EdgeUploader.upload_batch()` falls back to `upserted`.
@@ -322,11 +333,11 @@ Add tests to prove:
 
 ### Frontend Tests Or Type Checks
 
-At minimum:
+Implemented coverage:
 
 - TypeScript types use `acceptedRows` as canonical.
 - API normalizer maps `acceptedRows` first and falls back to `insertedRows`.
-- Upload page labels no longer display "Inserted".
+- Upload page labels no longer display "Inserted" or Korean inserted-row wording.
 - Mock upload job data populates `acceptedRows`.
 
 ### Contract Tests
@@ -360,6 +371,8 @@ Recommended deprecation path:
 3. Later cleanup can remove `insertedRows` only after no frontend/API consumers depend on it.
 
 ## Implementation Order
+
+Completed in PR #19:
 
 1. Backend: introduce accepted-row naming in internal variables where low risk.
 2. Backend: update `EdgeUploader` parser to prefer `accepted`, then `upserted`, then legacy `inserted`.

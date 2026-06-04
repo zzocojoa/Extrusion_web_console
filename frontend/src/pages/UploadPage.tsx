@@ -752,7 +752,7 @@ function JobTab({
           <div className="upload-job__metrics">
             <Metric label={t("upload.job.metrics.files")} value={`${formatNumber(job.summary.succeededFiles)}/${formatNumber(job.summary.totalFiles)}`} />
             <Metric label={t("upload.job.metrics.rows")} value={`${formatNumber(job.summary.processedRows)}/${formatNumber(job.summary.totalRows)}`} />
-            <Metric label={t("upload.job.metrics.inserted")} value={formatNumber(job.summary.insertedRows)} />
+            <Metric label={t("upload.job.metrics.accepted")} value={formatNumber(job.summary.acceptedRows)} />
             <Metric label={t("upload.job.metrics.failures")} value={formatNumber(job.summary.failedFiles)} danger={job.summary.failedFiles > 0} />
           </div>
           {job.errorMessage ? <div className="error-banner" role="alert">{job.errorMessage}</div> : null}
@@ -791,7 +791,7 @@ function JobFileTable({ files }: { files: UploadJobDetail["files"] }) {
               <th>{t("upload.job.table.progress")}</th>
               <th>{t("upload.job.table.rows")}</th>
               <th>{t("upload.job.table.uploaded")}</th>
-              <th>{t("upload.job.table.inserted")}</th>
+              <th>{t("upload.job.table.accepted")}</th>
               <th>{t("upload.job.table.resume")}</th>
               <th>{t("upload.job.table.retry")}</th>
               <th>{t("upload.job.table.error")}</th>
@@ -810,7 +810,7 @@ function JobFileTable({ files }: { files: UploadJobDetail["files"] }) {
                   </td>
                   <td className="num">{formatNumber(file.processedRows)} / {formatNumber(file.rowCount)}</td>
                   <td className="num">{formatNumber(file.uploadedRows)}</td>
-                  <td className="num">{formatNumber(file.insertedRows)}</td>
+                  <td className="num">{formatNumber(file.acceptedRows)}</td>
                   <td className="num">{formatNumber(file.resumeOffset)}</td>
                   <td className="num">{formatNumber(file.retryCount)}</td>
                   <td className="preview-reason">{file.lastErrorMessage ?? "-"}</td>

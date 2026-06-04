@@ -138,6 +138,33 @@ def test_retry_no_retryable_files_writes_blocked_audit(tmp_path: Path) -> None:
     assert audit["error_code"] == "no_retryable_files"
 
 
+def test_upload_job_detail_exposes_accepted_rows_with_legacy_inserted_alias(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(job_id="upl_counts", preview_run_id="prv_done", options={}, config_snapshot={})
+    file_id = repository.list_job_files("upl_counts")[0]["job_file_id"]
+    repository.mark_file_completed(file_id, uploaded_rows=2, inserted_rows=2)
+    repository.finish_job("upl_counts", UploadJobStatus.succeeded)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/upload/jobs/upl_counts")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job"]["summary"]["acceptedRows"] == 2
+    assert body["job"]["summary"]["insertedRows"] == 2
+    assert body["files"][0]["acceptedRows"] == 2
+    assert body["files"][0]["insertedRows"] == 2
+    succeeded_event = next(event for event in body["events"] if event["eventType"] == "file.succeeded")
+    assert succeeded_event["data"]["acceptedRows"] == 2
+    assert succeeded_event["data"]["insertedRows"] == 2
+
+
 def test_upload_job_events_replays_after_seq(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)

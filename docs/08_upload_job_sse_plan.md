@@ -16,6 +16,7 @@ Implemented on branch `codex/upload-job-sse`:
 - SSE event replay backed by persisted `job_events`.
 - Startup recovery that marks active upload jobs interrupted.
 - Upload Job frontend tab with progress summary, action buttons, file table, event viewer, mock mode, API mode, and SSE reconnect.
+- Upload Job row count terminology now exposes `acceptedRows` as the canonical accepted/upserted count in API responses, job events, SSE replay, and UI labels; `insertedRows` remains a deprecated v1 compatibility alias.
 - Review hardening for canonical legacy-compatible CSV transform, legacy Korean PLC/temperature fixture parity, terminal status guards, blocked-path audit logging, idempotent pause events, job-scoped SSE reconnect/replay, and concurrent event sequence writes.
 
 Verified after implementation:
@@ -23,12 +24,14 @@ Verified after implementation:
 - Backend tests: `.\.venv\Scripts\python -m pytest tests\backend`
 - Frontend typecheck: `npm run typecheck`
 - Frontend build: `npm run build`
+- PR #19 acceptedRows QA: targeted upload job backend tests, full backend tests, API/SSE smoke, frontend typecheck/build, `git diff --check`, Vite/backend HTTP smoke, and wording checks passed.
 
 Remaining implementation risks:
 
 - Real operator-PC upload against local Supabase Edge Function still needs environment QA with representative CSVs.
 - Broader legacy CSV parity tests now cover synthetic Korean PLC and temperature fixtures; real operator-PC representative CSVs still need environment QA before v1 replacement.
 - In-flight Edge HTTP cancellation is bounded by timeout; pause/cancel take effect at the next checkpoint after the HTTP call returns.
+- Browser screenshot QA for the acceptedRows label update remains limited by the local `node_repl` asset-path issue and missing local Playwright install; HTTP smoke covered the reachable local app.
 
 This plan follows `AGENTS.md`, `docs/00_product_scope.md`, `docs/02_engineering_plan.md`, `docs/03_ui_ux_plan.md`, `docs/04_design_system.md`, and `docs/07_upload_preview_plan.md`.
 
@@ -208,6 +211,7 @@ Response shape:
       "totalRows": 120000,
       "processedRows": 42000,
       "uploadedRows": 42000,
+      "acceptedRows": 41880,
       "insertedRows": 41880,
       "warningCount": 0
     },
@@ -634,9 +638,9 @@ It must not skip the file via latest-timestamp Smart Sync.
 Progress levels:
 
 1. Job summary:
-   total files, succeeded files, failed files, processed rows, uploaded rows, inserted rows.
+   total files, succeeded files, failed files, processed rows, uploaded rows, accepted rows.
 2. File rows:
-   per-file status, processed rows, uploaded rows, inserted rows, resume offset, retry count, last error.
+   per-file status, processed rows, uploaded rows, accepted rows, resume offset, retry count, last error.
 3. Events:
    immutable timeline for logs and SSE replay.
 
@@ -679,7 +683,7 @@ Job file table columns:
 | Progress | row progress bar plus text |
 | Rows | processed / total |
 | Uploaded | uploaded rows |
-| Inserted | inserted rows reported by Edge Function |
+| Accepted | rows accepted/upserted by the Edge Function; duplicate-safe reruns may not create new DB rows |
 | Resume | resume offset |
 | Retry | retry count |
 | Last error | wrapped reason text |
@@ -716,7 +720,7 @@ Buttons:
 | Transform error | file `failed/transform_error`, resume offset preserved | failed file row + log | service |
 | Edge 4xx | file `failed/edge_rejected` | failed row, no retry loop for permanent failure | service |
 | Edge 5xx/network timeout | retry, then file `failed/upload_failed` | warning/error events | service |
-| DB/Edge returns inserted count missing | uploaded rows recorded, inserted rows `0`, warning event | warning log | service |
+| DB/Edge returns accepted count missing | uploaded rows recorded, accepted rows `0`, warning event | warning log | service |
 | Pause requested | job `pausing -> paused` at checkpoint | paused status, Resume visible | service + UI |
 | Cancel requested | job `cancelling -> cancelled` or `partial_failed` | cancelled banner | service + UI |
 | Backend killed mid-upload | startup marks `interrupted`; event/audit written | latest job interrupted; Retry visible | startup |

@@ -186,7 +186,7 @@
     },
     "status": {
       "target": "대상",
-      "already_in_db": "DB 적재됨",
+      "already_in_db": "DB에 있음",
       "partial_overlap": "일부 중복",
       "risky": "주의",
       "excluded": "제외"
@@ -262,7 +262,8 @@
       "metrics": {
         "files": "파일",
         "rows": "행",
-        "inserted": "적재",
+        "accepted": "수락",
+        "inserted": "수락",
         "failures": "실패"
       },
       "status": {
@@ -297,7 +298,8 @@
         "progress": "진행",
         "rows": "행",
         "uploaded": "업로드",
-        "inserted": "적재",
+        "accepted": "수락",
+        "inserted": "수락",
         "resume": "재개",
         "retry": "재시도",
         "error": "최신 오류"

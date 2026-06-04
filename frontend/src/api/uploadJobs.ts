@@ -43,6 +43,7 @@ export interface UploadJobSummary {
   totalRows: number;
   processedRows: number;
   uploadedRows: number;
+  acceptedRows: number;
   insertedRows: number;
   warningCount: number;
 }
@@ -78,6 +79,7 @@ export interface UploadJobFile {
   rowCount: number | null;
   processedRows: number;
   uploadedRows: number;
+  acceptedRows: number;
   insertedRows: number;
   resumeOffset: number;
   retryCount: number;
@@ -211,6 +213,7 @@ export function normalizeJobEvent(raw: any): JobEvent {
 function normalizeJobDetail(raw: any): UploadJobDetail {
   const job = raw.job ?? {};
   const summary = job.summary ?? {};
+  const acceptedRows = summary.acceptedRows ?? summary.accepted_rows ?? summary.insertedRows ?? summary.inserted_rows ?? 0;
   return {
     job: {
       jobId: job.jobId ?? job.job_id,
@@ -230,36 +233,41 @@ function normalizeJobDetail(raw: any): UploadJobDetail {
         totalRows: summary.totalRows ?? summary.total_rows ?? 0,
         processedRows: summary.processedRows ?? summary.processed_rows ?? 0,
         uploadedRows: summary.uploadedRows ?? summary.uploaded_rows ?? 0,
-        insertedRows: summary.insertedRows ?? summary.inserted_rows ?? 0,
+        acceptedRows,
+        insertedRows: summary.insertedRows ?? summary.inserted_rows ?? acceptedRows,
         warningCount: summary.warningCount ?? summary.warning_count ?? 0,
       },
       errorCode: job.errorCode ?? job.error_code ?? null,
       errorMessage: job.errorMessage ?? job.error_message ?? null,
     },
-    files: (raw.files ?? []).map((file: any) => ({
-      jobFileId: file.jobFileId ?? file.job_file_id,
-      jobId: file.jobId ?? file.job_id,
-      previewItemId: file.previewItemId ?? file.preview_item_id ?? null,
-      fileKey: file.fileKey ?? file.file_key,
-      folderLabel: file.folderLabel ?? file.folder_label,
-      folderPath: file.folderPath ?? file.folder_path,
-      filename: file.filename,
-      path: file.path,
-      kind: file.kind,
-      fileDate: file.fileDate ?? file.file_date ?? null,
-      fileSignature: file.fileSignature ?? file.file_signature,
-      status: file.status,
-      rowCount: file.rowCount ?? file.row_count ?? null,
-      processedRows: file.processedRows ?? file.processed_rows ?? 0,
-      uploadedRows: file.uploadedRows ?? file.uploaded_rows ?? 0,
-      insertedRows: file.insertedRows ?? file.inserted_rows ?? 0,
-      resumeOffset: file.resumeOffset ?? file.resume_offset ?? 0,
-      retryCount: file.retryCount ?? file.retry_count ?? 0,
-      startedAt: file.startedAt ?? file.started_at ?? null,
-      finishedAt: file.finishedAt ?? file.finished_at ?? null,
-      lastErrorCode: file.lastErrorCode ?? file.last_error_code ?? null,
-      lastErrorMessage: file.lastErrorMessage ?? file.last_error_message ?? null,
-    })),
+    files: (raw.files ?? []).map((file: any) => {
+      const fileAcceptedRows = file.acceptedRows ?? file.accepted_rows ?? file.insertedRows ?? file.inserted_rows ?? 0;
+      return {
+        jobFileId: file.jobFileId ?? file.job_file_id,
+        jobId: file.jobId ?? file.job_id,
+        previewItemId: file.previewItemId ?? file.preview_item_id ?? null,
+        fileKey: file.fileKey ?? file.file_key,
+        folderLabel: file.folderLabel ?? file.folder_label,
+        folderPath: file.folderPath ?? file.folder_path,
+        filename: file.filename,
+        path: file.path,
+        kind: file.kind,
+        fileDate: file.fileDate ?? file.file_date ?? null,
+        fileSignature: file.fileSignature ?? file.file_signature,
+        status: file.status,
+        rowCount: file.rowCount ?? file.row_count ?? null,
+        processedRows: file.processedRows ?? file.processed_rows ?? 0,
+        uploadedRows: file.uploadedRows ?? file.uploaded_rows ?? 0,
+        acceptedRows: fileAcceptedRows,
+        insertedRows: file.insertedRows ?? file.inserted_rows ?? fileAcceptedRows,
+        resumeOffset: file.resumeOffset ?? file.resume_offset ?? 0,
+        retryCount: file.retryCount ?? file.retry_count ?? 0,
+        startedAt: file.startedAt ?? file.started_at ?? null,
+        finishedAt: file.finishedAt ?? file.finished_at ?? null,
+        lastErrorCode: file.lastErrorCode ?? file.last_error_code ?? null,
+        lastErrorMessage: file.lastErrorMessage ?? file.last_error_message ?? null,
+      };
+    }),
     events: (raw.events ?? []).map(normalizeJobEvent),
     eventCursor: {
       latestSeq: raw.eventCursor?.latestSeq ?? raw.event_cursor?.latest_seq ?? 0,

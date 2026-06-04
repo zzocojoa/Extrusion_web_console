@@ -81,12 +81,12 @@ Interpretation: the real operational sample is not an upload target because its 
 | Controlled target preview setup | Succeeded |
 | First Upload Job terminal status | `succeeded` |
 | First Upload Job uploaded rows | 12 |
-| First Upload Job Edge reported inserted rows | 12 |
+| First Upload Job Edge reported accepted/upserted rows through legacy `insertedRows` | 12 |
 | First Upload Job succeeded files | 1 |
 | First Upload Job failed files | 0 |
 | Duplicate rerun terminal status | `succeeded` |
 | Duplicate rerun uploaded rows | 12 |
-| Duplicate rerun Edge reported inserted rows | 12 |
+| Duplicate rerun Edge reported accepted/upserted rows through legacy `insertedRows` | 12 |
 | Duplicate rerun succeeded files | 1 |
 | Duplicate rerun failed files | 0 |
 
@@ -101,7 +101,7 @@ Exact key count checks:
 
 Interpretation: duplicate-safe DB behavior passed. The same exact keys remained at 12 rows after both uploads, so the duplicate rerun did not increase `all_metrics` row count.
 
-Observed limitation: the Edge response reported `insertedRows=12` for duplicate rows even though exact DB row count did not increase. Treat the current Upload Job `insertedRows` field as Edge-reported processed/upsert count until Edge response semantics are clarified. This is a reporting semantics risk, not evidence of duplicate DB insertion in this run.
+Observed limitation at the time of this QA: the Edge response reported legacy `insertedRows=12` for duplicate rows even though exact DB row count did not increase. PR #19 resolved the operator-facing naming risk by adding canonical `acceptedRows` for Edge/Supabase upsert-accepted rows and keeping `insertedRows` only as a deprecated compatibility alias. This remains not evidence of duplicate DB insertion in this run.
 
 ## Events And SSE
 
@@ -174,9 +174,9 @@ The previous `preconfigured_env_missing` and `runtime_unavailable` blockers were
 
 Two authenticated Upload Jobs reached `succeeded`. Exact key row count did not increase after the duplicate rerun.
 
-### Follow-up: Edge inserted row reporting semantics
+### Resolved follow-up: Edge accepted row reporting semantics
 
-The Edge response reported 12 inserted rows for duplicate rows, while exact DB row count stayed unchanged. A follow-up should clarify whether the Edge Function returns net-new insert count, upserted row count, or accepted row count, then align UI wording if needed.
+PR #19 clarified the web app semantics: `acceptedRows` is the canonical field and label for Edge/Supabase upsert-accepted rows. It is not a net-new insert count, so duplicate reruns can have DB row count delta `0` while `acceptedRows` remains positive. The legacy `insertedRows` field remains only as a deprecated v1 compatibility alias.
 
 ### Follow-up: browser screenshot QA
 
@@ -200,8 +200,8 @@ Upload Job and Audit Logs browser screenshot QA remains a follow-up. This pass v
 
 This PR is mergeable as a report-only QA artifact.
 
-It does not change feature code and does not prove large full-file authenticated upload soak behavior. The next engineering follow-up should clarify Edge inserted row reporting semantics before operators rely on the UI field as a net-new insert count.
+It does not change feature code and does not prove large full-file authenticated upload soak behavior. PR #19 later clarified Edge accepted/upserted row semantics so operators no longer see the legacy inserted-row wording in Upload Job UI.
 
-Recommended follow-up branch:
+Completed follow-up:
 
-`codex/upload-edge-inserted-count-semantics`
+`codex/upload-edge-accepted-rows-ui-api`
