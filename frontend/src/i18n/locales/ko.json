@@ -186,7 +186,7 @@
     },
     "status": {
       "target": "대상",
-      "already_in_db": "DB 적재됨",
+      "already_in_db": "DB에 있음",
       "partial_overlap": "일부 중복",
       "risky": "주의",
       "excluded": "제외"
