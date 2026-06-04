@@ -18,11 +18,13 @@ All notable changes to Extrusion Web Console are documented here.
 - Backend now exposes `GET /api/config` and `PUT /api/config` for safe config reads and saves while the Settings page remains read-only.
 - Settings saves now write `settings.save` audit rows for success, failure, malformed request validation, and env override blocked paths.
 - Upload Preview now writes `upload.preview` audit rows for success, DB unreachable, missing source, malformed request validation, and active preview conflict paths.
+- Upload Job API responses, file rows, job events, and SSE replay now expose canonical `acceptedRows` for Edge/Supabase upsert-accepted row counts.
 
 ### Changed
 
 - Start Upload only snapshots `target` Preview items. `already_in_db`, `partial_overlap`, `risky`, and `excluded` rows remain excluded in v1.
 - Preview-origin upload disables legacy latest-timestamp Smart Sync filtering and keeps database upsert on `(timestamp, device_id)` as final duplicate protection.
+- Upload Job UI now labels Edge/Supabase upsert-accepted row counts as `Accepted` / `수락`. The legacy `insertedRows` field remains as a deprecated compatibility alias and is not a net-new insert count.
 
 ### Fixed
 
@@ -41,3 +43,4 @@ All notable changes to Extrusion Web Console are documented here.
 - Config save audit params now record safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason` instead of raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies.
 - Config file writes now use a per-config-file lock, a unique temp filename, and atomic replace.
 - Upload Preview audit params now record safe metadata such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters` instead of raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed request bodies.
+- Korean Upload Preview `already_in_db` status now reads `DB에 있음` instead of inserted-row wording.

@@ -18,7 +18,7 @@ The first runnable scaffold is in place:
 - React + Vite + TypeScript frontend.
 - Dashboard Variant D mock UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
-- Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, and SSE event replay.
+- Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, SSE event replay, and canonical `acceptedRows` counts for Edge/Supabase upsert-accepted rows.
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
 - Dashboard runtime module connected to the runtime API in API mode.
 - Settings runtime section showing read-only local Supabase config values and their source.
@@ -97,6 +97,8 @@ $env:EWC_STATE_DB_PATH="C:\tmp\ExtrusionWebConsole\web_console_state.db"
 `EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB is unreachable, preview runs still persist and DB-dependent CSV candidates are shown as `risky/db_unreachable` under a `partial_failed` run.
 
 `EWC_SUPABASE_ANON_KEY` and either `EWC_SUPABASE_EDGE_URL` or `EWC_SUPABASE_URL` are required for real Start Upload and Retry Failed execution. Preview-origin upload disables the legacy latest-timestamp Smart Sync filter and relies on the existing `all_metrics(timestamp, device_id)` upsert safety for final duplicate protection.
+
+Upload Job responses and job events expose `acceptedRows` as the canonical count of rows accepted/upserted by the Edge Function and Supabase upsert path. This is not a net-new physical insert count: duplicate-safe reruns can report positive `acceptedRows` while the DB row count delta stays `0`. The legacy `insertedRows` response field remains available as a deprecated compatibility alias for v1, but operator-facing Upload UI labels use `Accepted` / `수락` and avoid inserted-row wording. The existing SQLite `inserted_rows` storage column is retained without rename or migration.
 
 Local Supabase runtime control uses the existing `Extrusion_data` local stack by default:
 
@@ -291,6 +293,13 @@ Upload Preview Audit QA:
 - QA confirmed `upload.preview` success, failure, and blocked audit rows for preview success, DB unreachable, missing source, malformed JSON, validation failure, and active preview conflict paths.
 - QA confirmed audit params use `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`, without raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed raw request bodies.
 - Remaining risk: Browser screenshot QA for PR #9 was not completed because `node_repl` failed with a kernel asset path error; Vite/backend HTTP smoke covered the running shell and proxy instead. Large real CSV preview soak remains a separate operator-environment validation item.
+
+Upload Job Accepted Rows QA:
+
+- PR #19 QA passed targeted upload job backend tests, full backend tests, API/SSE smoke, frontend typecheck/build, `git diff --check`, Vite/backend HTTP smoke, and source/build wording checks.
+- QA confirmed Upload Job API responses, file rows, job events, and SSE replay include canonical `acceptedRows` and compatibility `insertedRows`.
+- QA confirmed Upload UI uses `acceptedRows` first, labels accepted/upserted rows as `Accepted` / `수락`, and no longer shows operator-facing `Inserted`, `적재`, `삽입`, or `새로 삽입` wording. Korean Upload Preview `already_in_db` now displays `DB에 있음`.
+- Remaining risk: Browser screenshot QA for PR #19 was not completed because `node_repl` failed with a kernel asset path error and local Playwright was not installed; HTTP smoke covered Dashboard, Upload, Logs, Settings, and Vite proxy reachability.
 
 Browser QA has been run against:
 
