@@ -6,6 +6,16 @@ Date: 2026-06-04
 
 Scope: make Upload Job / Audit Logs browser screenshot QA reproducible on the Windows operator/developer environment without depending on Docker, local Supabase, operational CSV files, or secret-bearing configuration.
 
+Implementation result on branch `codex/upload-job-browser-tooling-impl`:
+
+- Added `@playwright/test` as a frontend devDependency.
+- Added `npm run qa:screenshots`.
+- Added Playwright screenshot QA under `frontend/qa/`.
+- Screenshot QA runs Vite mock mode on `127.0.0.1:5174` by default to avoid reusing an existing API-mode dev server on `5173`; it does not require Docker, local Supabase, DB URLs, auth keys, or operational CSV fixtures.
+- Screenshot artifacts are written under `.gstack/screenshots/upload-job-browser-qa/<timestamp>/`, which is already ignored by the repo `.gitignore`.
+- The runner captures Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
+- The runner asserts `Accepted` / `수락` and `DB에 있음` wording, blocks `Inserted` / `적재` / `삽입` / `새로 삽입`, captures console/page/network failures, masks file/path cells before screenshots, disables Playwright failure screenshots/traces to avoid raw path leakage, and scans text artifacts for credential/path-like markers.
+
 ## Summary
 
 PR #20 proved that Upload Job / Audit Logs screenshot QA is currently blocked by tooling, not by the app HTTP surface:

@@ -230,6 +230,16 @@ The Upload Preview page also uses mock data by default so all five preview state
 
 The Logs page shows mock audit rows by default and uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, raw `error_message` search, raw params JSON search, or arbitrary SQL query controls. API responses return sanitized `errorMessage` values and decoded redacted params from `params_json_redacted`.
 
+Local screenshot QA for Upload Job and Audit Logs can be run in mock mode without Docker or local Supabase:
+
+```powershell
+cd frontend
+npm run qa:screenshots
+```
+
+The screenshot runner writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`, checks the required viewport matrix, verifies `Accepted` / `수락` wording, captures console/network failures, and redacts path/credential-like markers before writing text artifacts.
+It uses `127.0.0.1:5174` by default to avoid reusing an existing `5173` dev server that may be running in API mode.
+
 Mock Dashboard states can be checked with query strings:
 
 ```text
