@@ -40,6 +40,18 @@ class CsvUploadRecordReader:
         return count_canonical_records(file_row)
 
 
+def parse_edge_accepted_rows(payload: dict[str, Any]) -> int:
+    for key in ("accepted", "upserted", "inserted"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
 class EdgeUploader:
     def __init__(self, settings: Settings, options: UploadJobOptions) -> None:
         self.edge_url = settings.upload_edge_url
@@ -65,7 +77,7 @@ class EdgeUploader:
                         payload = response.json()
                     except Exception:
                         payload = {}
-                    return int(payload.get("inserted", 0))
+                    return parse_edge_accepted_rows(payload)
                 except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError):
                     if attempt >= retry_attempts:
                         raise
@@ -176,9 +188,9 @@ class UploadJobService:
                 for batch_start in range(0, len(chunk), options.batch_rows):
                     self._control_checkpoint(job_id)
                     batch = chunk[batch_start : batch_start + options.batch_rows]
-                    inserted = uploader.upload_batch(batch)
+                    accepted = uploader.upload_batch(batch)
                     counters.uploaded_rows += len(batch)
-                    counters.inserted_rows += inserted
+                    counters.inserted_rows += accepted
                     counters.processed_rows += len(batch)
                     self.repository.update_file_progress(
                         job_file_id,

@@ -262,7 +262,8 @@
       "metrics": {
         "files": "Files",
         "rows": "Rows",
-        "inserted": "Inserted",
+        "accepted": "Accepted",
+        "inserted": "Accepted",
         "failures": "Failures"
       },
       "status": {
@@ -297,7 +298,8 @@
         "progress": "Progress",
         "rows": "Rows",
         "uploaded": "Uploaded",
-        "inserted": "Inserted",
+        "accepted": "Accepted",
+        "inserted": "Accepted",
         "resume": "Resume",
         "retry": "Retry",
         "error": "Last error"

@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from backend.app.core.settings import Settings
-from backend.app.db.upload_job_repository import UploadJobRepository
+from backend.app.db.upload_job_repository import UploadJobRepository, decode_json
 from backend.app.schemas.upload_jobs import UploadJobStatus
-from backend.app.services.upload_jobs import UploadJobService
+from backend.app.services.upload_jobs import UploadJobService, parse_edge_accepted_rows
 from tests.backend.test_upload_jobs_repository_contract import create_preview_with_items
 
 
@@ -59,10 +59,29 @@ def test_upload_job_service_uploads_preview_targets_and_disables_smart_sync(tmp_
     files = repository.list_job_files(job_id)
     events = repository.list_events(job_id)
     assert job["status"] == UploadJobStatus.succeeded.value
+    assert job["inserted_rows"] == 2
     assert files[0]["status"] == "succeeded"
     assert files[0]["uploaded_rows"] == 2
+    assert files[0]["inserted_rows"] == 2
     assert uploader.batches[0][0]["timestamp"] == "2026-06-02T09:00:00+09:00"
     assert all(event["event_type"] != "smart_sync.filtered" for event in events)
+    completed = next(event for event in events if event["event_type"] == "file.succeeded")
+    completed_data = decode_json(completed["data_json"], {})
+    assert completed_data["acceptedRows"] == 2
+    assert completed_data["insertedRows"] == 2
+
+
+def test_parse_edge_accepted_rows_prefers_canonical_count() -> None:
+    payload = {"accepted": 4, "upserted": 3, "inserted": 2}
+
+    assert parse_edge_accepted_rows(payload) == 4
+
+
+def test_parse_edge_accepted_rows_falls_back_to_upserted_then_legacy_inserted() -> None:
+    assert parse_edge_accepted_rows({"upserted": "3", "inserted": 2}) == 3
+    assert parse_edge_accepted_rows({"inserted": "2"}) == 2
+    assert parse_edge_accepted_rows({"accepted": "bad", "upserted": "3"}) == 3
+    assert parse_edge_accepted_rows({}) == 0
 
 
 def test_upload_job_service_records_file_failure_without_silent_exit(tmp_path: Path) -> None:

@@ -39,6 +39,7 @@ export function getMockUploadJob(
       rowCount: 16000,
       processedRows: status === "cancelled" ? firstProcessed : firstProcessed,
       uploadedRows: Math.min(firstProcessed, 16000),
+      acceptedRows: Math.max(0, Math.min(firstProcessed - 18, 15982)),
       insertedRows: Math.max(0, Math.min(firstProcessed - 18, 15982)),
       resumeOffset: step >= 65 ? 0 : firstProcessed,
       retryCount: 0,
@@ -63,6 +64,7 @@ export function getMockUploadJob(
       rowCount: 6400,
       processedRows: secondProcessed,
       uploadedRows: secondProcessed,
+      acceptedRows: Math.max(0, secondProcessed - 4),
       insertedRows: Math.max(0, secondProcessed - 4),
       resumeOffset: status === "partial_failed" ? 1400 : secondProcessed,
       retryCount: 0,
@@ -74,7 +76,7 @@ export function getMockUploadJob(
   ];
   const processedRows = files.reduce((sum, file) => sum + file.processedRows, 0);
   const uploadedRows = files.reduce((sum, file) => sum + file.uploadedRows, 0);
-  const insertedRows = files.reduce((sum, file) => sum + file.insertedRows, 0);
+  const acceptedRows = files.reduce((sum, file) => sum + file.acceptedRows, 0);
   const events: JobEvent[] = buildEvents(jobId, startedAtMs, status, step);
   return {
     job: {
@@ -95,7 +97,8 @@ export function getMockUploadJob(
         totalRows: 22400,
         processedRows,
         uploadedRows,
-        insertedRows,
+        acceptedRows,
+        insertedRows: acceptedRows,
         warningCount: status === "partial_failed" ? 1 : 0,
       },
       errorCode: status === "partial_failed" ? "upload_failed" : null,

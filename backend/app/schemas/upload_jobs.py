@@ -77,6 +77,7 @@ class UploadJobSummary(ApiModel):
     total_rows: int = 0
     processed_rows: int = 0
     uploaded_rows: int = 0
+    accepted_rows: int = 0
     inserted_rows: int = 0
     warning_count: int = 0
 
@@ -112,6 +113,7 @@ class UploadJobFileDto(ApiModel):
     row_count: int | None = None
     processed_rows: int = 0
     uploaded_rows: int = 0
+    accepted_rows: int = 0
     inserted_rows: int = 0
     resume_offset: int = 0
     retry_count: int = 0

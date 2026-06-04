@@ -262,7 +262,8 @@
       "metrics": {
         "files": "파일",
         "rows": "행",
-        "inserted": "적재",
+        "accepted": "수락",
+        "inserted": "수락",
         "failures": "실패"
       },
       "status": {
@@ -297,7 +298,8 @@
         "progress": "진행",
         "rows": "행",
         "uploaded": "업로드",
-        "inserted": "적재",
+        "accepted": "수락",
+        "inserted": "수락",
         "resume": "재개",
         "retry": "재시도",
         "error": "최신 오류"

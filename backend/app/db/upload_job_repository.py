@@ -744,6 +744,7 @@ class UploadJobRepository:
                 data={
                     "processedRows": processed_rows,
                     "uploadedRows": uploaded_rows,
+                    "acceptedRows": inserted_rows,
                     "insertedRows": inserted_rows,
                     "rowCount": row_count,
                 },
@@ -776,7 +777,7 @@ class UploadJobRepository:
                 level="info",
                 message=f"Completed {row['filename']}.",
                 job_file_id=job_file_id,
-                data={"uploadedRows": uploaded_rows, "insertedRows": inserted_rows},
+                data={"uploadedRows": uploaded_rows, "acceptedRows": inserted_rows, "insertedRows": inserted_rows},
             )
 
     def mark_file_failed(self, job_file_id: int, error_code: str, error_message: str, resume_offset: int | None = None) -> None:
