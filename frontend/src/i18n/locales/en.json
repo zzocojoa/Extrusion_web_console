@@ -187,7 +187,8 @@
         "config_empty_update": "There are no changed values to save.",
         "config_unknown_key": "Unknown setting key: {{keys}}",
         "config_file_invalid": "The local config file is not valid JSON.",
-        "config_write_failed": "The local config file could not be written."
+        "config_write_failed": "The local config file could not be written.",
+        "local_token_required": "Local console session is no longer valid. Restart the web console from the launcher."
       }
     },
     "runtime": {

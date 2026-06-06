@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { isLocalTokenApiError } from "../api/client";
 import {
   ActiveUploadJobError,
   controlUploadJob,
@@ -395,7 +396,7 @@ export function UploadPage() {
         <PreviewTab
           currentPreview={currentPreview}
           loading={previewQuery.isLoading || latestQuery.isLoading || createMutation.isPending}
-          error={previewQuery.error ?? latestQuery.error ?? createMutation.error}
+          error={previewQuery.error ?? latestQuery.error ?? createMutation.error ?? cancelMutation.error}
           rangeMode={rangeMode}
           startDate={startDate}
           endDate={endDate}
@@ -552,7 +553,7 @@ function PreviewTab(props: PreviewTabProps) {
 
       {props.error ? (
         <div className="error-banner" role="alert">
-          {t("upload.preview.error")}
+          {formatOperatorError(props.error, t("upload.preview.error"))}
         </div>
       ) : null}
       {props.startUploadError ? (
@@ -698,7 +699,7 @@ function JobTab({
     return <section className="panel panel--loading">{t("upload.job.loading")}</section>;
   }
   if (error && !detail) {
-    return <div className="error-banner" role="alert">{t("upload.job.loadError")}</div>;
+    return <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"))}</div>;
   }
   if (!detail) {
     return (
@@ -762,6 +763,11 @@ function JobTab({
       <JobEvents events={detail.events} />
     </section>
   );
+}
+
+function formatOperatorError(error: Error, fallback: string): string {
+  if (isLocalTokenApiError(error)) return error.message;
+  return fallback;
 }
 
 function Metric({ label, value, danger = false }: { label: string; value: string; danger?: boolean }) {

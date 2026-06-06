@@ -29,7 +29,7 @@ The first runnable scaffold is in place:
 - TanStack Query mock-first Dashboard query.
 - Korean/English i18n baseline with language persistence in `localStorage`.
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
-- Launcher phase 1 with FastAPI static frontend serving and Windows double-click launcher scripts.
+- Launcher phase 2 with FastAPI static frontend serving, Windows double-click launcher scripts, and per-run local token protection for mutating APIs.
 Legacy upload state import is not implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
@@ -68,7 +68,7 @@ Local Supabase, WSL, Docker, and Grafana are not required for the mock Dashboard
 
 ## Operator Launcher
 
-Launcher phase 1 lets an operator run the built web console from one localhost backend origin.
+Launcher phase 2 lets an operator run the built web console from one localhost backend origin with a per-run local token protecting mutating APIs.
 
 First build the frontend once from `frontend/`:
 
@@ -96,6 +96,8 @@ http://127.0.0.1:8000/
 
 Operator mode does not start Vite. FastAPI serves `frontend/dist` and the frontend calls same-origin `/api/*`.
 
+The launcher generates a per-run local API token, passes it to the backend through process environment, and never puts it in the browser URL. FastAPI injects the token into the served app shell at response time, and the frontend keeps it in memory only. Protected writes such as Settings save, Upload Preview start, Upload Job start/control, and Local Supabase start/stop send `X-EWC-Local-Token`. Read-only APIs such as `/api/health`, `GET /api/config`, `GET /api/audit`, upload/job status reads, and `/api/docs` remain localhost-readable. `/api/docs` operator-mode hardening remains a separate follow-up.
+
 If `frontend/dist/index.html` is missing, the launcher stops with a clear message. It does not run `npm run build` by default. Developers can explicitly request a build:
 
 ```powershell
@@ -103,6 +105,8 @@ If `frontend/dist/index.html` is missing, the launcher stops with a clear messag
 ```
 
 The explicit build path fails clearly if `npm run build` exits non-zero or does not produce `frontend/dist/index.html`.
+
+`-CheckOnly` verifies launcher prerequisites and the local token policy without starting a backend process. It reports token presence/policy status only; it never prints token values.
 
 Launcher logs are written under:
 
@@ -112,7 +116,7 @@ Launcher logs are written under:
 
 The launcher reuses an already healthy Extrusion Web Console backend on the selected port. If another process owns the port, it stops and reports the conflict; it does not kill unknown processes.
 
-Launcher phase 1 does not run local Supabase bootstrap, reset, cleanup, prune, Docker create/delete, or volume operations. Local Supabase status/start/stop remains inside the web console runtime API and existing command allowlist policy.
+Launcher phase 2 does not run local Supabase bootstrap, reset, cleanup, prune, Docker create/delete, or volume operations. Local Supabase status/start/stop remains inside the web console runtime API and existing command allowlist policy.
 
 ## Backend Development
 

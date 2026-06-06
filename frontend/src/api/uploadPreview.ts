@@ -1,3 +1,5 @@
+import { apiFetch } from "./client";
+
 export type PreviewRangeMode = "today" | "yesterday" | "last_2_days" | "custom";
 export type PreviewSource = "plc" | "temperature";
 export type PreviewItemStatus =
@@ -212,11 +214,15 @@ function appendPreviewQuery(url: URL, params: PreviewQueryParams) {
 export async function createUploadPreview(
   request: PreviewCreateRequest,
 ): Promise<PreviewCreateResponse> {
-  const response = await fetch("/api/upload/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
+  const response = await apiFetch(
+    "/api/upload/preview",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    },
+    { mutating: true },
+  );
 
   if (!response.ok) {
     if (response.status === 409) {
@@ -268,7 +274,11 @@ export async function fetchLatestUploadPreview(
 }
 
 export async function cancelUploadPreview(previewRunId: string): Promise<PreviewCreateResponse> {
-  const response = await fetch(`/api/upload/preview/${previewRunId}/cancel`, { method: "POST" });
+  const response = await apiFetch(
+    `/api/upload/preview/${previewRunId}/cancel`,
+    { method: "POST" },
+    { mutating: true },
+  );
   if (!response.ok) {
     throw new Error("Upload preview could not be cancelled");
   }

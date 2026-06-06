@@ -68,3 +68,22 @@ def test_missing_frontend_build_returns_operator_message(tmp_path: Path, monkeyp
     assert response.json()["detail"].startswith("Frontend build is missing")
 
     get_settings.cache_clear()
+
+
+def test_frontend_index_injects_runtime_token_without_mutating_dist(tmp_path: Path, monkeypatch) -> None:
+    client = _client_with_dist(tmp_path, monkeypatch)
+    monkeypatch.setenv("EWC_LOCAL_TOKEN_MODE", "required")
+    monkeypatch.setenv("EWC_LOCAL_API_TOKEN", "fixture-local-guard-value")
+    get_settings.cache_clear()
+
+    response = client.get("/")
+    index_path = tmp_path / "dist" / "index.html"
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert "window.__EWC_BOOTSTRAP__" in response.text
+    assert "localApiToken" in response.text
+    assert "fixture-local-guard-value" in response.text
+    assert "fixture-local-guard-value" not in index_path.read_text(encoding="utf-8")
+
+    get_settings.cache_clear()

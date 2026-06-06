@@ -83,6 +83,28 @@ function Wait-ForHealth {
   return $false
 }
 
+function New-LocalApiToken {
+  $bytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    $rng.Dispose()
+  }
+  return [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
+}
+
+function Test-FrontendBootstrap {
+  param([int]$Port)
+  try {
+    $response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/" -TimeoutSec 2 -UseBasicParsing
+    $body = [string]$response.Content
+    return $body.Contains("__EWC_BOOTSTRAP__") -and $body.Contains("localApiToken")
+  } catch {
+    return $false
+  }
+}
+
 $repoRoot = Get-RepoRoot
 $frontendRoot = Join-Path $repoRoot "frontend"
 $frontendDist = Join-Path $frontendRoot "dist"
@@ -133,6 +155,12 @@ if (-not (Test-Path -LiteralPath $frontendIndex)) {
 }
 
 if ($CheckOnly) {
+  $checkToken = New-LocalApiToken
+  if ([string]::IsNullOrWhiteSpace($checkToken)) {
+    Write-LauncherLog "Local API token policy check failed. Token generation returned an empty value." "ERROR"
+    exit 1
+  }
+  Write-LauncherLog "Local API token policy: required in operator mode; secure token generation is available; token value is hidden."
   Write-LauncherLog "CheckOnly completed. No backend process was started."
   Copy-Item -LiteralPath $script:LauncherLogPath -Destination $launcherLatest -Force
   exit 0
@@ -141,6 +169,10 @@ if ($CheckOnly) {
 if (Test-PortOpen -Port $BackendPort) {
   $health = Get-Health -Port $BackendPort
   if ($health -and $health.status -eq "ok" -and $health.service -eq "extrusion-web-console-api") {
+    if (-not (Test-FrontendBootstrap -Port $BackendPort)) {
+      Write-LauncherLog "Existing backend is healthy but does not expose the local token bootstrap page. Close it and restart from this launcher." "ERROR"
+      exit 1
+    }
     Write-LauncherLog "Existing Extrusion Web Console backend is already running on 127.0.0.1:$BackendPort. Reusing it."
     if (-not $NoBrowser) {
       Start-Process "http://127.0.0.1:$BackendPort/"
@@ -155,6 +187,9 @@ if (Test-PortOpen -Port $BackendPort) {
 $env:EWC_HOST = "127.0.0.1"
 $env:EWC_PORT = "$BackendPort"
 $env:EWC_FRONTEND_DIST_PATH = $frontendDist
+$env:EWC_LOCAL_TOKEN_MODE = "required"
+$env:EWC_LOCAL_API_TOKEN = New-LocalApiToken
+Write-LauncherLog "Local API token policy: required; token presence is present; token value is hidden."
 $arguments = @("-m", "uvicorn", "backend.app.main:app", "--host", "127.0.0.1", "--port", "$BackendPort")
 
 Write-LauncherLog "Starting backend on 127.0.0.1:$BackendPort."

@@ -107,7 +107,9 @@ def redact_audit_payload(value: Any) -> Any:
         for key, item in value.items():
             key_text = str(key)
             lower_key = key_text.lower()
-            if any(part in lower_key for part in SENSITIVE_KEY_PARTS):
+            if lower_key == "tokenpresent" and isinstance(item, bool):
+                redacted[key_text] = item
+            elif any(part in lower_key for part in SENSITIVE_KEY_PARTS):
                 redacted[key_text] = REDACTED
             else:
                 redacted[key_text] = redact_audit_payload(item)
