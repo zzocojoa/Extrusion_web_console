@@ -115,8 +115,16 @@ if (-not (Test-Path -LiteralPath $frontendIndex)) {
     Push-Location $frontendRoot
     try {
       npm run build
+      if ($LASTEXITCODE -ne 0) {
+        Write-LauncherLog "Frontend build failed. Review the npm output above." "ERROR"
+        exit 1
+      }
     } finally {
       Pop-Location
+    }
+    if (-not (Test-Path -LiteralPath $frontendIndex)) {
+      Write-LauncherLog "Frontend build did not produce frontend\dist\index.html." "ERROR"
+      exit 1
     }
   } else {
     Write-LauncherLog "Frontend build is missing. Run npm run build from frontend, or rerun this script with -BuildFrontend." "ERROR"

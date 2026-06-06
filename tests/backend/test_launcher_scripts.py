@@ -27,6 +27,8 @@ def test_launcher_script_keeps_allowlist_narrow() -> None:
     assert "uvicorn" in script
     assert "localhost_only" in script
     assert "npm run build" in script
+    assert "$LASTEXITCODE -ne 0" in script
+    assert "did not produce frontend\\dist\\index.html" in script
     assert "npm run dev" not in script
     assert "-BuildFrontend" in script
     assert "Start-Process \"http://127.0.0.1:$BackendPort/\"" in script
