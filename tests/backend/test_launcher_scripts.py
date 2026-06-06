@@ -32,6 +32,14 @@ def test_launcher_script_keeps_allowlist_narrow() -> None:
     assert "npm run dev" not in script
     assert "-BuildFrontend" in script
     assert "Start-Process \"http://127.0.0.1:$BackendPort/\"" in script
+    assert "New-LocalApiToken" in script
+    assert "RandomNumberGenerator" in script
+    assert "EWC_LOCAL_API_TOKEN" in script
+    assert "EWC_LOCAL_TOKEN_MODE" in script
+    assert "required" in script
+    assert "token value is hidden" in script
+    assert "token query" not in script.lower()
+    assert "?token" not in script.lower()
 
     forbidden_fragments = [
         "supabase init",
@@ -60,6 +68,18 @@ def test_launcher_script_redacts_sensitive_log_markers() -> None:
     assert "anon[_ -]?key" in script
     assert "eyJ" in script
     assert "request or response bodies" not in script
+
+
+def test_launcher_passes_local_token_through_environment_only() -> None:
+    script = LAUNCHER_PS1.read_text(encoding="utf-8")
+
+    assert "$env:EWC_LOCAL_API_TOKEN = New-LocalApiToken" in script
+    assert "$arguments = @(\"-m\", \"uvicorn\"" in script
+    assert "EWC_LOCAL_API_TOKEN" not in script.split("$arguments = @", 1)[1]
+    assert "Start-Process \"http://127.0.0.1:$BackendPort/\"" in script
+    assert "http://127.0.0.1:$BackendPort/?" not in script
+    assert "localApiToken" in script
+    assert "Test-FrontendBootstrap" in script
 
 
 def test_launcher_powershell_syntax_parses() -> None:

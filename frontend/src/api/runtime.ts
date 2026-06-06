@@ -1,3 +1,5 @@
+import { apiFetch } from "./client";
+
 export type RuntimeOverallStatus = "ready" | "running" | "attention" | "blocked" | "unknown";
 export type RuntimeServiceStatus = "ready" | "starting" | "stopping" | "stopped" | "unreachable" | "missing" | "unhealthy" | "unknown";
 export type RuntimeOperationStatus = "queued" | "running" | "succeeded" | "failed" | "blocked" | "timed_out" | "cancelled" | "interrupted";
@@ -87,7 +89,11 @@ export async function stopLocalSupabase(): Promise<RuntimeOperationCreateRespons
 }
 
 async function mutateRuntime(action: "start" | "stop"): Promise<RuntimeOperationCreateResponse> {
-  const response = await fetch(`/api/runtime/local-supabase/${action}`, { method: "POST" });
+  const response = await apiFetch(
+    `/api/runtime/local-supabase/${action}`,
+    { method: "POST" },
+    { mutating: true },
+  );
   if (!response.ok) {
     const raw = await response.json().catch(() => null);
     throw new Error(raw?.detail?.reason ?? `Local Supabase ${action} failed`);

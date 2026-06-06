@@ -1,3 +1,5 @@
+import { apiFetch, isLocalTokenApiError } from "./client";
+
 export type ConfigSource = "default" | "config" | "env" | string;
 
 export interface ConfigItem {
@@ -43,11 +45,19 @@ export async function fetchConfig(): Promise<ConfigResponse> {
 }
 
 export async function saveConfig(values: ConfigSaveValues): Promise<ConfigSaveResponse> {
-  const response = await fetch("/api/config", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ actor: "local_operator", values }),
-  });
+  let response: Response;
+  try {
+    response = await apiFetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "local_operator", values }),
+    }, { mutating: true });
+  } catch (error) {
+    if (isLocalTokenApiError(error)) {
+      throw new ConfigApiError(error.message, error.status, error.code, []);
+    }
+    throw error;
+  }
   if (!response.ok) {
     const raw = await response.json().catch(() => null);
     const reason = typeof raw?.detail?.reason === "string" ? raw.detail.reason : "config_save_failed";

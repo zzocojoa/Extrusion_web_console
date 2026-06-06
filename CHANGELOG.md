@@ -22,6 +22,8 @@ All notable changes to Extrusion Web Console are documented here.
 - Upload Job API responses, file rows, job events, and SSE replay now expose canonical `acceptedRows` for Edge/Supabase upsert-accepted row counts.
 - Frontend now includes Playwright screenshot QA through `npm run qa:screenshots`, covering Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings in mock mode without Docker, local Supabase, secrets, or operational CSV fixtures.
 - Launcher phase 1 now provides Windows operator launcher scripts, `-CheckOnly`, explicit `-BuildFrontend`, and FastAPI serving of the built frontend from `frontend/dist` on `127.0.0.1`.
+- Launcher phase 2 now adds per-run local token protection for mutating localhost APIs through `X-EWC-Local-Token`, with runtime HTML bootstrap, launcher env passing, and explicit dev-disabled mode.
+- Launcher local token QA passed targeted backend token/static/launcher tests (`17 passed`), full backend tests from clean cwd (`151 passed`), frontend typecheck/build, screenshot QA, launcher `-CheckOnly`, token HTTP smoke, and unsafe marker scans with `0` matches.
 
 ### Changed
 
@@ -31,6 +33,8 @@ All notable changes to Extrusion Web Console are documented here.
 - Screenshot QA now captures 32 viewport screenshots, verifies `Accepted` / `수락` and `DB에 있음` / `Already in DB`, blocks inserted-row wording, captures console/network failures, and writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`.
 - Operator mode now serves the web console from the backend origin so `/`, `/upload`, `/logs`, and `/settings` work without a Vite dev server after `npm run build`.
 - Launcher `-BuildFrontend` now fails clearly when `npm run build` fails or does not produce `frontend/dist/index.html`; the double-click operator flow still does not build automatically.
+- Mutating API calls for Settings save, Upload Preview, Upload Job start/control, and Local Supabase start/stop now require the launcher-provided local token in operator mode. Read-only APIs and `/api/docs` remain localhost-readable; `/api/docs` hardening is deferred to a separate PR.
+- `OPTIONS` requests are not blocked by the local token guard. Route-level API method handling can still return the normal method response.
 
 ### Fixed
 
@@ -51,3 +55,5 @@ All notable changes to Extrusion Web Console are documented here.
 - Upload Preview audit params now record safe metadata such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters` instead of raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed request bodies.
 - Korean Upload Preview `already_in_db` status now reads `DB에 있음` instead of inserted-row wording.
 - Screenshot QA mock labels and redaction scans now avoid operational CSV filename-pattern strings, raw paths, DB URLs, tokens, and credential-like values in source, docs, and generated text artifacts.
+- Missing or invalid local token attempts now return a stable `403 local_token_required` response and write rate-limited blocked audit rows with safe metadata only.
+- Token values are kept out of URL queries, browser storage, launcher/backend logs, audit params, screenshot artifacts, committed `.gstack` content, and committed `frontend/dist` content.

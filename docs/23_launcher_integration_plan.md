@@ -259,13 +259,16 @@ Reason:
 - Mutating APIs and Settings have been tested under loopback assumptions.
 - Adding token enforcement now would touch every frontend API call and many backend tests.
 
-Plan the token as phase 2:
+Phase 2 is now implemented on branch `codex/launcher-local-token-impl`:
 
 - Launcher generates a per-run random token.
 - Launcher passes it to backend through process env.
 - Backend requires it for mutating APIs.
-- Frontend receives it through a same-origin bootstrap endpoint or injected static config.
+- Frontend receives it through runtime HTML bootstrap from the same backend origin.
 - Audit params record token presence only, never token value.
+- Missing/invalid token attempts return `403 local_token_required` and are rate-limited in audit.
+- Read-only APIs and `/api/docs` remain localhost-readable. `OPTIONS` is not blocked by the token guard, although normal route method handling can still return non-success responses.
+- Developers using Vite should set `EWC_LOCAL_TOKEN_MODE=dev-disabled` unless they intentionally wire a test token path.
 
 Phase 1 must still reserve the design:
 
@@ -414,7 +417,7 @@ git diff --check
 7. Done: update README with non-developer launcher instructions.
 8. Done: run backend tests, frontend typecheck/build, screenshot QA, and operator mode smoke.
 9. Deferred: dev mode support, if needed, after operator mode is stable.
-10. Deferred: phase 2 local token enforcement.
+10. Done: phase 2 local token enforcement for mutating localhost APIs.
 
 ## What Already Exists
 
@@ -461,7 +464,7 @@ Conflict flags: Lane C and Lane D may both mention screenshot QA paths, coordina
 - Automatic upload of operational CSV data.
 - Service installation as a Windows background service.
 - Tray app, installer, code signing, MSI packaging, or auto-update.
-- Mandatory local token auth in phase 1.
+- Mandatory local token auth in phase 1. Phase 2 implements it separately and keeps phase 1 rollback boundaries clear.
 - Arbitrary command runner UI.
 - Data Mgmt archive/delete flows.
 
@@ -473,6 +476,7 @@ Conflict flags: Lane C and Lane D may both mention screenshot QA paths, coordina
 - `/api/health`, `/api/config`, `/api/audit`, Upload, Logs, and Settings work from the backend origin.
 - Port conflict messages distinguish same-app reuse from unknown process conflict.
 - Launcher logs are written to a documented local path and redact secrets/paths.
+- Phase 2 launcher token values stay out of URL queries, launcher logs, backend logs, audit params, screenshots, generated `.gstack` artifacts, and `frontend/dist`.
 - Launcher does not start, stop, reset, prune, create, delete, or bootstrap Docker/Supabase resources.
 - Settings save UI still writes config JSON through the API and respects env/process override blocking.
 - Generated `.gstack` artifacts and operational CSV fixtures remain uncommitted.

@@ -1,3 +1,5 @@
+import { apiFetch } from "./client";
+
 export type UploadJobMode = "preview_targets" | "retry_failed";
 export type UploadJobStatus =
   | "queued"
@@ -129,15 +131,19 @@ const defaultOptions: UploadJobOptions = {
 };
 
 export async function createUploadJob(previewRunId: string): Promise<UploadJobCreateResponse> {
-  const response = await fetch("/api/upload/jobs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      previewRunId,
-      mode: "preview_targets",
-      options: defaultOptions,
-    }),
-  });
+  const response = await apiFetch(
+    "/api/upload/jobs",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        previewRunId,
+        mode: "preview_targets",
+        options: defaultOptions,
+      }),
+    },
+    { mutating: true },
+  );
   if (!response.ok) {
     if (response.status === 409) {
       const raw = await response.json().catch(() => null);
@@ -151,11 +157,15 @@ export async function createUploadJob(previewRunId: string): Promise<UploadJobCr
 }
 
 export async function retryUploadJob(jobId: string): Promise<UploadJobCreateResponse> {
-  const response = await fetch(`/api/upload/jobs/${jobId}/retry`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ includeInterrupted: true, includeCancelled: false, options: defaultOptions }),
-  });
+  const response = await apiFetch(
+    `/api/upload/jobs/${jobId}/retry`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ includeInterrupted: true, includeCancelled: false, options: defaultOptions }),
+    },
+    { mutating: true },
+  );
   if (!response.ok) throw new Error("Retry job could not be started");
   return normalizeCreateResponse(await response.json());
 }
@@ -177,7 +187,11 @@ export async function controlUploadJob(
   jobId: string,
   action: "pause" | "resume" | "cancel",
 ): Promise<UploadJobDetail> {
-  const response = await fetch(`/api/upload/jobs/${jobId}/${action}`, { method: "POST" });
+  const response = await apiFetch(
+    `/api/upload/jobs/${jobId}/${action}`,
+    { method: "POST" },
+    { mutating: true },
+  );
   if (!response.ok) throw new Error(`Upload job could not ${action}`);
   return normalizeJobDetail(await response.json());
 }

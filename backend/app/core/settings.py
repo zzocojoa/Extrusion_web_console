@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     frontend_dist_path: str = DEFAULT_FRONTEND_DIST_PATH
+    local_api_token: str = ""
+    local_token_mode: str = "auto"
     grafana_url: str = "http://localhost:3001"
     state_db_path: str = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "web_console_state.db")
     config_file_path: str = DEFAULT_CONFIG_FILE_PATH

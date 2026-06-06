@@ -1,10 +1,41 @@
 # Launcher Local Token Phase 2 Plan
 
-Status: decision-complete plan for branch `codex/launcher-local-token-phase2`
+Status: implemented on branch `codex/launcher-local-token-impl`
 
 Date: 2026-06-07
 
 Scope: per-run local token enforcement for localhost mutating APIs in operator mode.
+
+Implementation result on branch `codex/launcher-local-token-impl`:
+
+- Added backend settings `EWC_LOCAL_API_TOKEN` and `EWC_LOCAL_TOKEN_MODE`.
+- Added mutating `/api/*` local token guard with `X-EWC-Local-Token`, constant-time comparison, and stable `403` response shape.
+- Operator launcher mode sets `EWC_LOCAL_TOKEN_MODE=required` and passes the per-run token through process environment only.
+- Explicit dev opt-out remains available with `EWC_LOCAL_TOKEN_MODE=dev-disabled`.
+- Read-only APIs, `OPTIONS`, `/api/health`, `/api/openapi.json`, `/api/docs`, static assets, and SPA routes remain token-free.
+- Protected mutating routes include `PUT /api/config`, `POST /api/upload/preview`, `POST /api/upload/preview/{previewRunId}/cancel`, `POST /api/upload/jobs`, Upload Job retry/pause/resume/cancel, and Local Supabase start/stop.
+- Read-only health/config/audit, upload preview reads, upload job status reads, and SSE event reads remain available without a token.
+- FastAPI injects runtime token bootstrap into served `index.html` responses only when enforcement is enabled. The built `frontend/dist/index.html` file is not mutated, and injected HTML uses `Cache-Control: no-store`.
+- Frontend mutating API calls send the token header only to same-origin `/api/*` requests. The token is not stored in URL, `localStorage`, `sessionStorage`, cookies, IndexedDB, config JSON, audit rows, logs, screenshots, or generated artifacts.
+- Missing/invalid token failures write rate-limited blocked audit rows with safe metadata only: `reasonCode`, `method`, `routeGroup`, `sourceHost`, and boolean `tokenPresent`.
+- Launcher `-CheckOnly` now verifies token policy/generation availability without printing token values.
+- Existing launcher phase 1 behavior is preserved: backend bind remains `127.0.0.1`, default operator flow does not run frontend build, port conflict handling remains explicit, and local Supabase/Docker bootstrap/reset/cleanup/prune/create/delete remains forbidden.
+- `/api/docs` operator-mode hardening remains out-of-scope for this PR and should be handled by a separate hardening PR.
+- Dev caveat: if a developer enables `EWC_LOCAL_API_TOKEN` on a backend used by the Vite dev shell, the Vite page may not receive the backend-served bootstrap token. Use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` for that development path.
+
+Validation completed during implementation:
+
+- Targeted backend token/static/launcher tests: 17 passed.
+- Full backend tests from clean cwd/config/env: 151 passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm run qa:screenshots`: passed.
+- Launcher `-CheckOnly`: passed and reported token policy/generation availability without printing token values.
+- HTTP smoke: `GET /api/health`, `GET /api/config`, `GET /api/audit`, `GET /api/docs`, and `GET /` worked without token; `OPTIONS /api/config` returned normal route handling (`405`) rather than token-guard `403`; missing-token protected routes returned `403`; invalid-token `PUT /api/config` returned `403`; valid-token `PUT /api/config` returned `200`; `/` served token bootstrap.
+- Audit smoke confirmed token failure params remained safe and centered on `reasonCode`, `method`, `routeGroup`, `sourceHost`, and `tokenPresent`.
+- `git diff --check`: passed.
+- Redaction checks found unsafe marker count `0` across screenshot, backend log, and launcher log artifacts. Generated `.gstack` artifacts, `frontend/dist`, and the untracked operational CSV fixture were not committed.
+- Repo cwd `.env` presence can intentionally change Settings/config override behavior. Full backend validation uses clean cwd to avoid repo `.env` influencing test expectations.
 
 Source documents:
 
@@ -366,17 +397,17 @@ Smoke tests:
 
 ## Implementation Order
 
-1. Add backend settings for `EWC_LOCAL_API_TOKEN` and explicit token mode.
-2. Add local-token middleware/dependency and protected route matcher.
-3. Add safe error DTO and operator-facing frontend error mapping.
-4. Add static HTML injection for runtime bootstrap token with `Cache-Control: no-store`.
-5. Add frontend API client helper and update mutating API modules.
-6. Add launcher secure token generation and env passing.
-7. Add audit writer/rate limiter for token failure blocked rows.
-8. Update backend tests for protected/exempt route matrix.
-9. Update frontend/launcher tests.
-10. Run full backend tests, frontend typecheck/build, screenshot QA, launcher HTTP smoke, missing-token smoke, and redaction scans.
-11. Update README and launcher docs after implementation.
+1. Done: add backend settings for `EWC_LOCAL_API_TOKEN` and explicit token mode.
+2. Done: add local-token middleware/dependency and protected route matcher.
+3. Done: add safe error DTO and operator-facing frontend error mapping.
+4. Done: add static HTML injection for runtime bootstrap token with `Cache-Control: no-store`.
+5. Done: add frontend API client helper and update mutating API modules.
+6. Done: add launcher secure token generation and env passing.
+7. Done: add audit writer/rate limiter for token failure blocked rows.
+8. Done: update backend tests for protected/exempt route matrix.
+9. Done: update frontend/launcher tests through typecheck/build and launcher source tests.
+10. In validation: run full backend tests, frontend typecheck/build, screenshot QA, launcher HTTP smoke, missing-token smoke, and redaction scans.
+11. Done: update README and launcher docs after implementation.
 
 ## Rollout And Compatibility
 
@@ -389,8 +420,8 @@ Smoke tests:
 
 ## Open Questions For Implementation PR
 
-- Exact environment flag name for operator mode fail-closed behavior.
-- Whether token failure audit rate limiting belongs in `AuditRepository`, middleware-local memory, or a small service.
-- Whether `/api/docs` should stay enabled in operator mode or become dev-only in a separate hardening PR.
+- Resolved: operator fail-closed behavior uses `EWC_LOCAL_TOKEN_MODE=required`; explicit local development opt-out uses `EWC_LOCAL_TOKEN_MODE=dev-disabled`.
+- Resolved: token failure audit rate limiting is middleware-local memory with a short route-group/action/reason bucket window.
+- Deferred: `/api/docs` stays enabled under localhost-only policy in this PR. Operator-mode docs hardening remains a separate hardening PR.
 
 These are implementation details, not blockers for the phase 2 plan.

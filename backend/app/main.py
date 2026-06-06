@@ -1,4 +1,5 @@
 from ipaddress import ip_address
+import logging
 from pathlib import Path
 
 from fastapi import Request
@@ -6,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.responses import FileResponse
+from starlette.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from backend.app.api.dashboard import router as dashboard_router
@@ -15,6 +17,11 @@ from backend.app.api.health import router as health_router
 from backend.app.api.runtime import router as runtime_router
 from backend.app.api.upload_jobs import router as upload_jobs_router
 from backend.app.api.upload_preview import router as upload_preview_router
+from backend.app.core.local_token import audit_local_token_failure
+from backend.app.core.local_token import bootstrap_script_for_settings
+from backend.app.core.local_token import local_token_enforcement_enabled
+from backend.app.core.local_token import local_token_error_response
+from backend.app.core.local_token import validate_local_token
 from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
@@ -23,6 +30,7 @@ from backend.app.db.upload_job_repository import UploadJobRepository
 
 
 API_PREFIX_SEGMENT = "api"
+_LOGGER = logging.getLogger(__name__)
 
 
 def is_loopback_host(host: str | None) -> bool:
@@ -45,7 +53,7 @@ def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
     @app.get("/")
     async def serve_frontend_root():
         if index_path.exists():
-            return FileResponse(index_path)
+            return _frontend_index_response(index_path)
         return JSONResponse(
             status_code=503,
             content={
@@ -62,7 +70,7 @@ def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
         if path.startswith(f"{API_PREFIX_SEGMENT}/") or path == API_PREFIX_SEGMENT:
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
         if index_path.exists():
-            return FileResponse(index_path)
+            return _frontend_index_response(index_path)
         return JSONResponse(
             status_code=503,
             content={
@@ -71,8 +79,29 @@ def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
         )
 
 
+def _frontend_index_response(index_path: Path):
+    settings = get_settings()
+    bootstrap_script = bootstrap_script_for_settings(settings)
+    if not bootstrap_script:
+        return FileResponse(index_path)
+
+    html = index_path.read_text(encoding="utf-8")
+    if "</head>" in html:
+        html = html.replace("</head>", f"{bootstrap_script}</head>", 1)
+    else:
+        html = f"{bootstrap_script}{html}"
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
+    if not local_token_enforcement_enabled(settings):
+        _LOGGER.warning("Local token enforcement is disabled by explicit mode or missing runtime token.")
     AuditRepository(settings.state_db_path).bootstrap()
     PreviewRepository(settings.state_db_path).mark_interrupted_active_runs()
     UploadJobRepository(settings.state_db_path).mark_interrupted_active_jobs()
@@ -99,6 +128,15 @@ def create_app() -> FastAPI:
                 status_code=403,
                 content={"detail": "Extrusion Web Console only accepts localhost clients."},
             )
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def enforce_local_api_token(request: Request, call_next):
+        current_settings = get_settings()
+        failure = validate_local_token(request, current_settings)
+        if failure is not None:
+            await audit_local_token_failure(request, current_settings, failure)
+            return local_token_error_response()
         return await call_next(request)
 
     app.include_router(health_router)
