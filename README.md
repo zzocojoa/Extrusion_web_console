@@ -102,6 +102,8 @@ If `frontend/dist/index.html` is missing, the launcher stops with a clear messag
 .\launcher\start_web_console.ps1 -BuildFrontend
 ```
 
+The explicit build path fails clearly if `npm run build` exits non-zero or does not produce `frontend/dist/index.html`.
+
 Launcher logs are written under:
 
 ```text

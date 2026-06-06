@@ -56,7 +56,7 @@ Status on branch `codex/web-console-scaffold`:
 - Done: Korean/English i18n baseline with persisted language selection.
 - Done: backend tests for health and Dashboard mock API contracts.
 - Verified: frontend typecheck/build, backend tests, browser QA at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
-- Not done: real upload jobs, real Supabase runtime control, launcher integration.
+- Not done: real upload jobs and real Supabase runtime control.
 
 Status on branch `codex/upload-preview-reconciliation`:
 
@@ -78,7 +78,8 @@ Status on branch `codex/upload-preview-reconciliation`:
 - Verified: PR #8 targeted/full backend tests, frontend typecheck/build, direct config API smoke, and Settings/Dashboard/Upload/Logs browser smoke. Vite proxy `/api/config` was not fully verified against the PR head because an older uvicorn process occupied port `8000`.
 - Verified: PR #9 review approved and QA passed twice with targeted preview/audit backend tests, full backend tests, frontend typecheck/build, `git diff --check`, direct Upload Preview API smoke, and Vite/backend HTTP smoke. Browser screenshot QA was not completed because `node_repl` failed with a kernel asset path error.
 - Verified: PR #19 review approved and QA passed with targeted upload job backend tests, full backend tests, API/SSE smoke, frontend typecheck/build, `git diff --check`, Vite/backend HTTP smoke, and source/build wording checks for inserted-row terminology. Browser screenshot QA was not completed because `node_repl` failed with a kernel asset path error and local Playwright was not installed.
-- Not done: launcher integration.
+- Done on branch `codex/launcher-integration-impl`: Launcher phase 1, FastAPI static frontend serving for built `frontend/dist`, `/api/*` precedence before SPA fallback, Windows `launcher/start_web_console.ps1` and `.bat`, `127.0.0.1` backend bind, `-CheckOnly`, explicit `-BuildFrontend`, clear missing-build `503`, port conflict handling, browser open, and documented launcher logs.
+- Verified: PR #26 review approved and QA passed with targeted launcher/static backend tests, full backend tests, frontend typecheck/build, screenshot QA, launcher `-CheckOnly`, launcher `-BuildFrontend -CheckOnly`, port conflict smoke, backend-origin HTTP smoke for `/`, `/upload`, `/logs`, `/settings`, `/api/health`, `/api/audit?action=settings.save&limit=1`, and missing frontend `503` smoke.
 
 ## 4. Build Backend Core Ops
 
@@ -93,7 +94,7 @@ Implement backend capabilities in this order:
 7. progress and log streaming
 8. launcher integration
 
-Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, Local Supabase runtime control APIs, Config APIs, and Audit Logs query APIs exist. `PUT /api/config` writes only allowed config keys to config JSON, blocks env-overridden keys, records `settings.save` success/failure/blocked audit rows, and keeps raw values, secrets, DB URLs, tokens, anon keys, service role values, and malformed request bodies out of audit params. `POST /api/upload/preview` records `upload.preview` success/failure/blocked audit rows with safe metadata only, including `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`; it does not store raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed raw bodies in audit params. Upload Job responses and job events use `acceptedRows` for Edge/Supabase upsert-accepted row counts and retain `insertedRows` only as a deprecated compatibility alias; `acceptedRows` is not a net-new insert count, so duplicate-safe reruns can have DB row count delta `0` while `acceptedRows` is positive. Audit Logs query search is limited to safe scalar columns and does not search raw `error_message` or raw params JSON. Launcher APIs remain future work.
+Current implementation note: mock Dashboard aggregation endpoints, Upload Preview APIs, Upload Job APIs, Local Supabase runtime control APIs, Config APIs, Audit Logs query APIs, and launcher phase 1 exist. `PUT /api/config` writes only allowed config keys to config JSON, blocks env-overridden keys, records `settings.save` success/failure/blocked audit rows, and keeps raw values, secrets, DB URLs, tokens, anon keys, service role values, and malformed request bodies out of audit params. `POST /api/upload/preview` records `upload.preview` success/failure/blocked audit rows with safe metadata only, including `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`; it does not store raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed raw bodies in audit params. Upload Job responses and job events use `acceptedRows` for Edge/Supabase upsert-accepted row counts and retain `insertedRows` only as a deprecated compatibility alias; `acceptedRows` is not a net-new insert count, so duplicate-safe reruns can have DB row count delta `0` while `acceptedRows` is positive. Audit Logs query search is limited to safe scalar columns and does not search raw `error_message` or raw params JSON. FastAPI serves built frontend routes in operator mode while preserving `/api/*` route precedence.
 
 ## 5. Build Frontend Core Ops
 
@@ -137,4 +138,4 @@ Transition from the legacy GUI only after:
 - upload behavior is tested with representative CSV files
 - README run instructions are accurate
 
-Current transition status: blocked. Duplicate-risk preview, real upload jobs, progress/event streaming, Local Supabase controls, and Audit Logs are implemented, but legacy GUI replacement still requires launcher integration, broader runtime E2E, and final operator workflow validation.
+Current transition status: partially unblocked. Duplicate-risk preview, real upload jobs, progress/event streaming, Local Supabase controls, Audit Logs, and launcher phase 1 are implemented. Legacy GUI replacement still requires broader runtime E2E and final operator workflow validation.

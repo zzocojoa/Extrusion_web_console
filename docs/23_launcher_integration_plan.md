@@ -1,6 +1,6 @@
 # Launcher Integration Plan
 
-Status: decision-complete plan for branch `codex/launcher-integration-plan`
+Status: phase 1 implemented on branch `codex/launcher-integration-impl`
 
 Date: 2026-06-06
 
@@ -17,8 +17,10 @@ Implementation result on branch `codex/launcher-integration-impl`:
 - The launcher waits for `/api/health`, opens the loopback browser URL, writes launcher/backend logs under `%APPDATA%\ExtrusionWebConsole\logs\launcher\`, and stops only its own backend child process on normal shutdown.
 - The launcher reuses an already healthy Extrusion Web Console backend on the selected port and blocks unknown port occupants without killing them.
 - The launcher does not run frontend build in the default double-click operator flow; `npm run build` is available only through the explicit `-BuildFrontend` developer flag.
+- The explicit `-BuildFrontend` path fails clearly when `npm run build` exits non-zero or does not produce `frontend/dist/index.html`.
 - Phase 1 does not add API token enforcement. Local token remains phase 2.
 - Phase 1 does not run local Supabase bootstrap, reset, cleanup, prune, Docker create/delete, volume operations, or arbitrary command input.
+- QA passed: targeted launcher/static tests 7 passed, full backend tests 141 passed, frontend typecheck/build/`qa:screenshots` passed, launcher `-CheckOnly` passed, launcher `-BuildFrontend -CheckOnly` passed, port conflict smoke passed, backend-origin HTTP smoke passed, and missing frontend `503` smoke passed.
 
 Source documents:
 
@@ -58,8 +60,8 @@ The launcher is the transition layer between the current developer commands and 
 
 4. Dev mode remains separate.
    - Existing developer flow stays: backend on `127.0.0.1:8000`, Vite on `127.0.0.1:5173`, `VITE_API_MODE=api`.
-   - The launcher may support `-Mode dev`, but default double-click behavior must be operator mode.
-   - Dev mode may start Vite only through `npm run dev` from `frontend/`.
+   - Phase 1 launcher does not implement `-Mode dev`.
+   - If launcher dev mode is added later, it may start Vite only through `npm run dev` from `frontend/`.
 
 5. Local Supabase is not bootstrapped by the launcher.
    - Launcher may check runtime reachability through app APIs after backend starts.
@@ -163,15 +165,15 @@ Responsibilities:
 - Write redacted launcher logs.
 - Stop only launcher-owned child process on normal exit.
 
-Recommended parameters:
+Implemented parameters:
 
 ```powershell
 param(
-  [ValidateSet("operator", "dev")]
-  [string]$Mode = "operator",
+  [ValidateRange(1024, 65535)]
   [int]$BackendPort = 8000,
   [switch]$NoBrowser,
-  [switch]$NoBuild
+  [switch]$BuildFrontend,
+  [switch]$CheckOnly
 )
 ```
 
@@ -192,17 +194,9 @@ Allowed commands:
 
 ```text
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port <allowed-port>
-.\.venv\Scripts\python.exe -m pip --version
 npm run build
-npm run dev
 Start-Process http://127.0.0.1:<allowed-port>/
 Invoke-RestMethod http://127.0.0.1:<allowed-port>/api/health
-```
-
-Allowed only in dev mode:
-
-```text
-npm run dev
 ```
 
 Allowed only when explicitly requested by a developer flag:
@@ -234,9 +228,9 @@ any DB reset/delete/cleanup/prune command
 
 The launcher must not be a generic shell wrapper.
 
-## Backend Static Serving Plan
+## Backend Static Serving
 
-Implementation PR should add static frontend serving to FastAPI:
+Phase 1 adds static frontend serving to FastAPI:
 
 - API routes stay under `/api/*`.
 - Static assets are served from `frontend/dist/assets`.
@@ -354,7 +348,7 @@ Stale process handling:
 
 No failure path should be silent. Each path needs a console message and redacted log entry.
 
-## Tests
+## Tests And QA Result
 
 Backend tests:
 
@@ -384,7 +378,21 @@ Frontend/browser checks:
 - Audit Logs can query `settings.save` from same-origin API.
 - 720px viewport does not break the launcher-served app.
 
-Validation commands for implementation PR:
+Validation result for PR #26:
+
+- Targeted launcher/static backend tests: 7 passed.
+- Full backend tests with clean config/env: 141 passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm run qa:screenshots`: passed.
+- Launcher `-CheckOnly`: passed.
+- Launcher `-BuildFrontend -CheckOnly`: passed.
+- Port conflict smoke: passed.
+- Backend-origin HTTP smoke for `/`, `/upload`, `/logs`, `/settings`, `/api/health`, `/api/audit?action=settings.save&limit=1`, and unknown `/api/*`: passed.
+- Missing frontend `503` smoke: passed.
+- `git diff --check`: passed.
+
+Validation commands:
 
 ```powershell
 .\.venv\Scripts\python -m pytest tests\backend
@@ -395,18 +403,18 @@ npm run qa:screenshots
 git diff --check
 ```
 
-## Implementation Order
+## Implementation Order And Status
 
-1. Add backend static serving for `frontend/dist` with API route precedence.
-2. Add tests for static serving, SPA fallback, and API route preservation.
-3. Add `launcher/start_web_console.ps1` with operator mode only.
-4. Add redacted launcher logging and PID handling.
-5. Add `launcher/start_web_console.bat` double-click wrapper.
-6. Add launcher tests for command policy, port handling, and redaction.
-7. Add dev mode support only after operator mode is stable.
-8. Update README with non-developer launcher instructions.
-9. Run backend tests, frontend typecheck/build, screenshot QA, and operator mode smoke.
-10. Plan phase 2 local token enforcement after operator launcher is stable.
+1. Done: add backend static serving for `frontend/dist` with API route precedence.
+2. Done: add tests for static serving, SPA fallback, and API route preservation.
+3. Done: add `launcher/start_web_console.ps1` with operator mode.
+4. Done: add redacted launcher logging and backend child-process handling.
+5. Done: add `launcher/start_web_console.bat` double-click wrapper.
+6. Done: add launcher tests for command policy, build handling, and redaction.
+7. Done: update README with non-developer launcher instructions.
+8. Done: run backend tests, frontend typecheck/build, screenshot QA, and operator mode smoke.
+9. Deferred: dev mode support, if needed, after operator mode is stable.
+10. Deferred: phase 2 local token enforcement.
 
 ## What Already Exists
 
@@ -423,7 +431,7 @@ git diff --check
 
 ## Worktree Parallelization
 
-The implementation has two useful lanes after this plan is approved.
+Phase 1 implementation is complete. The original lane split was:
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
@@ -439,7 +447,7 @@ Parallel lanes:
 - Lane C: docs and operator instructions, can run after Lane A decisions are stable.
 - Lane D: browser QA update, starts after Lane A.
 
-Execution order: implement Lane A first, then Lane B + C + D in parallel worktrees if desired.
+Execution order completed Lane A first, then launcher scripts, docs, and browser QA.
 
 Conflict flags: Lane C and Lane D may both mention screenshot QA paths, coordinate README wording.
 
