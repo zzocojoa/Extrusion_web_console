@@ -12,7 +12,8 @@ Implementation result on branch `codex/launcher-local-token-impl`:
 - Added mutating `/api/*` local token guard with `X-EWC-Local-Token`, constant-time comparison, and stable `403` response shape.
 - Operator launcher mode sets `EWC_LOCAL_TOKEN_MODE=required` and passes the per-run token through process environment only.
 - Explicit dev opt-out remains available with `EWC_LOCAL_TOKEN_MODE=dev-disabled`.
-- Read-only APIs, `OPTIONS`, `/api/health`, `/api/openapi.json`, `/api/docs`, static assets, and SPA routes remain token-free.
+- Read-only APIs, `OPTIONS`, static assets, and SPA routes remain token-free.
+- Operator launcher mode now disables `/api/docs`, `/api/openapi.json`, and ReDoc-style documentation routes by route configuration instead of token-gating them. Dev/test docs-enabled mode retains Swagger/OpenAPI with `EWC_API_DOCS_MODE=enabled`.
 - Protected mutating routes include `PUT /api/config`, `POST /api/upload/preview`, `POST /api/upload/preview/{previewRunId}/cancel`, `POST /api/upload/jobs`, Upload Job retry/pause/resume/cancel, and Local Supabase start/stop.
 - Read-only health/config/audit, upload preview reads, upload job status reads, and SSE event reads remain available without a token.
 - FastAPI injects runtime token bootstrap into served `index.html` responses only when enforcement is enabled. The built `frontend/dist/index.html` file is not mutated, and injected HTML uses `Cache-Control: no-store`.
@@ -20,7 +21,7 @@ Implementation result on branch `codex/launcher-local-token-impl`:
 - Missing/invalid token failures write rate-limited blocked audit rows with safe metadata only: `reasonCode`, `method`, `routeGroup`, `sourceHost`, and boolean `tokenPresent`.
 - Launcher `-CheckOnly` now verifies token policy/generation availability without printing token values.
 - Existing launcher phase 1 behavior is preserved: backend bind remains `127.0.0.1`, default operator flow does not run frontend build, port conflict handling remains explicit, and local Supabase/Docker bootstrap/reset/cleanup/prune/create/delete remains forbidden.
-- `/api/docs` operator-mode hardening remains out-of-scope for this PR and should be handled by a separate hardening PR.
+- `/api/docs` operator-mode hardening has been implemented separately and does not change the local token route matrix for mutating APIs.
 - Dev caveat: if a developer enables `EWC_LOCAL_API_TOKEN` on a backend used by the Vite dev shell, the Vite page may not receive the backend-served bootstrap token. Use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` for that development path.
 
 Validation completed during implementation:
@@ -160,7 +161,7 @@ sequenceDiagram
 | `/api/dashboard` | `GET` | Exempt | Read-only dashboard data. |
 | `/api/dashboard/summary` | `GET` | Exempt | Read-only dashboard summary. |
 | `/api/health` | `GET` | Exempt | Launcher readiness probe. |
-| `/api/openapi.json`, `/api/docs` | `GET` | Exempt | Developer documentation; localhost only. |
+| `/api/openapi.json`, `/api/docs` | `GET` | Disabled in operator mode; enabled only in dev/test docs-enabled mode | Developer documentation; not token-gated. |
 | Static/SPA routes | `GET` | Exempt | Required to load the app and token bootstrap. |
 | Any future `POST`, `PUT`, `PATCH`, `DELETE` under `/api/*` | Mutating | Required by default | Avoid missing new mutating endpoints. |
 
@@ -422,6 +423,6 @@ Smoke tests:
 
 - Resolved: operator fail-closed behavior uses `EWC_LOCAL_TOKEN_MODE=required`; explicit local development opt-out uses `EWC_LOCAL_TOKEN_MODE=dev-disabled`.
 - Resolved: token failure audit rate limiting is middleware-local memory with a short route-group/action/reason bucket window.
-- Deferred: `/api/docs` stays enabled under localhost-only policy in this PR. Operator-mode docs hardening remains a separate hardening PR.
+- Resolved later: operator-mode docs hardening disables docs/openapi routes in operator mode while retaining dev/test docs-enabled mode.
 
 These are implementation details, not blockers for the phase 2 plan.

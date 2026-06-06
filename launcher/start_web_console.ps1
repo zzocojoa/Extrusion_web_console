@@ -161,6 +161,7 @@ if ($CheckOnly) {
     exit 1
   }
   Write-LauncherLog "Local API token policy: required in operator mode; secure token generation is available; token value is hidden."
+  Write-LauncherLog "API docs policy: disabled in operator mode."
   Write-LauncherLog "CheckOnly completed. No backend process was started."
   Copy-Item -LiteralPath $script:LauncherLogPath -Destination $launcherLatest -Force
   exit 0
@@ -187,8 +188,10 @@ if (Test-PortOpen -Port $BackendPort) {
 $env:EWC_HOST = "127.0.0.1"
 $env:EWC_PORT = "$BackendPort"
 $env:EWC_FRONTEND_DIST_PATH = $frontendDist
+$env:EWC_API_DOCS_MODE = "disabled"
 $env:EWC_LOCAL_TOKEN_MODE = "required"
 $env:EWC_LOCAL_API_TOKEN = New-LocalApiToken
+Write-LauncherLog "API docs policy: disabled in operator mode."
 Write-LauncherLog "Local API token policy: required; token presence is present; token value is hidden."
 $arguments = @("-m", "uvicorn", "backend.app.main:app", "--host", "127.0.0.1", "--port", "$BackendPort")
 

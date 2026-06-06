@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_CONFIG_FILE_PATH = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "config.json")
@@ -49,6 +50,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     frontend_dist_path: str = DEFAULT_FRONTEND_DIST_PATH
+    api_docs_mode: str = "auto"
     local_api_token: str = ""
     local_token_mode: str = "auto"
     grafana_url: str = "http://localhost:3001"
@@ -81,6 +83,14 @@ class Settings(BaseSettings):
             return self.supabase_edge_url
         base_url = self.supabase_url or f"http://127.0.0.1:{self.local_supabase_api_port}"
         return base_url.rstrip("/") + "/functions/v1/upload-metrics"
+
+    @field_validator("api_docs_mode")
+    @classmethod
+    def validate_api_docs_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"auto", "enabled", "disabled"}:
+            raise ValueError("api_docs_mode must be one of: auto, enabled, disabled")
+        return normalized
 
     @classmethod
     def settings_customise_sources(

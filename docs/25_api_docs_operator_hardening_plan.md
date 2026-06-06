@@ -1,10 +1,21 @@
 # API Docs Operator Hardening Plan
 
-Status: decision-complete plan for `codex/launcher-docs-hardening`
+Status: implemented on branch `codex/api-docs-operator-hardening-impl`
 
 Date: 2026-06-07
 
 Scope: FastAPI `/api/docs`, `/api/openapi.json`, and any future ReDoc route in launcher operator mode.
+
+Implementation result:
+
+- Added `EWC_API_DOCS_MODE` with `auto`, `enabled`, and `disabled`.
+- FastAPI now sets `docs_url`, `openapi_url`, and `redoc_url` from the docs mode decision.
+- Operator launcher mode sets `EWC_API_DOCS_MODE=disabled`.
+- Operator mode returns API-style `404` for `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes.
+- Dev/test docs-enabled mode keeps Swagger/OpenAPI available with `EWC_API_DOCS_MODE=enabled`.
+- OpenAPI contract tests run under docs-enabled dev/test settings.
+- The route is disabled in operator mode; docs routes are not token-gated.
+- Read-only API and mutating local-token policies remain unchanged.
 
 ## Decision Summary
 

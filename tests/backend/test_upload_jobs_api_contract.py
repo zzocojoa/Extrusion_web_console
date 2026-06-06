@@ -6,12 +6,14 @@ from backend.app.api.upload_jobs import get_upload_job_repository
 from backend.app.core.settings import Settings, get_settings
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.upload_jobs import UploadJobStatus
-from backend.app.main import app
+from backend.app.main import app, create_app
 from tests.backend.test_upload_jobs_repository_contract import create_preview_with_items
 
 
-def test_upload_job_routes_are_registered_in_openapi() -> None:
-    client = TestClient(app)
+def test_upload_job_routes_are_registered_in_openapi(monkeypatch) -> None:
+    monkeypatch.setenv("EWC_API_DOCS_MODE", "enabled")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
 
     response = client.get("/api/openapi.json")
 
@@ -22,6 +24,7 @@ def test_upload_job_routes_are_registered_in_openapi() -> None:
     assert "/api/upload/jobs/{jobId}" in paths
     assert "/api/upload/jobs/{jobId}/retry" in paths
     assert "/api/upload/jobs/{jobId}/events" in paths
+    get_settings.cache_clear()
 
 
 def test_upload_job_start_rejects_missing_upload_config(tmp_path: Path) -> None:
@@ -29,7 +32,12 @@ def test_upload_job_start_rejects_missing_upload_config(tmp_path: Path) -> None:
     create_preview_with_items(db_path)
     repository = UploadJobRepository(db_path)
     app.dependency_overrides[get_upload_job_repository] = lambda: repository
-    app.dependency_overrides[get_settings] = lambda: Settings(state_db_path=str(db_path))
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        state_db_path=str(db_path),
+        supabase_anon_key="",
+        supabase_edge_url="",
+        supabase_url="",
+    )
     client = TestClient(app)
 
     try:

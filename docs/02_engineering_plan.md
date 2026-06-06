@@ -174,7 +174,8 @@ Backend가 고정 allowlist command만 실행한다.
 - CORS: same-origin 또는 `127.0.0.1` dev port만.
 - Launcher phase 1은 loopback enforcement와 backend-origin static serving을 제공한다.
 - Launcher phase 2 is implemented: operator mode generates a per-run local token, passes it to the backend through process environment, injects a runtime bootstrap into the served frontend shell, and requires `X-EWC-Local-Token` for mutating `/api/*` routes.
-- Protected mutating routes include Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, and Local Supabase start/stop. Read-only APIs, upload/job status reads, SSE events, `/api/health`, `/api/config`, `/api/audit`, and `/api/docs` remain localhost-readable.
+- Protected mutating routes include Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, and Local Supabase start/stop. Read-only APIs, upload/job status reads, SSE events, `/api/health`, `/api/config`, and `/api/audit` remain token-free.
+- Operator launcher mode disables `/api/docs`, `/api/openapi.json`, and ReDoc-style documentation routes by route configuration instead of token-gating them. Dev/test docs-enabled mode keeps Swagger/OpenAPI available with `EWC_API_DOCS_MODE=enabled`.
 - Missing or invalid local tokens return `403 local_token_required` and write rate-limited blocked audit rows with safe metadata only. Token values must not appear in URL queries, storage, logs, audit params, screenshots, or generated artifacts.
 - Vite development uses explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` when the backend is not serving the bootstrap token.
 - Configured PLC/TEMP directory 밖 파일 접근 금지.
@@ -232,6 +233,7 @@ Critical silent-failure gap: none allowed by design. The two “test needed” i
 
 - Per-run local token enforcement is implemented on branch `codex/launcher-local-token-impl`.
 - The launcher sets `EWC_LOCAL_TOKEN_MODE=required` and passes `EWC_LOCAL_API_TOKEN` through process environment only; token values are not printed by `-CheckOnly`.
+- The launcher sets `EWC_API_DOCS_MODE=disabled` in operator mode; `-CheckOnly` reports docs policy without printing token or secret values.
 - FastAPI serves token bootstrap HTML with `Cache-Control: no-store` without mutating `frontend/dist/index.html`.
 - Frontend mutating API calls add `X-EWC-Local-Token` only for same-origin `/api/*` requests.
 - QA passed targeted token/static/launcher tests (`17 passed`), full backend tests from clean cwd (`151 passed`), frontend typecheck/build/`qa:screenshots`, token HTTP smoke, and unsafe marker scans (`0` matches).
