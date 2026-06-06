@@ -23,14 +23,14 @@ const viewports: ViewportCase[] = [
 
 const forbiddenVisibleText = [/Inserted/i, /적재/u, /삽입/u, /새로 삽입/u];
 const forbiddenArtifactText = [
-  /Factory_Integrated/i,
-  /Factory_Integrated_Log/i,
+  /[A-Za-z0-9_-]+_\d{8}_\d{6}\.csv/i,
   /postgres(?:ql)?:\/\//i,
   /Bearer\s+\S+/i,
   /Authorization:\s*\S+/i,
   /service_role\s*[:=]\s*\S+/i,
   /C:\\Users\\/i,
   /C:\\extrusion\\/i,
+  /[A-Za-z]:\\(?:[^\\\r\n"'<>]+\\)+[^\\\r\n"'<>]+/i,
 ];
 
 function redact(value: string): string {
@@ -41,7 +41,8 @@ function redact(value: string): string {
     .replace(/eyJ[A-Za-z0-9._-]+/g, "[redacted-jwt]")
     .replace(/[A-Za-z]:\\Users\\[^"'<>\\\s]+(?:\\[^"'<>\\\s]+)*/g, "[redacted-user-path]")
     .replace(/[A-Za-z]:\\extrusion\\[^"'<>]+/gi, "[redacted-path]")
-    .replace(/Factory_Integrated_Log_[A-Za-z0-9_.-]+\.csv/gi, "[redacted-file]");
+    .replace(/[A-Za-z]:\\(?:[^\\\r\n"'<>]+\\)+[^\\\r\n"'<>]+/g, "[redacted-path]")
+    .replace(/[A-Za-z0-9_-]+_\d{8}_\d{6}\.csv/gi, "[redacted-file]");
 }
 
 function safeName(value: string): string {
@@ -67,7 +68,7 @@ async function maskSensitiveUiText(page: Page) {
     setText(".preview-file-cell strong", "[redacted-file]");
     document.querySelectorAll<HTMLElement>("[title]").forEach((element) => {
       const title = element.getAttribute("title") ?? "";
-      if (/Factory_Integrated|[A-Za-z]:\\/.test(title)) element.setAttribute("title", "[redacted]");
+      if (/[A-Za-z]:\\|[A-Za-z0-9_-]+_\d{8}_\d{6}\.csv/i.test(title)) element.setAttribute("title", "[redacted]");
     });
   });
 }
@@ -116,12 +117,18 @@ async function gotoPage(page: Page, pageName: "dashboard" | "upload" | "logs" | 
   await page.locator("main").waitFor({ state: "visible" });
 }
 
-async function openUploadJob(page: Page) {
+async function runUploadPreview(page: Page) {
   await gotoPage(page, "upload");
   const controls = page.locator(".upload-preview__actions");
   await controls.getByRole("button", { name: /미리보기|Preview/ }).click();
   await expect(page.locator(".preview-status-strip")).toContainText(/완료|Succeeded/, { timeout: 15_000 });
+  await expect(page.locator(".preview-summary-strip").getByText(/DB에 있음|Already in DB/)).toBeVisible();
   await expect(controls.getByRole("button", { name: /업로드 시작|Start Upload/ })).toBeEnabled({ timeout: 15_000 });
+}
+
+async function openUploadJob(page: Page, shouldRunPreview = true) {
+  if (shouldRunPreview) await runUploadPreview(page);
+  const controls = page.locator(".upload-preview__actions");
   await controls.getByRole("button", { name: /업로드 시작|Start Upload/ }).click();
   await expect(page.locator(".upload-job")).toBeVisible({ timeout: 5_000 });
 }
@@ -191,10 +198,10 @@ test.describe("Upload Job and Audit Logs screenshot QA", () => {
       await expect(page.locator("main")).toBeVisible();
       await capture(page, testInfo, viewport, "dashboard-ko", screenshots);
 
-      await gotoPage(page, "upload");
+      await runUploadPreview(page);
       await capture(page, testInfo, viewport, "upload-preview-ko", screenshots);
 
-      await openUploadJob(page);
+      await openUploadJob(page, false);
       await expect(page.getByText("수락").first()).toBeVisible();
       await capture(page, testInfo, viewport, "upload-job-ko", screenshots);
 

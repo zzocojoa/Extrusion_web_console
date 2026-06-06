@@ -282,8 +282,8 @@ Response:
       "reasonText": "일부 행이 이미 DB에 있습니다.",
       "kind": "plc",
       "folderLabel": "PLC",
-      "filename": "Factory_Integrated_Log_20260601_090000.csv",
-      "path": "C:\\data\\plc\\Factory_Integrated_Log_20260601_090000.csv",
+      "filename": "integrated_plc_sample_A.csv",
+      "path": "configured_plc_source/integrated_plc_sample_A.csv",
       "fileDate": "2026-06-01",
       "sizeBytes": 8821234,
       "modifiedAt": "2026-06-01T09:02:00+09:00",
@@ -532,7 +532,7 @@ Candidate scanner responsibilities:
 4. Classify source kind from configured folder, not filename alone.
 5. Parse KST file date:
    - PLC legacy: filename starts with `YYMMDD`.
-   - Integrated PLC: `Factory_Integrated_Log_YYYYMMDD_...`.
+   - Integrated PLC: configured integrated PLC CSV naming pattern.
    - Temperature: date-bearing filename only when temperature source is enabled.
 6. Apply requested date range.
 7. Check file stability by `mtime <= now - stableLagMinutes`.
