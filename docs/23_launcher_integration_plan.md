@@ -395,6 +395,18 @@ Validation result for PR #26:
 - Missing frontend `503` smoke: passed.
 - `git diff --check`: passed.
 
+Validation result for API docs operator hardening on PR #30:
+
+- Targeted route/token/OpenAPI backend tests: 33 passed.
+- Full backend tests with clean config/env: 153 passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm run qa:screenshots`: passed.
+- Launcher `-CheckOnly`: passed and reports API docs disabled policy without printing token values.
+- Operator HTTP smoke: `/api/docs`, `/api/openapi.json`, and `/api/redoc` returned `404`; `/api/health`, `/`, `/upload`, `/logs`, and `/settings` returned `200`.
+- Dev/docs-enabled HTTP smoke with `EWC_API_DOCS_MODE=enabled`: `/api/docs`, `/api/openapi.json`, and `/api/health` returned `200`.
+- Generated `.gstack` artifacts, `frontend/dist`, and the untracked operational CSV fixture were not committed.
+
 Validation commands:
 
 ```powershell

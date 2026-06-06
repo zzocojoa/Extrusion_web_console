@@ -32,7 +32,8 @@ Validation completed during implementation:
 - `npm run build`: passed.
 - `npm run qa:screenshots`: passed.
 - Launcher `-CheckOnly`: passed and reported token policy/generation availability without printing token values.
-- HTTP smoke: `GET /api/health`, `GET /api/config`, `GET /api/audit`, `GET /api/docs`, and `GET /` worked without token; `OPTIONS /api/config` returned normal route handling (`405`) rather than token-guard `403`; missing-token protected routes returned `403`; invalid-token `PUT /api/config` returned `403`; valid-token `PUT /api/config` returned `200`; `/` served token bootstrap.
+- PR #28 HTTP smoke before docs hardening: `GET /api/health`, `GET /api/config`, `GET /api/audit`, `GET /api/docs`, and `GET /` worked without token; `OPTIONS /api/config` returned normal route handling (`405`) rather than token-guard `403`; missing-token protected routes returned `403`; invalid-token `PUT /api/config` returned `403`; valid-token `PUT /api/config` returned `200`; `/` served token bootstrap.
+- PR #30 docs hardening smoke: operator mode now returns `404` for `/api/docs`, `/api/openapi.json`, and `/api/redoc`; dev/docs-enabled mode with `EWC_API_DOCS_MODE=enabled` returns `200` for `/api/docs` and `/api/openapi.json`.
 - Audit smoke confirmed token failure params remained safe and centered on `reasonCode`, `method`, `routeGroup`, `sourceHost`, and `tokenPresent`.
 - `git diff --check`: passed.
 - Redaction checks found unsafe marker count `0` across screenshot, backend log, and launcher log artifacts. Generated `.gstack` artifacts, `frontend/dist`, and the untracked operational CSV fixture were not committed.
@@ -164,6 +165,8 @@ sequenceDiagram
 | `/api/openapi.json`, `/api/docs` | `GET` | Disabled in operator mode; enabled only in dev/test docs-enabled mode | Developer documentation; not token-gated. |
 | Static/SPA routes | `GET` | Exempt | Required to load the app and token bootstrap. |
 | Any future `POST`, `PUT`, `PATCH`, `DELETE` under `/api/*` | Mutating | Required by default | Avoid missing new mutating endpoints. |
+
+`EWC_API_DOCS_MODE=enabled` is a dev/test override only. Operator launcher mode sets `EWC_API_DOCS_MODE=disabled`; the docs routes are not protected with the local token.
 
 ## Backend Contract
 

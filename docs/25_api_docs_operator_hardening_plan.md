@@ -16,6 +16,9 @@ Implementation result:
 - OpenAPI contract tests run under docs-enabled dev/test settings.
 - The route is disabled in operator mode; docs routes are not token-gated.
 - Read-only API and mutating local-token policies remain unchanged.
+- Disabled docs routes stay under `/api/*` precedence and do not fall through to the SPA shell.
+- `api_docs_mode=auto` currently disables docs when `local_token_mode=required`; if a first-class operator mode flag is added later, the auto decision can move to that explicit flag.
+- QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build/`qa:screenshots`, launcher `-CheckOnly`, operator HTTP smoke, dev/docs-enabled HTTP smoke, and `git diff --check`.
 
 ## Decision Summary
 
@@ -48,7 +51,7 @@ redoc_url=None
 
 Launcher phase 2 sets `EWC_LOCAL_TOKEN_MODE=required` and passes `EWC_LOCAL_API_TOKEN` through process environment. The frontend receives the token through backend-served HTML bootstrap and sends `X-EWC-Local-Token` only for same-origin mutating `/api/*` requests.
 
-Read-only APIs, upload/job status reads, SSE events, `/api/health`, `/api/config`, and `/api/audit` remain token-free. `/api/docs` is currently also localhost-readable; this plan changes that only for operator mode.
+Read-only APIs, upload/job status reads, SSE events, `/api/health`, `/api/config`, and `/api/audit` remain token-free. Operator mode disables API documentation routes, while dev/test docs-enabled mode preserves Swagger/OpenAPI.
 
 ## Mode Matrix
 
@@ -69,6 +72,8 @@ disabled
 ```
 
 Recommended default is `auto`. In `auto`, docs are disabled when the local token mode is `required`; otherwise they stay enabled. The launcher should still set `EWC_API_DOCS_MODE=disabled` explicitly so operator behavior is not accidentally changed by a future token-mode refactor.
+
+Implementation caveat: `auto` is tied to `local_token_mode=required` because that is the current operator launcher signal. If an explicit operator mode flag is introduced later, move the `auto` decision to that flag and keep `EWC_API_DOCS_MODE=enabled` limited to dev/test override use.
 
 ## Route Behavior
 
@@ -165,11 +170,25 @@ HTTP smoke after implementation:
 - Operator backend origin:
   - `/api/docs` returns `404`.
   - `/api/openapi.json` returns `404`.
+  - `/api/redoc` returns `404`.
   - `/api/health` returns success.
-  - `/` returns the built frontend when present.
+  - `/`, `/upload`, `/logs`, and `/settings` return the built frontend when present.
 - Developer backend:
   - `/api/docs` is reachable.
   - `/api/openapi.json` is reachable.
+
+Validation result for PR #30:
+
+- Targeted route/token/OpenAPI backend tests: 33 passed.
+- Full backend tests from clean cwd: 153 passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm run qa:screenshots`: passed.
+- Launcher `-CheckOnly`: passed.
+- Operator HTTP smoke: `/api/docs`, `/api/openapi.json`, `/api/redoc` returned `404`; `/api/health`, `/`, `/upload`, `/logs`, `/settings` returned `200`.
+- Dev/docs-enabled HTTP smoke: `/api/docs`, `/api/openapi.json`, `/api/health` returned `200`.
+- `git diff --check`: passed.
+- Generated `.gstack` artifacts, `frontend/dist`, and the untracked operational CSV fixture were not committed.
 
 Frontend screenshot QA:
 

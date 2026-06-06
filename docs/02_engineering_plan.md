@@ -237,6 +237,8 @@ Critical silent-failure gap: none allowed by design. The two “test needed” i
 - FastAPI serves token bootstrap HTML with `Cache-Control: no-store` without mutating `frontend/dist/index.html`.
 - Frontend mutating API calls add `X-EWC-Local-Token` only for same-origin `/api/*` requests.
 - QA passed targeted token/static/launcher tests (`17 passed`), full backend tests from clean cwd (`151 passed`), frontend typecheck/build/`qa:screenshots`, token HTTP smoke, and unsafe marker scans (`0` matches).
+- API docs hardening QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build/`qa:screenshots`, launcher `-CheckOnly`, operator HTTP smoke for docs/openapi/redoc `404`, dev/docs-enabled HTTP smoke for docs/openapi `200`, and `git diff --check`.
+- `api_docs_mode=auto` currently derives operator-style docs disablement from `local_token_mode=required`. If a first-class operator mode flag is added later, move the auto decision to that explicit flag while keeping `EWC_API_DOCS_MODE=enabled` as dev/test override only.
 - Repo cwd `.env` presence can change config override behavior during tests; clean-cwd backend test runs remain the authoritative full-suite validation for this branch.
 
 **Parallelization**
