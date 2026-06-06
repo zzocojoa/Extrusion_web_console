@@ -117,6 +117,7 @@ Implementation result:
 - The working directory is the prepared operator folder root.
 - `-CheckOnly` previews target and shortcut paths without writing shortcuts.
 - Test-only directory overrides allow idempotency validation without touching the real Desktop or Start menu.
+- `ShortcutName` is validated before shortcut path construction; empty names, whitespace names, invalid Windows filename characters, path separators, `..` traversal markers, and absolute paths are rejected before any shortcut is written.
 - The script does not delete AppData config, state databases, launcher logs, Docker data, database data, or operational CSV files.
 
 Shortcut uninstall should remove only shortcuts created by this app. It must not delete config, logs, state database files, local Supabase data, or operational CSV files.
@@ -275,6 +276,17 @@ Suggested checks:
 - Local Supabase readiness remains external to the launcher. This avoids unsafe automated repair but means operators may still need clear setup guidance when Docker or Supabase is unavailable.
 - Code signing and SmartScreen handling are not addressed in v1.
 - `frontend/dist` may be included in an operator package, but remains an ignored/generated artifact and is not committed to git.
+
+## Implementation Validation
+
+PR #32 validation:
+
+- Targeted launcher tests: `17 passed`.
+- Shortcut installer `-CheckOnly`: passed.
+- Frontend typecheck: passed.
+- Frontend build: passed.
+- `git diff --check`: passed.
+- Path-safety blocker fix: unsafe `ShortcutName` inputs are rejected, including empty or whitespace names, invalid filename characters, path separators, `..` traversal markers, and absolute paths.
 
 ## Merge Readiness For Implementation
 

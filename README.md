@@ -94,7 +94,7 @@ Maintainers can install or refresh Windows shortcuts from the prepared operator 
 .\launcher\install_shortcuts.ps1
 ```
 
-This creates or updates one Desktop shortcut and one Start menu shortcut named `Extrusion Web Console`. Re-running the script is idempotent: it updates the existing shortcuts instead of creating duplicates. The shortcuts target the repo-local `launcher\start_web_console.bat` and use the prepared folder as the working directory. A batch wrapper is also available:
+This creates or updates one Desktop shortcut and one Start menu shortcut named `Extrusion Web Console`. Re-running the script is idempotent: it updates the existing shortcuts instead of creating duplicates. The shortcuts target the repo-local `launcher\start_web_console.bat` and use the prepared folder as the working directory. `ShortcutName` is validated as a file name only: empty names, path separators, `..` traversal markers, Windows invalid filename characters, and absolute paths are rejected before any shortcut is written. A batch wrapper is also available:
 
 ```text
 launcher\install_shortcuts.bat
@@ -408,6 +408,7 @@ Launcher Local Token QA:
 - QA confirmed token values are absent from URL query strings, browser storage, audit params, backend logs, launcher logs, screenshot artifacts, committed `.gstack` content, and committed `frontend/dist` content. Unsafe marker scan count was `0`.
 - PR #30 API docs hardening disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes in operator launcher mode while preserving Swagger/OpenAPI in dev/test docs-enabled mode through `EWC_API_DOCS_MODE=enabled`.
 - PR #30 QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build, `npm run qa:screenshots`, launcher `-CheckOnly`, operator HTTP smoke (`/api/docs`, `/api/openapi.json`, `/api/redoc` all `404`), dev/docs-enabled HTTP smoke (`/api/docs` and `/api/openapi.json` both `200`), and `git diff --check`.
+- PR #32 Windows shortcut packaging adds `launcher\install_shortcuts.ps1` and `.bat`, passed targeted launcher tests (`17 passed`), shortcut `-CheckOnly`, frontend typecheck/build, and `git diff --check`; path-safety review confirmed unsafe `ShortcutName` inputs are rejected before writing shortcuts.
 - Full backend tests should be run from clean cwd when validating this branch because repo cwd `.env` presence intentionally changes Settings/config override behavior.
 
 Browser QA has been run against:
