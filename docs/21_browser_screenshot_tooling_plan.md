@@ -6,6 +6,18 @@ Date: 2026-06-04
 
 Scope: make Upload Job / Audit Logs browser screenshot QA reproducible on the Windows operator/developer environment without depending on Docker, local Supabase, operational CSV files, or secret-bearing configuration.
 
+Implementation result on branch `codex/upload-job-browser-tooling-impl`:
+
+- Added `@playwright/test` as a frontend devDependency.
+- Added `npm run qa:screenshots`.
+- Added Playwright screenshot QA under `frontend/qa/`.
+- Screenshot QA runs Vite mock mode on `127.0.0.1:5174` by default to avoid reusing an existing API-mode dev server on `5173`; it does not require Docker, local Supabase, DB URLs, auth keys, or operational CSV fixtures.
+- Screenshot artifacts are written under `.gstack/screenshots/upload-job-browser-qa/<timestamp>/`, which is already ignored by the repo `.gitignore`.
+- The runner captures Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
+- The runner asserts `Accepted` / `수락` and `DB에 있음` wording, blocks `Inserted` / `적재` / `삽입` / `새로 삽입`, captures console/page/network failures, masks file/path cells before screenshots, disables Playwright failure screenshots/traces to avoid raw path leakage, and scans text artifacts for credential/path-like markers.
+- PR #22 QA passed `npm run qa:screenshots` and captured 32 screenshots. Blocker fix commit `b570207` removed operational CSV filename-pattern markers from source/docs, kept mock filename/path/event labels sanitized, and added the visible `DB에 있음` / `Already in DB` assertion before Upload Preview capture.
+- Redaction scanning uses generic timestamp-style CSV, Windows absolute path, credential-like, DB URL, and token marker patterns. Source/docs should not contain operational CSV filename-pattern strings.
+
 ## Summary
 
 PR #20 proved that Upload Job / Audit Logs screenshot QA is currently blocked by tooling, not by the app HTTP surface:
@@ -137,7 +149,7 @@ Use Vite mock mode for screenshot QA:
 
 ```powershell
 cd frontend
-npm run dev -- --host 127.0.0.1 --port 5173
+npm run qa:screenshots
 ```
 
 Leave `VITE_API_MODE` unset.
@@ -305,7 +317,7 @@ The Playwright config should:
 
 - Start Vite with `webServer`.
 - Use `127.0.0.1`, not `localhost`, to avoid IPv6 ambiguity.
-- Use fixed port `5173`.
+- Use fixed port `5174` by default to avoid accidentally reusing a developer server on `5173` that may be running in API mode.
 - Reuse an existing Vite server when available.
 - Write artifacts under the repo root `.gstack/screenshots/...`.
 - Set a conservative timeout for slower operator PCs.
@@ -323,7 +335,13 @@ Artifact redaction should replace:
 - JWT-like strings.
 - Supabase anon/service-role-like labels when followed by values.
 - Absolute Windows user paths.
-- Operational CSV filenames.
+- Generic timestamp-style CSV filenames.
+- Credential-like markers.
+
+Source and documentation policy:
+
+- Do not commit operational CSV filename-pattern strings, raw operational CSV paths, CSV contents, DB URLs, tokens, Authorization headers, or credential values.
+- Use sanitized labels such as `integrated_plc_sample` and `mock://plc/...` in mock data and docs.
 
 Recommended artifact policy:
 

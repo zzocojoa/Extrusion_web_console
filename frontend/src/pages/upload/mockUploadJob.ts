@@ -29,9 +29,9 @@ export function getMockUploadJob(
       previewItemId: 101,
       fileKey: "mock-target-1",
       folderLabel: "PLC",
-      folderPath: "C:\\data\\plc",
-      filename: "Factory_Integrated_Log_20260602_090000.csv",
-      path: "C:\\data\\plc\\Factory_Integrated_Log_20260602_090000.csv",
+      folderPath: "mock://plc",
+      filename: "integrated_plc_upload_sample_A.csv",
+      path: "mock://plc/integrated_plc_upload_sample_A.csv",
       kind: "plc",
       fileDate: "2026-06-02",
       fileSignature: "size=15000|mtime_ns=1",
@@ -54,9 +54,9 @@ export function getMockUploadJob(
       previewItemId: 102,
       fileKey: "mock-target-2",
       folderLabel: "PLC",
-      folderPath: "C:\\data\\plc",
+      folderPath: "mock://plc",
       filename: "260602_plc_line_2.csv",
-      path: "C:\\data\\plc\\260602_plc_line_2.csv",
+      path: "mock://plc/260602_plc_line_2.csv",
       kind: "plc",
       fileDate: "2026-06-02",
       fileSignature: "size=6400|mtime_ns=2",
@@ -115,10 +115,10 @@ function buildEvents(jobId: string, startedAtMs: number, status: UploadJobStatus
   const events: JobEvent[] = [
     event(1, jobId, base, "info", "job.created", "Upload job was queued from preview targets."),
     event(2, jobId, new Date(startedAtMs + 250).toISOString(), "info", "job.started", "Upload job started."),
-    event(3, jobId, new Date(startedAtMs + 500).toISOString(), "info", "file.started", "Started Factory_Integrated_Log_20260602_090000.csv.", 1),
+    event(3, jobId, new Date(startedAtMs + 500).toISOString(), "info", "file.started", "Started integrated_plc_upload_sample_A.csv.", 1),
   ];
   if (step > 25) events.push(event(4, jobId, new Date(startedAtMs + 1600).toISOString(), "debug", "file.progress", "Progress 5200/16000.", 1));
-  if (step > 65) events.push(event(5, jobId, new Date(startedAtMs + 4600).toISOString(), "info", "file.succeeded", "Completed Factory_Integrated_Log_20260602_090000.csv.", 1));
+  if (step > 65) events.push(event(5, jobId, new Date(startedAtMs + 4600).toISOString(), "info", "file.succeeded", "Completed integrated_plc_upload_sample_A.csv.", 1));
   if (status === "partial_failed") {
     events.push(event(6, jobId, new Date(startedAtMs + 5100).toISOString(), "info", "file.started", "Started 260602_plc_line_2.csv.", 2));
     events.push(event(7, jobId, new Date(startedAtMs + 6500).toISOString(), "error", "file.failed", "Failed 260602_plc_line_2.csv: Edge upload timed out after retry attempts.", 2));
