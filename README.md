@@ -239,6 +239,7 @@ npm run qa:screenshots
 
 The screenshot runner writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`, checks the required viewport matrix, verifies `Accepted` / `수락` wording, captures console/network failures, and redacts path/credential-like markers before writing text artifacts.
 It uses `127.0.0.1:5174` by default to avoid reusing an existing `5173` dev server that may be running in API mode.
+The runner captures 32 screenshots across Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings, verifies `DB에 있음` / `Already in DB`, blocks inserted-row wording such as `Inserted`, `적재`, `삽입`, and `새로 삽입`, and scans artifacts for generic timestamp-style CSV names, Windows absolute paths, DB URLs, tokens, and credential-like markers. Source docs and mock labels should use sanitized sample names instead of operational CSV filename patterns.
 
 Mock Dashboard states can be checked with query strings:
 
@@ -310,6 +311,14 @@ Upload Job Accepted Rows QA:
 - QA confirmed Upload Job API responses, file rows, job events, and SSE replay include canonical `acceptedRows` and compatibility `insertedRows`.
 - QA confirmed Upload UI uses `acceptedRows` first, labels accepted/upserted rows as `Accepted` / `수락`, and no longer shows operator-facing `Inserted`, `적재`, `삽입`, or `새로 삽입` wording. Korean Upload Preview `already_in_db` now displays `DB에 있음`.
 - Remaining risk: Browser screenshot QA for PR #19 was not completed because `node_repl` failed with a kernel asset path error and local Playwright was not installed; HTTP smoke covered Dashboard, Upload, Logs, Settings, and Vite proxy reachability.
+
+Playwright Screenshot QA:
+
+- PR #22 adds project-owned Playwright screenshot QA through `npm run qa:screenshots` under `frontend/`.
+- QA runs in mock mode on `127.0.0.1:5174`, does not require Docker, local Supabase, DB URLs, auth keys, or operational CSV fixtures, and writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`.
+- QA captures 32 screenshots across `1440x900`, `1366x768`, `1024x768`, and `720x900`; smoke covers `/`, `/upload`, `/logs`, and `/settings`.
+- QA verifies `Accepted` / `수락`, `DB에 있음` / `Already in DB`, blocks inserted-row wording, captures console/page/network failures, and scans text artifacts for generic timestamp-style CSV names, Windows absolute paths, credential-like markers, DB URLs, and token markers.
+- PR #22 blocker fix `b570207` removed operational CSV filename-pattern markers from source/docs and kept mock filename/path/event labels sanitized.
 
 Browser QA has been run against:
 
