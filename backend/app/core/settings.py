@@ -7,6 +7,7 @@ from typing import Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_CONFIG_FILE_PATH = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "config.json")
+DEFAULT_FRONTEND_DIST_PATH = str(Path(__file__).resolve().parents[3] / "frontend" / "dist")
 
 CONFIG_JSON_KEY_TO_FIELD = {
     "plcDataDir": "plc_data_dir",
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     environment: str = "dev"
     host: str = "127.0.0.1"
     port: int = 8000
+    frontend_dist_path: str = DEFAULT_FRONTEND_DIST_PATH
     grafana_url: str = "http://localhost:3001"
     state_db_path: str = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "web_console_state.db")
     config_file_path: str = DEFAULT_CONFIG_FILE_PATH

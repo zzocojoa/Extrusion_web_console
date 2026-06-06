@@ -172,7 +172,8 @@ Backend가 고정 allowlist command만 실행한다.
 **보안**
 - Backend bind: `127.0.0.1` only.
 - CORS: same-origin 또는 `127.0.0.1` dev port만.
-- Mutating API는 launcher가 발급한 per-run local token 필요.
+- Launcher phase 1은 loopback enforcement를 유지하고 mandatory local token enforcement는 phase 2로 남긴다.
+- Phase 2 mutating API는 launcher가 발급한 per-run local token을 요구해야 한다.
 - Configured PLC/TEMP directory 밖 파일 접근 금지.
 - Runtime commands는 allowlist.
 - audit log append-only. UI delete 없음.
@@ -211,6 +212,18 @@ Config env override hidden -> UI source_by_key, audit redacted, unit test
 Grafana down               -> status degraded, link still shown, smoke test
 ```
 Critical silent-failure gap: none allowed by design. The two “test needed” items must be implemented before v1 signoff.
+
+**Launcher phase 1 implementation status**
+
+- FastAPI serves built `frontend/dist` for operator mode after API routers are registered.
+- `/api/*` routes keep precedence over SPA fallback; unknown `/api/*` returns API-style 404 rather than the frontend shell.
+- `/`, `/upload`, `/logs`, and `/settings` are served from the built frontend when `frontend/dist/index.html` exists.
+- Missing built frontend returns a clear `503`, and the launcher also blocks before backend start unless explicit `-BuildFrontend` is used.
+- Windows launcher scripts exist at `launcher/start_web_console.ps1` and `launcher/start_web_console.bat`.
+- The launcher binds Uvicorn to `127.0.0.1`, supports `-CheckOnly`, opens the browser to the backend origin, writes logs under `%APPDATA%\ExtrusionWebConsole\logs\launcher\`, and handles port conflicts without killing unknown processes.
+- `npm run build` is not part of the double-click operator default path. It runs only through explicit `-BuildFrontend`, and that path fails clearly when the build exits non-zero or does not produce `frontend/dist/index.html`.
+- Launcher phase 1 does not run local Supabase bootstrap, reset, cleanup, prune, create/delete, Docker volume operations, or arbitrary command input.
+- QA passed for targeted launcher/static backend tests, full backend tests, frontend typecheck/build, screenshot QA, `-CheckOnly`, `-BuildFrontend -CheckOnly`, port conflict smoke, backend-origin HTTP smoke, and missing frontend `503` smoke.
 
 **Parallelization**
 ```text

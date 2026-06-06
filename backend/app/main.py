@@ -1,9 +1,12 @@
 from ipaddress import ip_address
+from pathlib import Path
 
 from fastapi import Request
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
+from starlette.responses import FileResponse
+from starlette.staticfiles import StaticFiles
 
 from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.audit import router as audit_router
@@ -19,6 +22,9 @@ from backend.app.db.runtime_repository import RuntimeRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
 
 
+API_PREFIX_SEGMENT = "api"
+
+
 def is_loopback_host(host: str | None) -> bool:
     if host in {None, "", "localhost", "testclient"}:
         return True
@@ -26,6 +32,43 @@ def is_loopback_host(host: str | None) -> bool:
         return ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
+    dist_path = Path(frontend_dist_path)
+    index_path = dist_path / "index.html"
+    assets_path = dist_path / "assets"
+
+    if assets_path.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+
+    @app.get("/")
+    async def serve_frontend_root():
+        if index_path.exists():
+            return FileResponse(index_path)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Frontend build is missing. Run npm run build from frontend or start the launcher with the developer build flag."
+            },
+        )
+
+    @app.get("/{path:path}")
+    async def serve_frontend_route(path: str):
+        if path == "favicon.ico":
+            favicon_path = dist_path / "favicon.ico"
+            if favicon_path.exists():
+                return FileResponse(favicon_path)
+        if path.startswith(f"{API_PREFIX_SEGMENT}/") or path == API_PREFIX_SEGMENT:
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        if index_path.exists():
+            return FileResponse(index_path)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Frontend build is missing. Run npm run build from frontend or start the launcher with the developer build flag."
+            },
+        )
 
 
 def create_app() -> FastAPI:
@@ -65,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(upload_preview_router)
     app.include_router(upload_jobs_router)
     app.include_router(runtime_router)
+    configure_frontend_static(app, settings.frontend_dist_path)
     return app
 
 

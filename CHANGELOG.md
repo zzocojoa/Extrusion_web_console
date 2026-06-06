@@ -21,6 +21,7 @@ All notable changes to Extrusion Web Console are documented here.
 - Upload Preview now writes `upload.preview` audit rows for success, DB unreachable, missing source, malformed request validation, and active preview conflict paths.
 - Upload Job API responses, file rows, job events, and SSE replay now expose canonical `acceptedRows` for Edge/Supabase upsert-accepted row counts.
 - Frontend now includes Playwright screenshot QA through `npm run qa:screenshots`, covering Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings in mock mode without Docker, local Supabase, secrets, or operational CSV fixtures.
+- Launcher phase 1 now provides Windows operator launcher scripts, `-CheckOnly`, explicit `-BuildFrontend`, and FastAPI serving of the built frontend from `frontend/dist` on `127.0.0.1`.
 
 ### Changed
 
@@ -28,6 +29,8 @@ All notable changes to Extrusion Web Console are documented here.
 - Preview-origin upload disables legacy latest-timestamp Smart Sync filtering and keeps database upsert on `(timestamp, device_id)` as final duplicate protection.
 - Upload Job UI now labels Edge/Supabase upsert-accepted row counts as `Accepted` / `수락`. The legacy `insertedRows` field remains as a deprecated compatibility alias and is not a net-new insert count.
 - Screenshot QA now captures 32 viewport screenshots, verifies `Accepted` / `수락` and `DB에 있음` / `Already in DB`, blocks inserted-row wording, captures console/network failures, and writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`.
+- Operator mode now serves the web console from the backend origin so `/`, `/upload`, `/logs`, and `/settings` work without a Vite dev server after `npm run build`.
+- Launcher `-BuildFrontend` now fails clearly when `npm run build` fails or does not produce `frontend/dist/index.html`; the double-click operator flow still does not build automatically.
 
 ### Fixed
 
