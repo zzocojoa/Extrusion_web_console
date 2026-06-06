@@ -13,24 +13,29 @@ Implementation result on branch `codex/launcher-local-token-impl`:
 - Operator launcher mode sets `EWC_LOCAL_TOKEN_MODE=required` and passes the per-run token through process environment only.
 - Explicit dev opt-out remains available with `EWC_LOCAL_TOKEN_MODE=dev-disabled`.
 - Read-only APIs, `OPTIONS`, `/api/health`, `/api/openapi.json`, `/api/docs`, static assets, and SPA routes remain token-free.
+- Protected mutating routes include `PUT /api/config`, `POST /api/upload/preview`, `POST /api/upload/preview/{previewRunId}/cancel`, `POST /api/upload/jobs`, Upload Job retry/pause/resume/cancel, and Local Supabase start/stop.
+- Read-only health/config/audit, upload preview reads, upload job status reads, and SSE event reads remain available without a token.
 - FastAPI injects runtime token bootstrap into served `index.html` responses only when enforcement is enabled. The built `frontend/dist/index.html` file is not mutated, and injected HTML uses `Cache-Control: no-store`.
 - Frontend mutating API calls send the token header only to same-origin `/api/*` requests. The token is not stored in URL, `localStorage`, `sessionStorage`, cookies, IndexedDB, config JSON, audit rows, logs, screenshots, or generated artifacts.
 - Missing/invalid token failures write rate-limited blocked audit rows with safe metadata only: `reasonCode`, `method`, `routeGroup`, `sourceHost`, and boolean `tokenPresent`.
 - Launcher `-CheckOnly` now verifies token policy/generation availability without printing token values.
 - Existing launcher phase 1 behavior is preserved: backend bind remains `127.0.0.1`, default operator flow does not run frontend build, port conflict handling remains explicit, and local Supabase/Docker bootstrap/reset/cleanup/prune/create/delete remains forbidden.
 - `/api/docs` operator-mode hardening remains out-of-scope for this PR and should be handled by a separate hardening PR.
+- Dev caveat: if a developer enables `EWC_LOCAL_API_TOKEN` on a backend used by the Vite dev shell, the Vite page may not receive the backend-served bootstrap token. Use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` for that development path.
 
 Validation completed during implementation:
 
 - Targeted backend token/static/launcher tests: 17 passed.
-- Full backend tests with clean config/env: 151 passed.
+- Full backend tests from clean cwd/config/env: 151 passed.
 - `npm run typecheck`: passed.
 - `npm run build`: passed.
 - `npm run qa:screenshots`: passed.
 - Launcher `-CheckOnly`: passed and reported token policy/generation availability without printing token values.
-- HTTP smoke: `/api/health` and `/api/audit` worked without token, missing/invalid token `PUT /api/config` returned `403`, valid-token `PUT /api/config` returned `200`, and `/` served token bootstrap.
-- `git diff --check`: passed with CRLF warnings only.
-- Redaction checks found no token value in temporary backend logs and no operational CSV filename marker in source/docs.
+- HTTP smoke: `GET /api/health`, `GET /api/config`, `GET /api/audit`, `GET /api/docs`, and `GET /` worked without token; `OPTIONS /api/config` returned normal route handling (`405`) rather than token-guard `403`; missing-token protected routes returned `403`; invalid-token `PUT /api/config` returned `403`; valid-token `PUT /api/config` returned `200`; `/` served token bootstrap.
+- Audit smoke confirmed token failure params remained safe and centered on `reasonCode`, `method`, `routeGroup`, `sourceHost`, and `tokenPresent`.
+- `git diff --check`: passed.
+- Redaction checks found unsafe marker count `0` across screenshot, backend log, and launcher log artifacts. Generated `.gstack` artifacts, `frontend/dist`, and the untracked operational CSV fixture were not committed.
+- Repo cwd `.env` presence can intentionally change Settings/config override behavior. Full backend validation uses clean cwd to avoid repo `.env` influencing test expectations.
 
 Source documents:
 

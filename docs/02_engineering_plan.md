@@ -172,8 +172,11 @@ Backend가 고정 allowlist command만 실행한다.
 **보안**
 - Backend bind: `127.0.0.1` only.
 - CORS: same-origin 또는 `127.0.0.1` dev port만.
-- Launcher phase 1은 loopback enforcement를 유지하고 mandatory local token enforcement는 phase 2로 남긴다.
-- Phase 2 mutating API는 launcher가 발급한 per-run local token을 요구해야 한다.
+- Launcher phase 1은 loopback enforcement와 backend-origin static serving을 제공한다.
+- Launcher phase 2 is implemented: operator mode generates a per-run local token, passes it to the backend through process environment, injects a runtime bootstrap into the served frontend shell, and requires `X-EWC-Local-Token` for mutating `/api/*` routes.
+- Protected mutating routes include Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, and Local Supabase start/stop. Read-only APIs, upload/job status reads, SSE events, `/api/health`, `/api/config`, `/api/audit`, and `/api/docs` remain localhost-readable.
+- Missing or invalid local tokens return `403 local_token_required` and write rate-limited blocked audit rows with safe metadata only. Token values must not appear in URL queries, storage, logs, audit params, screenshots, or generated artifacts.
+- Vite development uses explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` when the backend is not serving the bootstrap token.
 - Configured PLC/TEMP directory 밖 파일 접근 금지.
 - Runtime commands는 allowlist.
 - audit log append-only. UI delete 없음.
@@ -224,6 +227,15 @@ Critical silent-failure gap: none allowed by design. The two “test needed” i
 - `npm run build` is not part of the double-click operator default path. It runs only through explicit `-BuildFrontend`, and that path fails clearly when the build exits non-zero or does not produce `frontend/dist/index.html`.
 - Launcher phase 1 does not run local Supabase bootstrap, reset, cleanup, prune, create/delete, Docker volume operations, or arbitrary command input.
 - QA passed for targeted launcher/static backend tests, full backend tests, frontend typecheck/build, screenshot QA, `-CheckOnly`, `-BuildFrontend -CheckOnly`, port conflict smoke, backend-origin HTTP smoke, and missing frontend `503` smoke.
+
+**Launcher phase 2 implementation status**
+
+- Per-run local token enforcement is implemented on branch `codex/launcher-local-token-impl`.
+- The launcher sets `EWC_LOCAL_TOKEN_MODE=required` and passes `EWC_LOCAL_API_TOKEN` through process environment only; token values are not printed by `-CheckOnly`.
+- FastAPI serves token bootstrap HTML with `Cache-Control: no-store` without mutating `frontend/dist/index.html`.
+- Frontend mutating API calls add `X-EWC-Local-Token` only for same-origin `/api/*` requests.
+- QA passed targeted token/static/launcher tests (`17 passed`), full backend tests from clean cwd (`151 passed`), frontend typecheck/build/`qa:screenshots`, token HTTP smoke, and unsafe marker scans (`0` matches).
+- Repo cwd `.env` presence can change config override behavior during tests; clean-cwd backend test runs remain the authoritative full-suite validation for this branch.
 
 **Parallelization**
 ```text
