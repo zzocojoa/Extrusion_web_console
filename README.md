@@ -29,7 +29,8 @@ The first runnable scaffold is in place:
 - TanStack Query mock-first Dashboard query.
 - Korean/English i18n baseline with language persistence in `localStorage`.
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
-Launcher integration and legacy upload state import are not implemented in this scaffold.
+- Launcher phase 1 with FastAPI static frontend serving and Windows double-click launcher scripts.
+Legacy upload state import is not implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
@@ -64,6 +65,52 @@ docs/
 - npm
 
 Local Supabase, WSL, Docker, and Grafana are not required for the mock Dashboard and mock Upload Preview paths. Local Supabase is required when testing real reachable Upload Preview reconciliation, Upload Job execution, or Local Supabase runtime controls.
+
+## Operator Launcher
+
+Launcher phase 1 lets an operator run the built web console from one localhost backend origin.
+
+First build the frontend once from `frontend/`:
+
+```powershell
+npm run build
+```
+
+Then double-click:
+
+```text
+launcher\start_web_console.bat
+```
+
+Or run from PowerShell:
+
+```powershell
+.\launcher\start_web_console.ps1
+```
+
+The launcher starts the backend on `127.0.0.1:8000`, waits for `/api/health`, then opens:
+
+```text
+http://127.0.0.1:8000/
+```
+
+Operator mode does not start Vite. FastAPI serves `frontend/dist` and the frontend calls same-origin `/api/*`.
+
+If `frontend/dist/index.html` is missing, the launcher stops with a clear message. It does not run `npm run build` by default. Developers can explicitly request a build:
+
+```powershell
+.\launcher\start_web_console.ps1 -BuildFrontend
+```
+
+Launcher logs are written under:
+
+```text
+%APPDATA%\ExtrusionWebConsole\logs\launcher\
+```
+
+The launcher reuses an already healthy Extrusion Web Console backend on the selected port. If another process owns the port, it stops and reports the conflict; it does not kill unknown processes.
+
+Launcher phase 1 does not run local Supabase bootstrap, reset, cleanup, prune, Docker create/delete, or volume operations. Local Supabase status/start/stop remains inside the web console runtime API and existing command allowlist policy.
 
 ## Backend Development
 

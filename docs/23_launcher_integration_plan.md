@@ -6,6 +6,20 @@ Date: 2026-06-06
 
 Scope: Windows launcher integration for the local operator web console.
 
+Implementation result on branch `codex/launcher-integration-impl`:
+
+- Added FastAPI static frontend serving for built `frontend/dist`.
+- API routes under `/api/*` keep precedence over static and SPA fallback routes.
+- `/`, `/upload`, `/logs`, and `/settings` return the built frontend shell when `frontend/dist/index.html` exists.
+- Missing built frontend returns an operator-facing `503` message instead of silently serving a blank app.
+- Added `launcher/start_web_console.ps1` and `launcher/start_web_console.bat`.
+- The launcher starts Uvicorn with `backend.app.main:app` on `127.0.0.1` only, using the project virtualenv Python.
+- The launcher waits for `/api/health`, opens the loopback browser URL, writes launcher/backend logs under `%APPDATA%\ExtrusionWebConsole\logs\launcher\`, and stops only its own backend child process on normal shutdown.
+- The launcher reuses an already healthy Extrusion Web Console backend on the selected port and blocks unknown port occupants without killing them.
+- The launcher does not run frontend build in the default double-click operator flow; `npm run build` is available only through the explicit `-BuildFrontend` developer flag.
+- Phase 1 does not add API token enforcement. Local token remains phase 2.
+- Phase 1 does not run local Supabase bootstrap, reset, cleanup, prune, Docker create/delete, volume operations, or arbitrary command input.
+
 Source documents:
 
 - `AGENTS.md`
