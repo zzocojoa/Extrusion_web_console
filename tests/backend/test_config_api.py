@@ -220,6 +220,31 @@ def test_config_save_env_override_is_blocked_and_audited(tmp_path: Path, monkeyp
     assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["grafanaUrl"]
 
 
+def test_config_save_dotenv_override_is_blocked_and_audited(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("EWC_GRAFANA_URL=http://dotenv.example\n", encoding="utf-8")
+    client, audit_repository, config_path = _client(tmp_path)
+
+    try:
+        get_response = client.get("/api/config")
+        save_response = client.put("/api/config", json={"values": {"grafanaUrl": "http://localhost:4000"}})
+    finally:
+        _clear_overrides()
+
+    items = {item["key"]: item for item in get_response.json()["items"]}
+    assert get_response.status_code == 200
+    assert items["grafanaUrl"]["source"] == "env"
+    assert items["grafanaUrl"]["overridden"] is True
+    assert save_response.status_code == 409
+    assert save_response.json()["detail"]["reason"] == "config_env_override"
+    assert not config_path.exists()
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
+    assert row["result"] == AuditResult.blocked.value
+    assert row["error_code"] == "config_env_override"
+    assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["grafanaUrl"]
+
+
 def test_saved_config_json_is_loaded_by_new_settings_instance(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
     client, _, config_path = _client(tmp_path)
