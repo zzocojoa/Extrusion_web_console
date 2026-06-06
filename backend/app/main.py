@@ -22,6 +22,7 @@ from backend.app.core.local_token import bootstrap_script_for_settings
 from backend.app.core.local_token import local_token_enforcement_enabled
 from backend.app.core.local_token import local_token_error_response
 from backend.app.core.local_token import validate_local_token
+from backend.app.core.settings import Settings
 from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
@@ -31,6 +32,15 @@ from backend.app.db.upload_job_repository import UploadJobRepository
 
 API_PREFIX_SEGMENT = "api"
 _LOGGER = logging.getLogger(__name__)
+
+
+def api_docs_enabled(settings: Settings) -> bool:
+    mode = settings.api_docs_mode.strip().lower()
+    if mode == "enabled":
+        return True
+    if mode == "disabled":
+        return False
+    return settings.local_token_mode.strip().lower() != "required"
 
 
 def is_loopback_host(host: str | None) -> bool:
@@ -106,11 +116,12 @@ def create_app() -> FastAPI:
     PreviewRepository(settings.state_db_path).mark_interrupted_active_runs()
     UploadJobRepository(settings.state_db_path).mark_interrupted_active_jobs()
     RuntimeRepository(settings.state_db_path).mark_interrupted_active_operations()
+    docs_enabled = api_docs_enabled(settings)
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
-        openapi_url="/api/openapi.json",
-        docs_url="/api/docs",
+        openapi_url="/api/openapi.json" if docs_enabled else None,
+        docs_url="/api/docs" if docs_enabled else None,
         redoc_url=None,
     )
     app.add_middleware(

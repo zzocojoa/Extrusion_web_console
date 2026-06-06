@@ -36,7 +36,10 @@ def test_launcher_script_keeps_allowlist_narrow() -> None:
     assert "RandomNumberGenerator" in script
     assert "EWC_LOCAL_API_TOKEN" in script
     assert "EWC_LOCAL_TOKEN_MODE" in script
+    assert "EWC_API_DOCS_MODE" in script
+    assert "$env:EWC_API_DOCS_MODE = \"disabled\"" in script
     assert "required" in script
+    assert "API docs policy: disabled in operator mode." in script
     assert "token value is hidden" in script
     assert "token query" not in script.lower()
     assert "?token" not in script.lower()
@@ -74,6 +77,7 @@ def test_launcher_passes_local_token_through_environment_only() -> None:
     script = LAUNCHER_PS1.read_text(encoding="utf-8")
 
     assert "$env:EWC_LOCAL_API_TOKEN = New-LocalApiToken" in script
+    assert "$env:EWC_API_DOCS_MODE = \"disabled\"" in script
     assert "$arguments = @(\"-m\", \"uvicorn\"" in script
     assert "EWC_LOCAL_API_TOKEN" not in script.split("$arguments = @", 1)[1]
     assert "Start-Process \"http://127.0.0.1:$BackendPort/\"" in script

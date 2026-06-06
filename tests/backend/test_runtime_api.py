@@ -4,12 +4,14 @@ from fastapi.testclient import TestClient
 
 from backend.app.api.runtime import get_command_runner
 from backend.app.core.settings import Settings, get_settings
-from backend.app.main import app
+from backend.app.main import app, create_app
 from tests.backend.test_runtime_control import FakeRunner, write_supabase_config
 
 
-def test_runtime_routes_are_registered_in_openapi() -> None:
-    client = TestClient(app)
+def test_runtime_routes_are_registered_in_openapi(monkeypatch) -> None:
+    monkeypatch.setenv("EWC_API_DOCS_MODE", "enabled")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
 
     response = client.get("/api/openapi.json")
 
@@ -19,6 +21,7 @@ def test_runtime_routes_are_registered_in_openapi() -> None:
     assert "/api/runtime/local-supabase/start" in paths
     assert "/api/runtime/local-supabase/stop" in paths
     assert "/api/runtime/operations/{operationId}" in paths
+    get_settings.cache_clear()
 
 
 def test_runtime_status_returns_graceful_blocked_state_without_docker(tmp_path: Path) -> None:

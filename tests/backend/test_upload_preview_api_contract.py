@@ -6,12 +6,15 @@ from backend.app.api.audit import get_audit_repository
 from backend.app.api.upload_preview import get_preview_audit_repository, get_preview_repository
 from backend.app.db.audit_repository import AuditLogFilters, AuditRepository, decode_params_json
 from backend.app.db.preview_repository import PreviewRepository
-from backend.app.main import app
+from backend.app.core.settings import get_settings
+from backend.app.main import app, create_app
 from backend.app.schemas.upload_preview import PreviewDbStatus, PreviewRunStatus
 
 
-def test_upload_preview_routes_are_registered_in_openapi() -> None:
-    client = TestClient(app)
+def test_upload_preview_routes_are_registered_in_openapi(monkeypatch) -> None:
+    monkeypatch.setenv("EWC_API_DOCS_MODE", "enabled")
+    get_settings.cache_clear()
+    client = TestClient(create_app())
 
     response = client.get("/api/openapi.json")
 
@@ -25,6 +28,7 @@ def test_upload_preview_routes_are_registered_in_openapi() -> None:
     assert "get" in paths["/api/upload/preview/{previewRunId}"]
     assert "/api/upload/preview/{previewRunId}/cancel" in paths
     assert "post" in paths["/api/upload/preview/{previewRunId}/cancel"]
+    get_settings.cache_clear()
 
 
 def test_upload_preview_create_rejects_invalid_custom_range_before_work_starts(tmp_path) -> None:

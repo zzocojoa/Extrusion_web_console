@@ -29,7 +29,7 @@ The first runnable scaffold is in place:
 - TanStack Query mock-first Dashboard query.
 - Korean/English i18n baseline with language persistence in `localStorage`.
 - Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
-- Launcher phase 2 with FastAPI static frontend serving, Windows double-click launcher scripts, and per-run local token protection for mutating APIs.
+- Launcher phase 2 with FastAPI static frontend serving, Windows double-click launcher scripts, per-run local token protection for mutating APIs, and operator-mode API docs hardening.
 Legacy upload state import is not implemented in this scaffold.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
@@ -96,9 +96,9 @@ http://127.0.0.1:8000/
 
 Operator mode does not start Vite. FastAPI serves `frontend/dist` and the frontend calls same-origin `/api/*`.
 
-The launcher generates a per-run local API token, passes it to the backend through process environment, and never puts it in the browser URL. FastAPI injects the token into the served app shell at response time, and the frontend keeps it in memory only. Protected writes such as Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, and Local Supabase start/stop send `X-EWC-Local-Token`. Read-only APIs such as `/api/health`, `GET /api/config`, `GET /api/audit`, upload/job status reads, and `/api/docs` remain localhost-readable. `OPTIONS` requests are not blocked by the local token guard; route-level method handling may still return the normal API response. Missing or invalid tokens return `403 local_token_required`, while valid-token requests proceed through the existing API validation. `/api/docs` operator-mode hardening remains a separate follow-up.
+The launcher generates a per-run local API token, passes it to the backend through process environment, and never puts it in the browser URL. FastAPI injects the token into the served app shell at response time, and the frontend keeps it in memory only. Protected writes such as Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, and Local Supabase start/stop send `X-EWC-Local-Token`. Read-only APIs such as `/api/health`, `GET /api/config`, `GET /api/audit`, and upload/job status reads remain token-free. `OPTIONS` requests are not blocked by the local token guard; route-level method handling may still return the normal API response. Missing or invalid tokens return `403 local_token_required`, while valid-token requests proceed through the existing API validation. Operator launcher mode disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes instead of token-gating them.
 
-The local API token must not be stored or copied into URL query strings, `localStorage`, `sessionStorage`, launcher logs, backend logs, audit params, screenshots, generated `.gstack` artifacts, or `frontend/dist`. Development with Vite should use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` when the backend is not serving the token bootstrap. If a developer sets only `EWC_LOCAL_API_TOKEN` on the backend while using the Vite dev shell, mutating API calls can fail because the Vite page does not receive the backend-served bootstrap token.
+The local API token must not be stored or copied into URL query strings, `localStorage`, `sessionStorage`, launcher logs, backend logs, audit params, screenshots, generated `.gstack` artifacts, or `frontend/dist`. Development with Vite should use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` when the backend is not serving the token bootstrap. Dev/test API docs can be retained with `EWC_API_DOCS_MODE=enabled`; this override is for developer and test use only. If a developer sets only `EWC_LOCAL_API_TOKEN` on the backend while using the Vite dev shell, mutating API calls can fail because the Vite page does not receive the backend-served bootstrap token.
 
 If `frontend/dist/index.html` is missing, the launcher stops with a clear message. It does not run `npm run build` by default. Developers can explicitly request a build:
 
@@ -108,7 +108,7 @@ If `frontend/dist/index.html` is missing, the launcher stops with a clear messag
 
 The explicit build path fails clearly if `npm run build` exits non-zero or does not produce `frontend/dist/index.html`.
 
-`-CheckOnly` verifies launcher prerequisites and the local token policy without starting a backend process. It reports token presence/policy status only; it never prints token values.
+`-CheckOnly` verifies launcher prerequisites, local token policy, and operator API docs policy without starting a backend process. It reports presence/policy status only; it never prints token values.
 
 Launcher logs are written under:
 
@@ -382,8 +382,10 @@ Playwright Screenshot QA:
 Launcher Local Token QA:
 
 - PR #28 QA passed targeted backend token/static/launcher tests (`17 passed`), full backend tests from clean cwd (`151 passed`), frontend typecheck/build, `npm run qa:screenshots`, launcher `-CheckOnly`, token HTTP smoke, and `git diff --check`.
-- QA confirmed read-only APIs stay token-free, protected mutating APIs reject missing/invalid tokens with `403`, valid-token Settings save proceeds, `/api/docs` policy is unchanged, and `OPTIONS` is not blocked by the token guard.
+- QA confirmed read-only APIs stay token-free, protected mutating APIs reject missing/invalid tokens with `403`, valid-token Settings save proceeds, and `OPTIONS` is not blocked by the token guard.
 - QA confirmed token values are absent from URL query strings, browser storage, audit params, backend logs, launcher logs, screenshot artifacts, committed `.gstack` content, and committed `frontend/dist` content. Unsafe marker scan count was `0`.
+- PR #30 API docs hardening disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes in operator launcher mode while preserving Swagger/OpenAPI in dev/test docs-enabled mode through `EWC_API_DOCS_MODE=enabled`.
+- PR #30 QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build, `npm run qa:screenshots`, launcher `-CheckOnly`, operator HTTP smoke (`/api/docs`, `/api/openapi.json`, `/api/redoc` all `404`), dev/docs-enabled HTTP smoke (`/api/docs` and `/api/openapi.json` both `200`), and `git diff --check`.
 - Full backend tests should be run from clean cwd when validating this branch because repo cwd `.env` presence intentionally changes Settings/config override behavior.
 
 Browser QA has been run against:

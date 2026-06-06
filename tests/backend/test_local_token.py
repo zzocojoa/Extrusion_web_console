@@ -90,7 +90,8 @@ def test_read_only_and_options_do_not_require_token(tmp_path: Path, monkeypatch)
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/config").status_code == 200
     assert client.get("/api/audit").status_code == 200
-    assert client.get("/api/docs").status_code != 403
+    assert client.get("/api/docs").status_code == 404
+    assert client.get("/api/openapi.json").status_code == 404
     assert client.options("/api/config").status_code != 403
     get_settings.cache_clear()
 

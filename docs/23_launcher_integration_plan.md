@@ -267,7 +267,7 @@ Phase 2 is now implemented on branch `codex/launcher-local-token-impl`:
 - Frontend receives it through runtime HTML bootstrap from the same backend origin.
 - Audit params record token presence only, never token value.
 - Missing/invalid token attempts return `403 local_token_required` and are rate-limited in audit.
-- Read-only APIs and `/api/docs` remain localhost-readable. `OPTIONS` is not blocked by the token guard, although normal route method handling can still return non-success responses.
+- Read-only APIs remain token-free. Operator launcher mode disables `/api/docs`, `/api/openapi.json`, and ReDoc-style documentation routes by route configuration instead of token-gating them. `OPTIONS` is not blocked by the token guard, although normal route method handling can still return non-success responses.
 - Developers using Vite should set `EWC_LOCAL_TOKEN_MODE=dev-disabled` unless they intentionally wire a test token path.
 
 Phase 1 must still reserve the design:
@@ -395,6 +395,18 @@ Validation result for PR #26:
 - Missing frontend `503` smoke: passed.
 - `git diff --check`: passed.
 
+Validation result for API docs operator hardening on PR #30:
+
+- Targeted route/token/OpenAPI backend tests: 33 passed.
+- Full backend tests with clean config/env: 153 passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm run qa:screenshots`: passed.
+- Launcher `-CheckOnly`: passed and reports API docs disabled policy without printing token values.
+- Operator HTTP smoke: `/api/docs`, `/api/openapi.json`, and `/api/redoc` returned `404`; `/api/health`, `/`, `/upload`, `/logs`, and `/settings` returned `200`.
+- Dev/docs-enabled HTTP smoke with `EWC_API_DOCS_MODE=enabled`: `/api/docs`, `/api/openapi.json`, and `/api/health` returned `200`.
+- Generated `.gstack` artifacts, `frontend/dist`, and the untracked operational CSV fixture were not committed.
+
 Validation commands:
 
 ```powershell
@@ -418,6 +430,7 @@ git diff --check
 8. Done: run backend tests, frontend typecheck/build, screenshot QA, and operator mode smoke.
 9. Deferred: dev mode support, if needed, after operator mode is stable.
 10. Done: phase 2 local token enforcement for mutating localhost APIs.
+11. Done: operator-mode API docs hardening with dev/test docs-enabled override.
 
 ## What Already Exists
 
