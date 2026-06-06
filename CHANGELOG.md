@@ -24,6 +24,7 @@ All notable changes to Extrusion Web Console are documented here.
 - Launcher phase 1 now provides Windows operator launcher scripts, `-CheckOnly`, explicit `-BuildFrontend`, and FastAPI serving of the built frontend from `frontend/dist` on `127.0.0.1`.
 - Launcher phase 2 now adds per-run local token protection for mutating localhost APIs through `X-EWC-Local-Token`, with runtime HTML bootstrap, launcher env passing, and explicit dev-disabled mode.
 - API docs hardening now disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes in operator launcher mode while retaining Swagger/OpenAPI for dev/test docs-enabled runs.
+- Windows shortcut packaging v1 now adds maintainer-run Desktop and Start menu shortcut installation for prepared operator folders, with idempotent shortcut updates and no AppData config/state/log deletion.
 - API docs hardening QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build, screenshot QA, launcher `-CheckOnly`, operator HTTP smoke, dev/docs-enabled HTTP smoke, and `git diff --check`.
 - Launcher local token QA passed targeted backend token/static/launcher tests (`17 passed`), full backend tests from clean cwd (`151 passed`), frontend typecheck/build, screenshot QA, launcher `-CheckOnly`, token HTTP smoke, and unsafe marker scans with `0` matches.
 
@@ -37,6 +38,7 @@ All notable changes to Extrusion Web Console are documented here.
 - Launcher `-BuildFrontend` now fails clearly when `npm run build` fails or does not produce `frontend/dist/index.html`; the double-click operator flow still does not build automatically.
 - Mutating API calls for Settings save, Upload Preview, Upload Job start/control, and Local Supabase start/stop now require the launcher-provided local token in operator mode. Read-only APIs remain token-free; API docs are disabled in operator launcher mode rather than token-gated.
 - `OPTIONS` requests are not blocked by the local token guard. Route-level API method handling can still return the normal method response.
+- `launcher/install_shortcuts.ps1` and `.bat` create or refresh `Extrusion Web Console` Desktop/Start menu shortcuts targeting the repo-local launcher in the prepared operator folder.
 
 ### Fixed
 
