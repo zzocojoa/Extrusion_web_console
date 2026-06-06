@@ -1,5 +1,7 @@
 # Windows Shortcut Packaging Plan
 
+Status: implemented on branch `codex/windows-shortcut-packaging-impl` for shortcut installation, idempotency tests, and operator documentation. General installer/MSI/service packaging remains out of scope.
+
 ## Decision Summary
 
 Launcher phase 3 will ship an operator-friendly Windows entry point without changing the local-only architecture. The v1 packaging model is a prepared operator folder plus Windows shortcuts, not an installer, service, or machine-wide deployment.
@@ -106,6 +108,17 @@ The shortcut installer should be idempotent:
 - avoid creating duplicates
 - not modify AppData config, logs, or state
 - not delete the feature branch, package folder, or runtime data
+
+Implementation result:
+
+- `launcher/install_shortcuts.ps1` creates or updates Desktop and Start menu shortcuts named `Extrusion Web Console`.
+- `launcher/install_shortcuts.bat` provides a double-click wrapper for maintainers.
+- The shortcut target is `launcher/start_web_console.bat`.
+- The working directory is the prepared operator folder root.
+- `-CheckOnly` previews target and shortcut paths without writing shortcuts.
+- Test-only directory overrides allow idempotency validation without touching the real Desktop or Start menu.
+- `ShortcutName` is validated before shortcut path construction; empty names, whitespace names, invalid Windows filename characters, path separators, `..` traversal markers, and absolute paths are rejected before any shortcut is written.
+- The script does not delete AppData config, state databases, launcher logs, Docker data, database data, or operational CSV files.
 
 Shortcut uninstall should remove only shortcuts created by this app. It must not delete config, logs, state database files, local Supabase data, or operational CSV files.
 
@@ -249,12 +262,12 @@ Suggested checks:
 
 1. Add shortcut install/update script with idempotent Desktop shortcut creation.
 2. Add optional Start menu shortcut support.
-3. Add shortcut uninstall script that removes only app-created shortcuts.
-4. Add package manifest allowlist and redaction scan.
-5. Add launcher readiness output for package mode.
-6. Add tests for shortcut target, working directory, missing runtime, missing dist, API docs disabled, and token guard.
-7. Update README operator instructions.
-8. Run screenshot and HTTP smoke from the packaged entry point.
+3. Done: add shortcut tests for syntax, expected path generation, idempotency, repo-local target, working directory, and destructive command exclusions.
+4. Done: update README operator instructions.
+5. Deferred: shortcut uninstall script. If added later, it must remove only app-created shortcuts and must not delete AppData config/state/logs.
+6. Deferred: package manifest allowlist and redaction scan.
+7. Deferred: launcher readiness output for package mode.
+8. Deferred: screenshot and HTTP smoke from a fully assembled packaged entry point.
 
 ## Remaining Risks
 
@@ -262,6 +275,18 @@ Suggested checks:
 - Without an installer, shortcut creation and package placement are maintainer responsibilities.
 - Local Supabase readiness remains external to the launcher. This avoids unsafe automated repair but means operators may still need clear setup guidance when Docker or Supabase is unavailable.
 - Code signing and SmartScreen handling are not addressed in v1.
+- `frontend/dist` may be included in an operator package, but remains an ignored/generated artifact and is not committed to git.
+
+## Implementation Validation
+
+PR #32 validation:
+
+- Targeted launcher tests: `17 passed`.
+- Shortcut installer `-CheckOnly`: passed.
+- Frontend typecheck: passed.
+- Frontend build: passed.
+- `git diff --check`: passed.
+- Path-safety blocker fix: unsafe `ShortcutName` inputs are rejected, including empty or whitespace names, invalid filename characters, path separators, `..` traversal markers, and absolute paths.
 
 ## Merge Readiness For Implementation
 

@@ -68,7 +68,7 @@ Local Supabase, WSL, Docker, and Grafana are not required for the mock Dashboard
 
 ## Operator Launcher
 
-Launcher phase 2 lets an operator run the built web console from one localhost backend origin with a per-run local token protecting mutating APIs.
+Launcher phase 3 lets an operator run the built web console from one localhost backend origin with a per-run local token protecting mutating APIs and optional Windows Desktop/Start menu shortcuts.
 
 First build the frontend once from `frontend/`:
 
@@ -87,6 +87,26 @@ Or run from PowerShell:
 ```powershell
 .\launcher\start_web_console.ps1
 ```
+
+Maintainers can install or refresh Windows shortcuts from the prepared operator folder:
+
+```powershell
+.\launcher\install_shortcuts.ps1
+```
+
+This creates or updates one Desktop shortcut and one Start menu shortcut named `Extrusion Web Console`. Re-running the script is idempotent: it updates the existing shortcuts instead of creating duplicates. The shortcuts target the repo-local `launcher\start_web_console.bat` and use the prepared folder as the working directory. `ShortcutName` is validated as a file name only: empty names, path separators, `..` traversal markers, Windows invalid filename characters, and absolute paths are rejected before any shortcut is written. A batch wrapper is also available:
+
+```text
+launcher\install_shortcuts.bat
+```
+
+Use `-CheckOnly` to preview the shortcut paths without writing shortcuts:
+
+```powershell
+.\launcher\install_shortcuts.ps1 -CheckOnly
+```
+
+The shortcut installer does not delete AppData config, state databases, launcher logs, Docker data, database data, or operational CSV files.
 
 The launcher starts the backend on `127.0.0.1:8000`, waits for `/api/health`, then opens:
 
@@ -119,6 +139,8 @@ Launcher logs are written under:
 The launcher reuses an already healthy Extrusion Web Console backend on the selected port. If another process owns the port, it stops and reports the conflict; it does not kill unknown processes.
 
 Launcher phase 2 does not run local Supabase bootstrap, reset, cleanup, prune, Docker create/delete, or volume operations. Local Supabase status/start/stop remains inside the web console runtime API and existing command allowlist policy.
+
+Prepared operator folders should include `frontend/dist` and a target-PC prepared `.venv\Scripts\python.exe`. Node/npm are not required for normal operator launch. The `.venv` may be tied to the target PC and Python version, so dependency setup remains a maintainer responsibility before handoff.
 
 ## Backend Development
 
@@ -386,6 +408,7 @@ Launcher Local Token QA:
 - QA confirmed token values are absent from URL query strings, browser storage, audit params, backend logs, launcher logs, screenshot artifacts, committed `.gstack` content, and committed `frontend/dist` content. Unsafe marker scan count was `0`.
 - PR #30 API docs hardening disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes in operator launcher mode while preserving Swagger/OpenAPI in dev/test docs-enabled mode through `EWC_API_DOCS_MODE=enabled`.
 - PR #30 QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build, `npm run qa:screenshots`, launcher `-CheckOnly`, operator HTTP smoke (`/api/docs`, `/api/openapi.json`, `/api/redoc` all `404`), dev/docs-enabled HTTP smoke (`/api/docs` and `/api/openapi.json` both `200`), and `git diff --check`.
+- PR #32 Windows shortcut packaging adds `launcher\install_shortcuts.ps1` and `.bat`, passed targeted launcher tests (`17 passed`), shortcut `-CheckOnly`, frontend typecheck/build, and `git diff --check`; path-safety review confirmed unsafe `ShortcutName` inputs are rejected before writing shortcuts.
 - Full backend tests should be run from clean cwd when validating this branch because repo cwd `.env` presence intentionally changes Settings/config override behavior.
 
 Browser QA has been run against:
