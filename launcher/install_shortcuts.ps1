@@ -28,6 +28,31 @@ function Write-ShortcutStatus {
   Write-Host "[shortcut] $Message"
 }
 
+function Assert-SafeShortcutName {
+  param([string]$Name)
+
+  if ([string]::IsNullOrWhiteSpace($Name)) {
+    Write-Error "ShortcutName must not be empty."
+    exit 1
+  }
+
+  $invalidChars = [System.IO.Path]::GetInvalidFileNameChars()
+  if ($Name.IndexOfAny($invalidChars) -ge 0) {
+    Write-Error "ShortcutName must be a file name, not a path."
+    exit 1
+  }
+
+  if ($Name -eq "." -or $Name -eq ".." -or $Name.Contains("..")) {
+    Write-Error "ShortcutName must not contain path traversal markers."
+    exit 1
+  }
+
+  if ([System.IO.Path]::IsPathRooted($Name)) {
+    Write-Error "ShortcutName must be a file name, not an absolute path."
+    exit 1
+  }
+}
+
 function Set-Shortcut {
   param(
     [Parameter(Mandatory = $true)]
@@ -56,6 +81,8 @@ function Set-Shortcut {
 
 $repoRoot = Get-RepoRoot
 $targetPath = Join-Path $repoRoot "launcher\start_web_console.bat"
+
+Assert-SafeShortcutName -Name $ShortcutName
 
 if (-not (Test-Path -LiteralPath $targetPath)) {
   Write-Error "Shortcut target is missing: launcher\start_web_console.bat"

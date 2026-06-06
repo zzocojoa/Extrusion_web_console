@@ -125,6 +125,9 @@ def test_shortcut_script_keeps_update_policy_safe() -> None:
     assert "CreateShortcut" in script
     assert "WorkingDirectory = $WorkingDirectory" in script
     assert "CheckOnly" in script
+    assert "Assert-SafeShortcutName" in script
+    assert "GetInvalidFileNameChars" in script
+    assert "IsPathRooted" in script
     assert "does not delete AppData config, state, logs" in script
     assert "Docker data" in script
     assert "operational CSV files" in script
@@ -247,3 +250,53 @@ def test_shortcut_install_is_idempotent_and_targets_repo_launcher(tmp_path: Path
     lines = [line.strip() for line in inspected.stdout.splitlines() if line.strip()]
     assert Path(lines[0]) == expected_target
     assert Path(lines[1]) == REPO_ROOT
+
+
+@pytest.mark.parametrize(
+    "unsafe_name",
+    [
+        "",
+        "   ",
+        "..",
+        r"..\outside",
+        "../outside",
+        "bad/name",
+        r"bad\name",
+        r"C:\outside",
+    ],
+)
+def test_shortcut_install_rejects_unsafe_shortcut_names(
+    tmp_path: Path, unsafe_name: str
+) -> None:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    desktop = tmp_path / "desktop"
+    start_menu = tmp_path / "programs"
+    outside = tmp_path / "outside"
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(SHORTCUT_PS1),
+            "-ShortcutName",
+            unsafe_name,
+            "-DesktopDirectory",
+            str(desktop),
+            "-StartMenuDirectory",
+            str(start_menu),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    combined_output = f"{result.stdout}\n{result.stderr}"
+    assert "ShortcutName must" in combined_output
+    assert not list(tmp_path.rglob("*.lnk"))
+    assert not outside.exists()
