@@ -15,8 +15,9 @@ All notable changes to Extrusion Web Console are documented here.
 - Logs now has separate Job Logs and Audit Logs tabs with Audit table filters, pagination, loading/empty/error states, and Korean/English UI text.
 - Backend now exposes `GET /api/audit` with pagination, filter echo, sort allowlist, sanitized `errorMessage` values, and decoded redacted params.
 - SQLite audit storage now installs append-only triggers `audit_log_no_update` and `audit_log_no_delete`.
-- Backend now exposes `GET /api/config` and `PUT /api/config` for safe config reads and saves while the Settings page remains read-only.
+- Settings now has a save UI connected to `GET /api/config` and `PUT /api/config`, with editable fields, dirty state, Save/Reset controls, validation feedback, save status, and hidden secret replacement behavior.
 - Settings saves now write `settings.save` audit rows for success, failure, malformed request validation, and env override blocked paths.
+- Env/process and repo `.env` overridden Settings fields are disabled/read-only and backend-blocked from config JSON writes.
 - Upload Preview now writes `upload.preview` audit rows for success, DB unreachable, missing source, malformed request validation, and active preview conflict paths.
 - Upload Job API responses, file rows, job events, and SSE replay now expose canonical `acceptedRows` for Edge/Supabase upsert-accepted row counts.
 - Frontend now includes Playwright screenshot QA through `npm run qa:screenshots`, covering Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings in mock mode without Docker, local Supabase, secrets, or operational CSV fixtures.

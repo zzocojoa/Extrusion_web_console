@@ -21,8 +21,8 @@ The first runnable scaffold is in place:
 - Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, SSE event replay, and canonical `acceptedRows` counts for Edge/Supabase upsert-accepted rows.
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
 - Dashboard runtime module connected to the runtime API in API mode.
-- Settings runtime section showing read-only local Supabase config values and their source.
-- Config API with `GET /api/config` and `PUT /api/config`; Settings UI is still read-only and does not expose a save form yet.
+- Settings save UI connected to `GET /api/config` and `PUT /api/config`, with editable config fields, dirty state, Save/Reset controls, validation feedback, and save status.
+- Env/process and repo `.env` override fields are disabled/read-only in Settings and blocked by the backend from config JSON writes.
 - Settings saves persist to `%APPDATA%\ExtrusionWebConsole\config.json`, are loaded by new `Settings` instances, and write `settings.save` success/failure/blocked audit rows.
 - Logs page with separate Job Logs and Audit Logs tabs.
 - Audit Logs API/UI with redacted, paginated, filtered, append-only audit rows.
@@ -132,7 +132,9 @@ Invoke-RestMethod -Method Put `
 Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=settings.save&limit=20"
 ```
 
-`PUT /api/config` accepts only known config keys. It rejects environment-overridden keys, writes blocked audit rows for those attempts, and writes failure audit rows for validation failures including malformed JSON bodies. Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason`; they do not store raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies. Config writes use a per-config-file lock, a unique temp filename, and atomic replace. Settings precedence is built-in defaults, then config JSON, then repo `.env` or launcher env, then process environment.
+`PUT /api/config` accepts only known config keys. It rejects environment-overridden keys, including repo `.env` key-presence overrides, writes blocked audit rows for those attempts, and writes failure audit rows for validation failures including malformed JSON bodies. Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason`; they do not store raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies. Config writes use a per-config-file lock, a unique temp filename, and atomic replace. Settings precedence is built-in defaults, then config JSON, then repo `.env` or launcher env, then process environment.
+
+The Settings page uses the config API in `VITE_API_MODE="api"`. Non-secret editable fields are sent only when changed. Secret fields display only an empty replacement input and hidden-value status; existing secret raw values are never rendered. Empty or unchanged secret inputs are excluded from the save payload, and a secret key is included only when the operator types a replacement value.
 
 Runtime API smoke check. Run the start/stop calls only when no upload job or preview run is active:
 
@@ -296,7 +298,9 @@ Settings Save Audit QA:
 
 - PR #8 QA passed targeted config/audit backend tests, full backend tests, frontend typecheck/build, `git diff --check`, and direct API smoke for `GET /api/config`, `PUT /api/config`, and `/api/audit?action=settings.save`.
 - QA confirmed success, failure, and blocked `settings.save` audit rows, malformed JSON failure audit, env override blocking, config JSON loading into new `Settings`, env/process precedence over config JSON, and non-exposure of raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies.
-- Remaining risk: Settings page is still read-only and has no save UI. Vite proxy `/api/config` was not fully verified against the PR head during QA because an older uvicorn process already occupied port `8000`; direct PR API smoke covered the endpoint behavior instead.
+- PR #23 adds the Settings save UI and passed frontend typecheck/build, `npm run qa:screenshots`, config API targeted tests (`13 passed`), full backend tests (`134 passed`), `git diff --check`, and Settings API-mode smoke.
+- QA confirmed editable fields, env/process override disabled state, repo `.env` override backend blocking, dirty state, Save/Reset behavior, validation feedback, save success/failure status, `/api/audit?action=settings.save` queryability, and secret placeholder behavior.
+- QA confirmed raw secret values, DB URLs, tokens, anon keys, and service role values are not rendered in the Settings UI, save payloads, audit params, or screenshot QA artifacts. Clean-cwd backend tests remain intentional because repo `.env` presence changes override behavior by design.
 
 Upload Preview Audit QA:
 

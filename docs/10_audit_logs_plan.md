@@ -22,13 +22,15 @@ Implementation result on branch `codex/audit-logs-ui-impl`:
 
 Follow-up implementation on branch `codex/settings-save-audit-writer`:
 
-- Added `GET /api/config` and `PUT /api/config` while keeping the Settings page read-only.
+- Added `GET /api/config` and `PUT /api/config`, then connected the Settings page save UI to those endpoints on PR #23.
 - Added `settings.save` success/failure/blocked audit writer coverage for config saves, validation failures, malformed JSON/body failures, and env override blocked attempts.
+- Settings save UI now sends only changed editable values. Env/process and repo `.env` overridden fields are disabled/read-only and backend-blocked. Secret fields render only hidden status plus an empty replacement input; empty or unchanged secret fields are excluded from save payloads, and new secret values are included only when typed.
 - Stored audit params as safe metadata (`savedSettings`, `rejectedSettings`, `validationReason`, `configPathConfigured`) instead of raw config values.
 - Kept secret/config raw values, DB URLs, tokens, anon keys, service role values, and malformed request bodies out of API responses and audit params.
 - Added config JSON as a `Settings` source below repo `.env` / launcher env and process environment, so saved values load into new `Settings` instances while env/process overrides still win.
 - Hardened config writes with a per-config-file lock, unique temp filename, and atomic replace.
-- QA passed targeted/full backend tests, frontend typecheck/build, `git diff --check`, direct config API smoke, and Settings/Dashboard/Upload/Logs browser smoke. Vite proxy `/api/config` was not fully verified against the PR head because an older uvicorn process occupied port `8000`; direct PR API smoke covered endpoint behavior.
+- PR #8 QA passed targeted/full backend tests, frontend typecheck/build, `git diff --check`, direct config API smoke, and Settings/Dashboard/Upload/Logs browser smoke. Vite proxy `/api/config` was not fully verified against the PR head because an older uvicorn process occupied port `8000`; direct PR API smoke covered endpoint behavior.
+- PR #23 QA passed frontend typecheck/build, `npm run qa:screenshots`, config API targeted tests (`13 passed`), full backend tests (`134 passed`), `git diff --check`, and Settings API-mode smoke. QA confirmed `/api/audit?action=settings.save` queryability, success/failure/blocked audit coverage, override blocking, validation feedback, and non-exposure of raw secret values, DB URLs, tokens, anon keys, and service role values. Clean-cwd backend tests remain intentional because repo `.env` presence changes override behavior by design.
 
 Follow-up implementation on branch `codex/upload-preview-audit-writer`:
 

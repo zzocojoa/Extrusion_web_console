@@ -47,6 +47,27 @@ _CONFIG_FILE_LOCKS: dict[Path, threading.Lock] = {}
 _CONFIG_FILE_LOCKS_GUARD = threading.Lock()
 
 
+def _dotenv_env_keys() -> set[str]:
+    dotenv_path = Path(".env")
+    if not dotenv_path.exists():
+        return set()
+    keys: set[str] = set()
+    for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        if candidate.startswith("export "):
+            candidate = candidate.removeprefix("export ").strip()
+        key, separator, _value = candidate.partition("=")
+        if separator:
+            keys.add(key.strip())
+    return keys
+
+
+def _has_env_override(env_key: str) -> bool:
+    return env_key in os.environ or env_key in _dotenv_env_keys()
+
+
 class ConfigSaveError(Exception):
     def __init__(self, *, status_code: int, error_code: str, message: str, keys: list[str]) -> None:
         super().__init__(message)
@@ -90,7 +111,7 @@ class ConfigService:
         saved = self._read_config_file()
         items: list[ConfigItemDto] = []
         for field in CONFIG_FIELDS:
-            env_overridden = field.env_key in os.environ
+            env_overridden = _has_env_override(field.env_key)
             saved_has_key = field.key in saved
             source = "env" if env_overridden else "config" if saved_has_key else "default"
             raw_value = getattr(self.settings, field.settings_attr)
@@ -141,7 +162,7 @@ class ConfigService:
     def save_config(self, values: dict[str, Any], *, actor: str) -> ConfigSaveResponse:
         try:
             normalized = self._validate_values(values)
-            blocked_keys = [key for key in normalized if FIELDS_BY_KEY[key].env_key in os.environ]
+            blocked_keys = [key for key in normalized if _has_env_override(FIELDS_BY_KEY[key].env_key)]
             if blocked_keys:
                 raise ConfigSaveError(
                     status_code=409,

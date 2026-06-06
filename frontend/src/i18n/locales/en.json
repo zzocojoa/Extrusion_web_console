@@ -122,9 +122,77 @@
     }
   },
   "settings": {
+    "editor": {
+      "title": "Save Settings",
+      "subtitle": "Edit only values that can be written to config JSON. Environment-overridden values are read-only.",
+      "loading": "Loading settings...",
+      "error": "Settings could not be loaded.",
+      "apiModeRequired": "Mock mode does not save settings. Real saves run in API mode.",
+      "configFile": "Config file",
+      "configFileHidden": "Local path hidden",
+      "mockMode": "mock mode",
+      "envOverride": "{{envKey}} override",
+      "secretHidden": "value hidden",
+      "secretPlaceholder": "Saved only when replaced"
+    },
+    "sections": {
+      "folders": {
+        "title": "Folders",
+        "subtitle": "Local source locations used by preview and upload."
+      },
+      "connection": {
+        "title": "Connection",
+        "subtitle": "Local Supabase, Edge, and Grafana connection settings."
+      },
+      "runtime": {
+        "title": "Runtime",
+        "subtitle": "Settings used to inspect and control the existing Local Supabase stack."
+      },
+      "interface": {
+        "title": "Interface",
+        "subtitle": "Operator display settings."
+      }
+    },
+    "fields": {
+      "plcDataDir": "PLC folder",
+      "temperatureDataDir": "Temperature folder",
+      "supabaseDbUrl": "Supabase DB URL",
+      "supabaseUrl": "Supabase API URL",
+      "supabaseAnonKey": "Supabase anon key",
+      "supabaseEdgeUrl": "Supabase Edge URL",
+      "grafanaUrl": "Grafana URL",
+      "localSupabaseProjectPath": "Supabase project path",
+      "localSupabaseWslPath": "WSL path",
+      "localSupabaseProjectId": "Supabase project ID",
+      "localSupabaseApiPort": "API port",
+      "localSupabaseDbPort": "DB port",
+      "localSupabaseStudioPort": "Studio port",
+      "runtimeCommandTimeoutSeconds": "Command timeout",
+      "runtimeReadinessTimeoutSeconds": "Readiness timeout"
+    },
+    "save": {
+      "button": "Save",
+      "saving": "Saving",
+      "reset": "Reset",
+      "clean": "No unsaved changes.",
+      "dirty": "{{count}} changes are ready to save.",
+      "success": "Saved {{count}} settings and recorded a settings.save audit row.",
+      "failure": "Settings save failed.",
+      "validationSummary": "Check the highlighted values.",
+      "integerError": "Enter an integer from 1 to 65535.",
+      "reason": {
+        "config_env_override": "Environment-overridden values cannot be saved: {{keys}}",
+        "config_validation_failed": "One or more values failed validation: {{keys}}",
+        "config_request_validation_failed": "The save request shape is invalid.",
+        "config_empty_update": "There are no changed values to save.",
+        "config_unknown_key": "Unknown setting key: {{keys}}",
+        "config_file_invalid": "The local config file is not valid JSON.",
+        "config_write_failed": "The local config file could not be written."
+      }
+    },
     "runtime": {
       "title": "Local Runtime Settings",
-      "subtitle": "Read-only configuration used for local Supabase control.",
+      "subtitle": "Configuration used for local Supabase control.",
       "error": "Runtime settings could not be loaded.",
       "unavailable": "Runtime config is unavailable until the backend runtime API is reachable.",
       "configLabel": "Runtime configuration values",
@@ -134,7 +202,9 @@
     },
     "source": {
       "default": "Default",
-      "env": "Environment"
+      "config": "Config file",
+      "env": "Environment",
+      "process": "Process environment"
     }
   },
   "upload": {

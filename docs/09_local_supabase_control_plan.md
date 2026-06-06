@@ -747,7 +747,7 @@ Implemented on branch `codex/local-supabase-control-impl`:
 - Added audit rows for manual start/stop success/failure/blocked paths while leaving passive status polling success out of `audit_log`.
 - Added readiness checks for Docker, WSL, Supabase CLI, required containers, API `54321`, DB `25432`, Studio `54323`, Edge Function unauthenticated `POST {}`, and Grafana status/link.
 - Connected the Dashboard runtime panel to the runtime API in API mode with Start/Stop controls.
-- Replaced the Settings placeholder with a read-only runtime config/source section.
+- Replaced the Settings placeholder with a runtime config/source editor connected to `GET /api/config` and `PUT /api/config`.
 - Added Korean/English runtime and settings UI text.
 
 Verification completed during implementation:
@@ -760,4 +760,4 @@ Remaining risks:
 
 - Operator-PC E2E for actual Docker Desktop/WSL/local Supabase start-stop needs to be run before merge confidence is final.
 - Runtime command output is captured only for operation events/audit summaries; future Logs/Audit pages should expose it with redaction.
-- Settings remains read-only. Config write/save workflow is still out of scope.
+- Settings save UI is implemented for config JSON writes. Env/process and repo `.env` overridden values remain visibly read-only and backend-blocked from save attempts; local Supabase runtime command policy remains unchanged.

@@ -155,7 +155,7 @@ Implementation status on PR #8:
 - Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, `validationReason`, and `configPathConfigured`, not raw config values.
 - Secret/config raw values, DB URLs, tokens, anon keys, service role values, and malformed request bodies must not appear in responses, audit params, or logs.
 - Config writes use a per-config-file in-process lock, unique temp filename, and atomic replace.
-- Settings UI remains read-only; save UI integration is still future work.
+- Settings UI save integration is implemented. In API mode it loads `GET /api/config`, sends changed editable values through `PUT /api/config`, disables env/process and repo `.env` overridden fields, excludes empty/unchanged secret placeholder inputs from payloads, includes a secret key only when the operator types a replacement value, shows validation/save status, and refetches after save.
 
 **Local Supabase**
 Backend가 고정 allowlist command만 실행한다.
