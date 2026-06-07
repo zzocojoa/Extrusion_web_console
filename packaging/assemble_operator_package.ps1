@@ -56,6 +56,23 @@ function Resolve-RepoRelativePath {
   return $fullPath
 }
 
+function Test-PathInsideOrEqual {
+  param(
+    [string]$BasePath,
+    [string]$CandidatePath
+  )
+
+  $baseFullPath = [System.IO.Path]::GetFullPath($BasePath)
+  $candidateFullPath = [System.IO.Path]::GetFullPath($CandidatePath)
+  if ($candidateFullPath.Equals($baseFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  if (-not $baseFullPath.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+    $baseFullPath = $baseFullPath + [System.IO.Path]::DirectorySeparatorChar
+  }
+  return $candidateFullPath.StartsWith($baseFullPath, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Test-RuntimeCachePath {
   param([string]$Path)
 
@@ -282,6 +299,10 @@ if ([System.IO.Path]::IsPathRooted($PackageLabel) -or $PackageLabel.Contains("..
 }
 
 $outputRootFull = [System.IO.Path]::GetFullPath($OutputRoot)
+if (Test-PathInsideOrEqual -BasePath $repoRoot -CandidatePath $outputRootFull) {
+  throw "OutputRoot must be outside the repository root to avoid packaging generated output into source control."
+}
+
 $packageContainer = Join-Path $outputRootFull $PackageLabel
 $packageRoot = Join-Path $packageContainer $manifest.packageRoot
 
@@ -374,11 +395,14 @@ if ($CreateZip) {
     throw "Zip or checksum output already exists for package label: $PackageLabel"
   }
 
+  $buildInfo.zipCreated = $true
+  $buildInfo.zipSha256 = "see-adjacent-sha256-file"
+  $buildInfo | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $buildInfoPath -Encoding UTF8
+
   Compress-Archive -LiteralPath $packageRoot -DestinationPath $zipPath -CompressionLevel Optimal
   $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
   "$hash  $(Split-Path -Leaf $zipPath)" | Set-Content -LiteralPath $checksumPath -Encoding ASCII
 
-  $buildInfo.zipCreated = $true
   $buildInfo.zipSha256 = $hash
   $buildInfo | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $buildInfoPath -Encoding UTF8
 

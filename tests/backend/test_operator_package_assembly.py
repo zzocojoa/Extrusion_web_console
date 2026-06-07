@@ -234,6 +234,19 @@ def test_assembly_fails_when_frontend_dist_is_missing(tmp_path: Path) -> None:
     assert not (output_root / "missing-dist").exists()
 
 
+def test_assembly_rejects_output_root_inside_repo(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _copy_packaging_files(repo_root)
+    _create_minimal_repo(repo_root)
+
+    result = _run_assembly(repo_root, repo_root / "package-output", "-PackageLabel", "inside-repo")
+
+    assert result.returncode != 0
+    assert "OutputRoot must be outside the repository root" in f"{result.stdout}\n{result.stderr}"
+    assert not (repo_root / "package-output").exists()
+
+
 def test_assembly_create_zip_records_checksum(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     output_root = tmp_path / "out"
@@ -254,9 +267,14 @@ def test_assembly_create_zip_records_checksum(tmp_path: Path) -> None:
 
     with ZipFile(zip_path) as archive:
         names = archive.namelist()
+        zipped_build_info = json.loads(
+            archive.read("ExtrusionWebConsole/package-build-info.json").decode("utf-8-sig")
+        )
     assert "ExtrusionWebConsole/frontend/dist/index.html" in names
     assert not any(name.startswith("ExtrusionWebConsole/tests/") for name in names)
     assert not any(name.endswith(".csv") for name in names)
+    assert zipped_build_info["zipCreated"] is True
+    assert zipped_build_info["zipSha256"] == "see-adjacent-sha256-file"
 
     build_info = json.loads(
         (output_root / "zip-package" / "ExtrusionWebConsole" / "package-build-info.json").read_text(
