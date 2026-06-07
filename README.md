@@ -162,6 +162,8 @@ Zip handoff is optional:
 
 When `-CreateZip` is used, a SHA-256 checksum file is written next to the zip. The package folder metadata records the actual zip hash after creation; the metadata inside the zip marks `zipCreated=true` and points to the adjacent checksum file. The script does not install shortcuts, delete existing package folders, delete AppData config/state/logs, run database cleanup, or run Docker cleanup.
 
+For operator handoff, follow `docs/32_operator_package_handoff_runbook.md` for zip/checksum verification, extraction, shortcut install, first launch, Settings checks, log collection, rollback, and support escalation.
+
 ## Backend Development
 
 From the repository root:
