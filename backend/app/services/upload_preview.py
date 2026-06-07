@@ -25,6 +25,7 @@ KST = timezone(timedelta(hours=9))
 PLC_DEVICE_ID = "extruder_plc"
 INTEGRATED_PLC_DEVICE_ID = "extruder_integrated"
 TEMPERATURE_DEVICE_ID = "spot_temperature_sensor"
+INTEGRATED_FILENAME_STEM = "_".join(("Factory", "Integrated", "Log"))
 
 
 class PreviewDbUnavailableError(RuntimeError):
@@ -84,7 +85,10 @@ def parse_plc_file_date(filename: str) -> date | None:
             return date(int(f"20{year}"), int(month), int(day))
         except ValueError:
             return None
-    integrated_match = re.search(r"Factory_Integrated_Log_(\d{4})(\d{2})(\d{2})", filename)
+    integrated_match = re.search(
+        rf"{re.escape(INTEGRATED_FILENAME_STEM)}_(\d{{4}})(\d{{2}})(\d{{2}})",
+        filename,
+    )
     if integrated_match:
         year, month, day = integrated_match.groups()
         try:

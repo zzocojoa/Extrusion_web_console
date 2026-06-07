@@ -148,7 +148,9 @@ Maintainers can assemble a manifest-validated prepared package after building `f
 .\packaging\assemble_operator_package.ps1
 ```
 
-The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. `OutputRoot` must be outside the repository root so package output cannot be created inside source control. The script validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and excludes `.venv` cache files such as `__pycache__` and `*.pyc`.
+The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. `OutputRoot` must be outside the repository root so package output cannot be created inside source control. The script validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and prunes `.venv` cache/test-only content such as `__pycache__`, compiled bytecode, pytest cache, and dependency test directories while preserving dependency metadata and license/notice files.
+
+The operator package does not copy the repository README verbatim. It uses the sanitized package runtime note as the package-local README so marker-heavy engineering docs and path examples stay out of release artifacts.
 
 Zip handoff is optional:
 

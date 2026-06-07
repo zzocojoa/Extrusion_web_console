@@ -40,7 +40,7 @@
       "required": true
     },
     {
-      "source": "README.md",
+      "source": "docs/operator_package_runtime_note.md",
       "target": "README.md",
       "type": "file",
       "required": true
@@ -58,32 +58,8 @@
       "required": true
     },
     {
-      "source": "docs/23_launcher_integration_plan.md",
-      "target": "docs/23_launcher_integration_plan.md",
-      "type": "file",
-      "required": true
-    },
-    {
-      "source": "docs/24_launcher_local_token_phase2_plan.md",
-      "target": "docs/24_launcher_local_token_phase2_plan.md",
-      "type": "file",
-      "required": true
-    },
-    {
-      "source": "docs/26_windows_shortcut_packaging_plan.md",
-      "target": "docs/26_windows_shortcut_packaging_plan.md",
-      "type": "file",
-      "required": true
-    },
-    {
-      "source": "docs/27_operator_package_smoke.md",
-      "target": "docs/27_operator_package_smoke.md",
-      "type": "file",
-      "required": true
-    },
-    {
-      "source": "docs/28_operator_package_manifest_plan.md",
-      "target": "docs/28_operator_package_manifest_plan.md",
+      "source": "docs/operator_package_runtime_note.md",
+      "target": "docs/operator_package_runtime_note.md",
       "type": "file",
       "required": true
     },
@@ -96,7 +72,22 @@
       "exclude": [
         "__pycache__",
         "*.pyc",
-        "*.pyo"
+        "*.pyo",
+        ".pytest_cache",
+        "test",
+        "tests",
+        "testing",
+        "testsuite"
+      ],
+      "preserveMetadata": [
+        "*.dist-info",
+        "METADATA",
+        "RECORD",
+        "WHEEL",
+        "entry_points.txt",
+        "LICENSE*",
+        "NOTICE*",
+        "COPYING*"
       ]
     }
   ],
@@ -135,12 +126,16 @@
   "redactionChecks": [
     "database-url-marker",
     "authorization-bearer-marker",
+    "credential-like-marker",
     "jwt-like-marker",
     "service-role-assignment-marker",
     "anon-key-assignment-marker",
-    "timestamp-style-csv-marker"
+    "timestamp-style-csv-marker",
+    "operational-filename-family-marker",
+    "windows-absolute-path-marker"
   ],
   "smokeChecks": [
+    "packaged .venv python imports backend.app.main",
     "launcher/start_web_console.ps1 -CheckOnly",
     "launcher/install_shortcuts.ps1 -CheckOnly",
     "GET /",

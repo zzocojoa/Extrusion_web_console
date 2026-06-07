@@ -44,6 +44,7 @@ def _create_minimal_repo(repo_root: Path, *, include_venv: bool = True, include_
 
     docs = repo_root / "docs"
     docs.mkdir()
+    (docs / "operator_package_runtime_note.md").write_text("# Operator package\n", encoding="utf-8")
     for name in [
         "23_launcher_integration_plan.md",
         "24_launcher_local_token_phase2_plan.md",
@@ -65,6 +66,18 @@ def _create_minimal_repo(repo_root: Path, *, include_venv: bool = True, include_
         cache.mkdir(parents=True)
         (cache / "module.cpython-311.pyc").write_bytes(b"compiled")
         (cache.parent / "module.pyo").write_bytes(b"optimized")
+        package_root = repo_root / ".venv" / "Lib" / "site-packages" / "demo"
+        (package_root / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+        for test_dir in ["test", "tests", "testing", "testsuite"]:
+            (package_root / test_dir).mkdir(parents=True)
+            (package_root / test_dir / "case.py").write_text("assert True\n", encoding="utf-8")
+        pytest_cache = repo_root / ".venv" / "Lib" / "site-packages" / ".pytest_cache" / "v"
+        pytest_cache.mkdir(parents=True)
+        (pytest_cache / "cache").write_text("cache\n", encoding="utf-8")
+        metadata = repo_root / ".venv" / "Lib" / "site-packages" / "demo-1.0.0.dist-info"
+        metadata.mkdir()
+        for name in ["METADATA", "RECORD", "WHEEL", "entry_points.txt", "LICENSE", "NOTICE", "COPYING"]:
+            (metadata / name).write_text(f"{name}\n", encoding="utf-8")
 
     for denylisted in [".git", ".gstack", ".agents", ".codex", ".bkit-codex", ".pytest_cache"]:
         (repo_root / denylisted).mkdir()
@@ -111,9 +124,15 @@ def test_manifest_json_contract_is_valid() -> None:
     assert "frontend/dist/index.html" in manifest["requiredPaths"]
     assert ".venv/Scripts/python.exe" in manifest["operatorReadyChecks"]
     assert any(entry["source"] == ".venv" for entry in manifest["includeAllowlist"])
+    assert any(entry["source"] == "docs/operator_package_runtime_note.md" for entry in manifest["includeAllowlist"])
+    assert not any(entry["source"] == "README.md" for entry in manifest["includeAllowlist"])
+    assert not any(entry["source"] == "docs/27_operator_package_smoke.md" for entry in manifest["includeAllowlist"])
     assert ".git" in manifest["excludeDenylist"]
     assert "tests" in manifest["excludeDenylist"]
     assert "*.csv" in manifest["excludeDenylist"]
+    assert "windows-absolute-path-marker" in manifest["redactionChecks"]
+    assert "operational-filename-family-marker" in manifest["redactionChecks"]
+    assert "credential-like-marker" in manifest["redactionChecks"]
     assert "X-EWC-Local-Token" not in MANIFEST_PATH.read_text(encoding="utf-8")
 
 
@@ -178,6 +197,20 @@ def test_assembly_copies_allowlist_and_rejects_denylist(tmp_path: Path) -> None:
     assert not list(package_root.rglob("*.pyc"))
     assert not list(package_root.rglob("*.pyo"))
     assert not list(package_root.rglob("__pycache__"))
+    assert not list((package_root / ".venv").rglob(".pytest_cache"))
+    assert not any(
+        part.lower() in {"test", "tests", "testing", "testsuite"}
+        for path in (package_root / ".venv").rglob("*")
+        for part in path.relative_to(package_root / ".venv").parts
+    )
+    assert (package_root / ".venv" / "Lib" / "site-packages" / "demo" / "__init__.py").exists()
+    metadata = package_root / ".venv" / "Lib" / "site-packages" / "demo-1.0.0.dist-info"
+    assert (metadata / "METADATA").exists()
+    assert (metadata / "RECORD").exists()
+    assert (metadata / "LICENSE").exists()
+    assert (package_root / "README.md").read_text(encoding="utf-8") == "# Operator package\n"
+    assert (package_root / "docs" / "operator_package_runtime_note.md").exists()
+    assert not (package_root / "docs" / "27_operator_package_smoke.md").exists()
 
     build_info = json.loads((package_root / "package-build-info.json").read_text(encoding="utf-8-sig"))
     assert build_info["runtimeMode"] == "operator-ready"
@@ -283,6 +316,29 @@ def test_assembly_create_zip_records_checksum(tmp_path: Path) -> None:
     )
     assert build_info["zipCreated"] is True
     assert build_info["zipSha256"] == checksum.split()[0]
+
+
+def test_assembly_redaction_blocks_release_marker_classes(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_root = tmp_path / "out"
+    repo_root.mkdir()
+    _copy_packaging_files(repo_root)
+    _create_minimal_repo(repo_root)
+    marker_text = "\n".join(
+        [
+            "credential" + ": " + "example-value",
+            "Factory" + "_Example_Log",
+            "C:" + "\\example\\operator\\data",
+        ]
+    )
+    (repo_root / "docs" / "operator_package_runtime_note.md").write_text(marker_text, encoding="utf-8")
+
+    result = _run_assembly(repo_root, output_root, "-PackageLabel", "redaction-block")
+
+    assert result.returncode != 0
+    output = f"{result.stdout}\n{result.stderr}"
+    assert "Package redaction validation failed" in output
+    assert "credential-like-marker" in output
 
 
 def test_assembly_default_output_is_repeatable_without_deleting_existing_output(tmp_path: Path) -> None:
