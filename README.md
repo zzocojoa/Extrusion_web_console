@@ -164,6 +164,8 @@ For API-mode package assembly, require the API-mode frontend metadata:
 
 If `-FrontendMode api` is used with a mock-mode or metadata-missing `frontend/dist`, assembly fails before package copy. Mock/default package assembly remains available through the default build and default assembly path.
 
+The default `-FrontendMode auto` is backward-compatible for existing mock/default package assembly. If legacy `frontend/dist` lacks `frontend-build-info.json`, package metadata can record `frontendMode` as `unknown`; do not use `auto` for API-mode release packages. API-mode release assembly must use `-FrontendMode api`.
+
 The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. `OutputRoot` must be outside the repository root so package output cannot be created inside source control. The script validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and prunes `.venv` cache/test-only content such as `__pycache__`, compiled bytecode, pytest cache, and dependency test directories while preserving dependency metadata and license/notice files.
 
 The operator package does not copy the repository README verbatim. It uses the sanitized package runtime note as the package-local README so marker-heavy engineering docs and path examples stay out of release artifacts.
@@ -353,6 +355,8 @@ npm run build:api
 ```
 
 This compiles the frontend with API mode and writes build metadata consumed by package assembly validation.
+
+For API-mode release packages, follow the build with `.\packaging\assemble_operator_package.ps1 -FrontendMode api`. The default assembly mode is only for backward-compatible mock/default packaging and can record `frontendMode=unknown` when old build metadata is absent.
 
 The Logs page shows mock audit rows by default and uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, raw `error_message` search, raw params JSON search, or arbitrary SQL query controls. API responses return sanitized `errorMessage` values and decoded redacted params from `params_json_redacted`.
 

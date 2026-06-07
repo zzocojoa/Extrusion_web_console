@@ -96,6 +96,7 @@ Implementation contract:
 | Mock/API distinction | `npm run build` writes mock/default frontend metadata; `npm run build:api` writes API-mode frontend metadata. |
 | Package metadata | `package-build-info.json` includes `frontendMode` and source commit. |
 | Validation gate | `packaging/assemble_operator_package.ps1 -FrontendMode api` fails if `frontend/dist` is mock-mode or missing mode metadata. |
+| Backward compatibility | Default `-FrontendMode auto` keeps legacy mock/default assembly available and can record `frontendMode=unknown` when old dist metadata is absent. API-mode release packages must not use `auto`. |
 | Release note | GitHub Release notes must state `API mode frontend build`. |
 | Existing mock build | Keep available for screenshot QA and mock-mode package line. |
 
@@ -108,6 +109,8 @@ Implemented first step:
 5. Explicit API-mode assembly fails fast on mode mismatch.
 
 Remaining future work is to run API-mode package assembly, smoke, tag, and release only after separate approval.
+
+QA smoke on 2026-06-08 reconfirmed the maintainer flow: `npm run build` records `frontendMode=mock`, `npm run build:api` records `frontendMode=api`, mock/default package assembly records `frontendMode=mock`, API package assembly with `-FrontendMode api` records `frontendMode=api`, and mock dist plus `-FrontendMode api` fails before package copy.
 
 ## 3. Package Contents
 
