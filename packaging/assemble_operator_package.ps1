@@ -73,17 +73,42 @@ function Test-PathInsideOrEqual {
   return $candidateFullPath.StartsWith($baseFullPath, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
-function Test-RuntimeCachePath {
+function Test-RuntimeMetadataPath {
   param([string]$Path)
 
-  $normalized = ConvertTo-ForwardSlash $Path
-  if ($normalized -match "(^|/)__pycache__(/|$)") {
+  $normalized = (ConvertTo-ForwardSlash $Path).ToLowerInvariant()
+  $fileName = [System.IO.Path]::GetFileName($normalized)
+
+  if ($normalized -match "(^|/)[^/]+\.dist-info(/|$)") {
     return $true
   }
-  if ($normalized -match "\.(pyc|pyo)$") {
+  if ($fileName -match "^(metadata|record|wheel|entry_points\.txt)$") {
+    return $true
+  }
+  if ($fileName -match "^(license|notice|copying)(\.|$)") {
     return $true
   }
   return $false
+}
+
+function Get-RuntimePruneClass {
+  param([string]$Path)
+
+  if (Test-RuntimeMetadataPath $Path) {
+    return ""
+  }
+
+  $normalized = (ConvertTo-ForwardSlash $Path).ToLowerInvariant()
+  if ($normalized -match "(^|/)__pycache__(/|$)" -or $normalized -match "\.(pyc|pyo)$") {
+    return "cache"
+  }
+  if ($normalized -match "(^|/)\.pytest_cache(/|$)") {
+    return "cache"
+  }
+  if ($normalized -match "(^|/)(test|tests|testing|testsuite)(/|$)") {
+    return "test"
+  }
+  return ""
 }
 
 function Copy-ManifestFile {
@@ -101,14 +126,29 @@ function Copy-ManifestDirectory {
   param(
     [string]$Source,
     [string]$Destination,
-    [bool]$FilterRuntimeCache
+    [bool]$FilterRuntime
   )
 
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
   Get-ChildItem -LiteralPath $Source -Force -Recurse | ForEach-Object {
     $relative = Get-SafeRelativePath -BasePath $Source -FullPath $_.FullName
-    if ($FilterRuntimeCache -and (Test-RuntimeCachePath $relative)) {
+    $pruneClass = Get-RuntimePruneClass $relative
+    if ($pruneClass -eq "cache") {
+      if ($FilterRuntime) {
+        $script:runtimeCachePrunedCount += 1
+      } else {
+        $script:sourceCachePrunedCount += 1
+      }
       return
+    }
+    if ($FilterRuntime) {
+      if ($pruneClass -eq "test") {
+        $script:runtimeTestPrunedCount += 1
+        return
+      }
+      if (Test-RuntimeMetadataPath $relative) {
+        $script:runtimeMetadataPreservedCount += 1
+      }
     }
 
     $target = Join-Path $Destination $relative
@@ -165,6 +205,12 @@ function Test-DenylistedPackagePath {
   if ($lower -match "(^|/)__pycache__(/|$)") {
     return $true
   }
+  if ($lower -match "(^|/)\.pytest_cache(/|$)") {
+    return $true
+  }
+  if ($lower.StartsWith(".venv/") -and $lower -match "(^|/)(test|tests|testing|testsuite)(/|$)") {
+    return $true
+  }
   if ($lower -match "\.(db|db-shm|db-wal|sqlite|sqlite3|log|csv|pyc|pyo)$") {
     return $true
   }
@@ -188,10 +234,13 @@ function Find-RedactionMatches {
   $patterns = @(
     @{ Name = "database-url-marker"; Regex = "postgres(?:ql)?://[^\s`"'<>)]+" },
     @{ Name = "authorization-bearer-marker"; Regex = "(?i)authorization\s*[:=]\s*bearer\s+\S+" },
+    @{ Name = "credential-like-marker"; Regex = "(?i)(^|[^A-Z0-9_])(credential|secret|token|api[_ -]?key)\s*[:=]\s*['""]?[A-Za-z0-9._-]{8,}" },
     @{ Name = "jwt-like-marker"; Regex = "\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b" },
     @{ Name = "service-role-assignment-marker"; Regex = "(?i)(^|[^A-Z0-9_])service[_ -]?role\s*[:=]" },
     @{ Name = "anon-key-assignment-marker"; Regex = "(?i)(^|[^A-Z0-9_])anon[_ -]?key\s*[:=]" },
-    @{ Name = "timestamp-style-csv-marker"; Regex = "\b\d{8}_\d{6}\.csv\b" }
+    @{ Name = "timestamp-style-csv-marker"; Regex = "\b\d{8}_\d{6}\.csv\b" },
+    @{ Name = "operational-filename-family-marker"; Regex = "(?i)\bfactory[_-][A-Za-z0-9_-]*log\b" },
+    @{ Name = "windows-absolute-path-marker"; Regex = "\b[A-Za-z]:\\[^\r\n`"'<>)]+" }
   )
 
   Get-ChildItem -LiteralPath $PackageRoot -Force -Recurse -File | ForEach-Object {
@@ -253,7 +302,7 @@ function Assert-PackageContents {
     throw "Package denylist validation failed. Match count: $($denylistMatches.Count). First match: $($denylistMatches[0])"
   }
 
-  $redactionMatches = Find-RedactionMatches -PackageRoot $PackageRoot
+  $redactionMatches = @(Find-RedactionMatches -PackageRoot $PackageRoot)
   if ($redactionMatches.Count -gt 0) {
     throw "Package redaction validation failed. Match count: $($redactionMatches.Count). First match: $($redactionMatches[0])"
   }
@@ -262,6 +311,10 @@ function Assert-PackageContents {
   Write-AssemblyInfo "operator readiness: $(if ($RuntimeIncomplete) { 'incomplete runtime allowed' } else { 'ready' })"
   Write-AssemblyInfo "denylist matches: 0"
   Write-AssemblyInfo "redaction matches: 0"
+  Write-AssemblyInfo "source cache pruned: $script:sourceCachePrunedCount"
+  Write-AssemblyInfo "runtime cache pruned: $script:runtimeCachePrunedCount"
+  Write-AssemblyInfo "runtime test segments pruned: $script:runtimeTestPrunedCount"
+  Write-AssemblyInfo "runtime metadata preserved: $script:runtimeMetadataPreservedCount"
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -339,6 +392,10 @@ foreach ($entry in $manifest.includeAllowlist) {
 }
 
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+$script:runtimeCachePrunedCount = 0
+$script:runtimeTestPrunedCount = 0
+$script:runtimeMetadataPreservedCount = 0
+$script:sourceCachePrunedCount = 0
 
 foreach ($entry in $manifest.includeAllowlist) {
   $source = Resolve-RepoRelativePath -RepoRoot $repoRoot -RelativePath $entry.source
@@ -365,7 +422,8 @@ foreach ($entry in $manifest.includeAllowlist) {
     if (-not (Get-Item -LiteralPath $source).PSIsContainer) {
       throw "Manifest expected a directory but found a file: $($entry.source)"
     }
-    Copy-ManifestDirectory -Source $source -Destination $target -FilterRuntimeCache $true
+    $filterRuntime = ($entry.source -eq ".venv")
+    Copy-ManifestDirectory -Source $source -Destination $target -FilterRuntime $filterRuntime
   } else {
     throw "Unsupported manifest include type: $($entry.type)"
   }

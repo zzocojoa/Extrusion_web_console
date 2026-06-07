@@ -1,6 +1,6 @@
 # Operator Package Runtime Prune / Redaction Policy
 
-Status: planned
+Status: implemented
 
 Date: 2026-06-07
 
@@ -18,7 +18,29 @@ The next implementation must remove package-only hygiene blockers while preservi
 - prepared `.venv/Scripts/python.exe` available for non-developer launch.
 - no Node/npm requirement in operator mode.
 
-This plan is document-only. It does not change `packaging/operator-package.manifest.json`, `packaging/assemble_operator_package.ps1`, backend code, frontend code, launcher scripts, AppData state, local Supabase, Docker, or package outputs.
+This policy is implemented in `packaging/operator-package.manifest.json` and `packaging/assemble_operator_package.ps1`. The implementation changes package assembly hygiene only; it does not change product API behavior, frontend behavior, launcher local token enforcement, AppData state, local Supabase, Docker, or package outputs.
+
+Implementation notes:
+
+- Runtime `.venv` copy now prunes cache/test-only content and preserves dependency metadata/license files.
+- Operator package docs now use a sanitized package runtime note instead of copying marker-heavy source docs into release artifacts.
+- Package redaction checks now include credential-like assignment markers, operational filename-family markers, and Windows absolute path markers.
+- Assembly output remains count-oriented and does not print secret values.
+
+PR #38 QA result:
+
+- Targeted packaging tests: 11 passed.
+- Full backend tests from clean cwd: 176 passed.
+- Frontend typecheck, build, and screenshot QA: passed.
+- Package assembly with `-CreateZip`: passed.
+- Zip-entry scan: dependency test segments `0`, cache/bytecode entries `0`, marker-heavy docs `0`, denylist matches `0`.
+- Redaction scan: credential marker `0`, operational filename-family marker `0`, Windows path marker `0`, DB URL marker `0`, Authorization marker `0`, JWT marker `0`.
+- Runtime `.py`, native files, dist-info metadata, `METADATA`, `RECORD`, and license/notice/copying material were preserved.
+- Packaged import smoke returned `import_ok`.
+- Launcher `-CheckOnly`, shortcut installer `-CheckOnly`, HTTP route smoke, no-token `PUT /api/config` returning `403`, and `/api/docs`, `/api/openapi.json`, `/api/redoc` returning `404` all passed.
+- Python cache generated after package import or HTTP smoke is treated as post-runtime output and is distinct from clean zip contents.
+
+Known future hardening: split redaction marker tests into marker-specific parametrized fixtures so each marker class has an independent assertion.
 
 ## Release Blocker Analysis
 

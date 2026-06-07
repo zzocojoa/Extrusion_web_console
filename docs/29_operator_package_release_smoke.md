@@ -17,6 +17,39 @@ The runnable package smoke passed, but the release candidate is **not release-re
 
 No feature code was changed. No DB reset/delete/cleanup/prune command was run. No Docker volume/container cleanup command was run. AppData config/state/logs were not deleted. The untracked operational CSV fixture was not copied, committed, or deleted.
 
+## Resolution Update
+
+PR #38 implements the runtime prune/redaction policy that resolves these release blockers.
+
+Follow-up QA confirmed:
+
+| Check | Result |
+| --- | --- |
+| Targeted packaging tests | `11 passed` |
+| Full backend tests from clean cwd | `176 passed` |
+| Frontend typecheck/build/screenshot QA | Passed |
+| Package assembly with `-CreateZip` | Passed |
+| Zip-entry dependency test segments | `0` |
+| Zip-entry cache/bytecode entries | `0` |
+| Marker-heavy package docs | `0` |
+| Package denylist matches | `0` |
+| Credential marker | `0` |
+| Operational filename-family marker | `0` |
+| Windows path marker | `0` |
+| DB URL marker | `0` |
+| Authorization marker | `0` |
+| JWT marker | `0` |
+| Packaged import smoke | `import_ok` |
+| Launcher `-CheckOnly` | Passed |
+| Shortcut installer `-CheckOnly` | Passed |
+| HTTP route smoke | Passed |
+| No-token `PUT /api/config` | `403` |
+| `/api/docs`, `/api/openapi.json`, `/api/redoc` | `404` |
+
+The package zip now preserves runtime `.py`, native files, dist-info metadata, `METADATA`, `RECORD`, and license/notice/copying material while pruning dependency test segments, `__pycache__`, `.pytest_cache`, `*.pyc`, and `*.pyo`. Any Python cache created after import or HTTP smoke is post-runtime generated output, not zip content.
+
+Release blocker status after PR #38 QA: resolved.
+
 ## Environment
 
 | Item | Result |

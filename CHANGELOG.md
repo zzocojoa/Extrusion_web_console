@@ -42,6 +42,7 @@ All notable changes to Extrusion Web Console are documented here.
 - `launcher/install_shortcuts.ps1` and `.bat` create or refresh `Extrusion Web Console` Desktop/Start menu shortcuts targeting the repo-local launcher in the prepared operator folder.
 - Shortcut packaging rejects unsafe shortcut names before writing `.lnk` files, including empty or whitespace names, invalid Windows filename characters, path separators, `..` traversal markers, and absolute paths.
 - Package assembly writes each run to a new timestamped repo-external output folder by default and never performs repo-wide recursive copy, package output deletion, shortcut installation, AppData deletion, database cleanup, or Docker cleanup. QA passed targeted packaging tests (`10 passed`), full backend tests from clean cwd (`175 passed`), frontend typecheck/build/screenshot QA, and package launcher/shortcut/HTTP/token/docs smoke.
+- Operator package assembly now prunes runtime `.venv` cache/test-only content, preserves dependency metadata/license files, ships a sanitized package-local README instead of marker-heavy source docs, and expands package redaction checks for release-candidate marker classes. PR #38 QA passed targeted packaging tests (`11 passed`), full backend clean-cwd tests (`176 passed`), frontend typecheck/build/screenshot QA, package `-CreateZip`, zip-entry scans with test/cache/redaction counts `0`, packaged import smoke, launcher/shortcut smoke, HTTP/token smoke, and operator docs hardening smoke.
 
 ### Fixed
 

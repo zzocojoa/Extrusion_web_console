@@ -148,7 +148,11 @@ Maintainers can assemble a manifest-validated prepared package after building `f
 .\packaging\assemble_operator_package.ps1
 ```
 
-The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. `OutputRoot` must be outside the repository root so package output cannot be created inside source control. The script validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and excludes `.venv` cache files such as `__pycache__` and `*.pyc`.
+The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. `OutputRoot` must be outside the repository root so package output cannot be created inside source control. The script validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and prunes `.venv` cache/test-only content such as `__pycache__`, compiled bytecode, pytest cache, and dependency test directories while preserving dependency metadata and license/notice files.
+
+The operator package does not copy the repository README verbatim. It uses the sanitized package runtime note as the package-local README so marker-heavy engineering docs and path examples stay out of release artifacts.
+
+The package docs subset is `README.md`, `CHANGELOG.md`, `VERSION`, and `docs/operator_package_runtime_note.md`. Marker-heavy engineering docs remain in the repository but are not copied into the operator package. PR #38 QA confirmed zip-entry scans with dependency test segments `0`, cache/bytecode entries `0`, marker-heavy docs `0`, denylist matches `0`, and redaction marker counts `0` for credential, operational filename-family, Windows path, DB URL, Authorization, and JWT classes. Runtime `.py`, native files, dist-info metadata, `METADATA`, `RECORD`, and license/notice/copying material remain present. Python may create cache files after import or HTTP smoke; that post-runtime cache is distinct from clean zip contents.
 
 Zip handoff is optional:
 
@@ -426,6 +430,12 @@ Launcher Local Token QA:
 - PR #30 QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build, `npm run qa:screenshots`, launcher `-CheckOnly`, operator HTTP smoke (`/api/docs`, `/api/openapi.json`, `/api/redoc` all `404`), dev/docs-enabled HTTP smoke (`/api/docs` and `/api/openapi.json` both `200`), and `git diff --check`.
 - PR #32 Windows shortcut packaging adds `launcher\install_shortcuts.ps1` and `.bat`, passed targeted launcher tests (`17 passed`), shortcut `-CheckOnly`, frontend typecheck/build, and `git diff --check`; path-safety review confirmed unsafe `ShortcutName` inputs are rejected before writing shortcuts.
 - Full backend tests should be run from clean cwd when validating this branch because repo cwd `.env` presence intentionally changes Settings/config override behavior.
+
+Operator Package Runtime Prune QA:
+
+- PR #38 QA passed targeted packaging tests (`11 passed`), full backend tests from clean cwd (`176 passed`), frontend typecheck/build, `npm run qa:screenshots`, package assembly with `-CreateZip`, zip-entry prune/redaction scans, packaged import smoke, launcher/shortcut `-CheckOnly`, HTTP route smoke, no-token mutation guard, and operator docs hardening smoke.
+- Zip-entry scan confirmed dependency test segments `0`, cache/bytecode entries `0`, marker-heavy docs `0`, denylist matches `0`, and redaction marker counts `0` for credential, operational filename-family, Windows path, DB URL, Authorization, and JWT classes.
+- Runtime `.py`, native files, dist-info metadata, `METADATA`, `RECORD`, and license/notice/copying material are preserved. Python cache generated after import or HTTP smoke is post-runtime output and is distinct from clean zip contents.
 
 Browser QA has been run against:
 
