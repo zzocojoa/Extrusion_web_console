@@ -25,6 +25,7 @@ All notable changes to Extrusion Web Console are documented here.
 - Launcher phase 2 now adds per-run local token protection for mutating localhost APIs through `X-EWC-Local-Token`, with runtime HTML bootstrap, launcher env passing, and explicit dev-disabled mode.
 - API docs hardening now disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes in operator launcher mode while retaining Swagger/OpenAPI for dev/test docs-enabled runs.
 - Windows shortcut packaging v1 now adds maintainer-run Desktop and Start menu shortcut installation for prepared operator folders, with idempotent shortcut updates, safe `ShortcutName` validation, and no AppData config/state/log deletion.
+- Operator package assembly v1 now adds a manifest and maintainer-run PowerShell assembly script for prepared operator folders, with allowlist-only copying, denylist/redaction validation, optional zip creation, SHA-256 checksum output, `.venv` cache exclusion, and package smoke guidance.
 - API docs hardening QA passed targeted route/token/OpenAPI backend tests (`33 passed`), full backend tests from clean cwd (`153 passed`), frontend typecheck/build, screenshot QA, launcher `-CheckOnly`, operator HTTP smoke, dev/docs-enabled HTTP smoke, and `git diff --check`.
 - Launcher local token QA passed targeted backend token/static/launcher tests (`17 passed`), full backend tests from clean cwd (`151 passed`), frontend typecheck/build, screenshot QA, launcher `-CheckOnly`, token HTTP smoke, and unsafe marker scans with `0` matches.
 
@@ -40,6 +41,7 @@ All notable changes to Extrusion Web Console are documented here.
 - `OPTIONS` requests are not blocked by the local token guard. Route-level API method handling can still return the normal method response.
 - `launcher/install_shortcuts.ps1` and `.bat` create or refresh `Extrusion Web Console` Desktop/Start menu shortcuts targeting the repo-local launcher in the prepared operator folder.
 - Shortcut packaging rejects unsafe shortcut names before writing `.lnk` files, including empty or whitespace names, invalid Windows filename characters, path separators, `..` traversal markers, and absolute paths.
+- Package assembly writes each run to a new timestamped output folder by default and never performs repo-wide recursive copy, package output deletion, shortcut installation, AppData deletion, database cleanup, or Docker cleanup.
 
 ### Fixed
 

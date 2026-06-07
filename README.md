@@ -142,6 +142,22 @@ Launcher phase 2 does not run local Supabase bootstrap, reset, cleanup, prune, D
 
 Prepared operator folders should include `frontend/dist` and a target-PC prepared `.venv\Scripts\python.exe`. Node/npm are not required for normal operator launch. The `.venv` may be tied to the target PC and Python version, so dependency setup remains a maintainer responsibility before handoff.
 
+Maintainers can assemble a manifest-validated prepared package after building `frontend/dist` and preparing the target-PC `.venv`:
+
+```powershell
+.\packaging\assemble_operator_package.ps1
+```
+
+The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. It validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and excludes `.venv` cache files such as `__pycache__` and `*.pyc`.
+
+Zip handoff is optional:
+
+```powershell
+.\packaging\assemble_operator_package.ps1 -CreateZip
+```
+
+When `-CreateZip` is used, a SHA-256 checksum file is written next to the zip. The script does not install shortcuts, delete existing package folders, delete AppData config/state/logs, run database cleanup, or run Docker cleanup.
+
 ## Backend Development
 
 From the repository root:
@@ -160,15 +176,15 @@ Invoke-RestMethod http://127.0.0.1:8000/api/dashboard
 Invoke-RestMethod http://127.0.0.1:8000/api/dashboard/summary
 ```
 
-Upload Preview configuration is read from environment-backed settings:
+Upload Preview configuration is read from environment-backed settings. Set values locally in PowerShell, a local `.env`, or app config; do not paste secret values into chat, logs, docs, or PR bodies.
 
 ```powershell
-$env:EWC_PLC_DATA_DIR="C:\path\to\plc_csv"
-$env:EWC_SUPABASE_DB_URL="postgresql://postgres:postgres@127.0.0.1:25432/postgres"
-$env:EWC_SUPABASE_URL="http://127.0.0.1:54321"
-$env:EWC_SUPABASE_ANON_KEY="<local anon key>"
-$env:EWC_SUPABASE_EDGE_URL="http://127.0.0.1:54321/functions/v1/upload-metrics"
-$env:EWC_STATE_DB_PATH="C:\tmp\ExtrusionWebConsole\web_console_state.db"
+$env:EWC_PLC_DATA_DIR="<local PLC source folder>"
+$env:EWC_SUPABASE_DB_URL="<local Supabase DB URL>"
+$env:EWC_SUPABASE_URL="<local Supabase API URL>"
+$env:EWC_SUPABASE_ANON_KEY="<local Supabase anon key>"
+$env:EWC_SUPABASE_EDGE_URL="<local Supabase Edge URL>"
+$env:EWC_STATE_DB_PATH="<local state DB path>"
 ```
 
 `EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB is unreachable, preview runs still persist and DB-dependent CSV candidates are shown as `risky/db_unreachable` under a `partial_failed` run.
@@ -180,7 +196,7 @@ Upload Job responses and job events expose `acceptedRows` as the canonical count
 Local Supabase runtime control uses the existing `Extrusion_data` local stack by default:
 
 ```powershell
-$env:EWC_LOCAL_SUPABASE_PROJECT_PATH="C:\Users\user\Documents\GitHub\Extrusion_data"
+$env:EWC_LOCAL_SUPABASE_PROJECT_PATH="<local Supabase project path>"
 $env:EWC_LOCAL_SUPABASE_PROJECT_ID="Extrusion_data"
 $env:EWC_LOCAL_SUPABASE_API_PORT="54321"
 $env:EWC_LOCAL_SUPABASE_DB_PORT="25432"

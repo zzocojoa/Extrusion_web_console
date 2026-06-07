@@ -1,12 +1,26 @@
 # Operator Package Manifest / Assembly Plan
 
-Status: planned
+Status: implemented on branch `codex/operator-package-assembly-impl`
 
 Date: 2026-06-07
 
 Scope: prepared operator package manifest and safe assembly plan.
 
-This plan defines the package contents contract for the prepared Windows operator folder. It does not implement the manifest file or assembly script in this step.
+This plan defines the package contents contract for the prepared Windows operator folder.
+
+Implementation result on branch `codex/operator-package-assembly-impl`:
+
+- Added `packaging/operator-package.manifest.json`.
+- Added `packaging/assemble_operator_package.ps1`.
+- The script copies only manifest allowlist entries and never performs a repository-root recursive copy.
+- Default output is a new timestamped package folder under `C:\tmp\ExtrusionWebConsole-packages\`.
+- Existing package output is not deleted; explicit duplicate package labels fail safely.
+- `-CreateZip` creates an optional zip and writes a SHA-256 checksum next to it.
+- Package root remains `ExtrusionWebConsole/`.
+- Required path, operator readiness, denylist, and redaction validation run after assembly.
+- `.venv` is required for operator-ready packages unless `-AllowIncompleteRuntime` is explicitly used.
+- `.venv` runtime contents are allowed, but `__pycache__`, `*.pyc`, and `*.pyo` are filtered out during copy and rejected by validation.
+- The script prints package smoke guidance without running shortcut install, AppData cleanup, database cleanup, or Docker cleanup.
 
 ## Goal
 
