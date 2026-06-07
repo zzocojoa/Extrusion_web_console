@@ -10,6 +10,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "packaging" / "operator-package.manifest.json"
 ASSEMBLY_SCRIPT = REPO_ROOT / "packaging" / "assemble_operator_package.ps1"
+FRONTEND_PACKAGE_PATH = REPO_ROOT / "frontend" / "package.json"
+FRONTEND_BUILD_SCRIPT = REPO_ROOT / "frontend" / "scripts" / "build.mjs"
 
 
 def _powershell() -> str | None:
@@ -23,7 +25,14 @@ def _copy_packaging_files(repo_root: Path) -> None:
     shutil.copy2(ASSEMBLY_SCRIPT, packaging / ASSEMBLY_SCRIPT.name)
 
 
-def _create_minimal_repo(repo_root: Path, *, include_venv: bool = True, include_dist: bool = True) -> None:
+def _create_minimal_repo(
+    repo_root: Path,
+    *,
+    include_venv: bool = True,
+    include_dist: bool = True,
+    frontend_mode: str = "mock",
+    include_frontend_metadata: bool = True,
+) -> None:
     (repo_root / "backend" / "app").mkdir(parents=True)
     (repo_root / "backend" / "app" / "main.py").write_text("app = object()\n", encoding="utf-8")
     (repo_root / "backend" / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
@@ -32,6 +41,19 @@ def _create_minimal_repo(repo_root: Path, *, include_venv: bool = True, include_
         (repo_root / "frontend" / "dist" / "assets").mkdir(parents=True)
         (repo_root / "frontend" / "dist" / "index.html").write_text("<html>ok</html>\n", encoding="utf-8")
         (repo_root / "frontend" / "dist" / "assets" / "app.js").write_text("console.log('ok')\n", encoding="utf-8")
+        if include_frontend_metadata:
+            (repo_root / "frontend" / "dist" / "frontend-build-info.json").write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "frontendMode": frontend_mode,
+                        "createdUtc": "2026-06-08T00:00:00.000Z",
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
     (repo_root / "launcher").mkdir()
     for name in [
@@ -154,7 +176,23 @@ def test_manifest_json_contract_is_valid() -> None:
     assert "windows-absolute-path-marker" in manifest["redactionChecks"]
     assert "operational-filename-family-marker" in manifest["redactionChecks"]
     assert "credential-like-marker" in manifest["redactionChecks"]
+    assert manifest["buildMetadata"]["frontendMode"] == "filled-by-assembly"
+    assert manifest["buildMetadata"]["frontendBuildInfoPath"] == "frontend/dist/frontend-build-info.json"
+    assert "api" in manifest["buildMetadata"]["supportedFrontendModes"]
+    assert "mock" in manifest["buildMetadata"]["supportedFrontendModes"]
     assert "X-EWC-Local-Token" not in MANIFEST_PATH.read_text(encoding="utf-8")
+
+
+def test_frontend_build_scripts_record_mode_metadata() -> None:
+    package = json.loads(FRONTEND_PACKAGE_PATH.read_text(encoding="utf-8"))
+    scripts = package["scripts"]
+    build_script = FRONTEND_BUILD_SCRIPT.read_text(encoding="utf-8")
+
+    assert scripts["build"] == "node scripts/build.mjs mock"
+    assert scripts["build:api"] == "node scripts/build.mjs api"
+    assert "VITE_API_MODE" in build_script
+    assert "frontendMode" in build_script
+    assert "frontend-build-info.json" in build_script
 
 
 def test_assembly_powershell_syntax_parses() -> None:
@@ -185,6 +223,8 @@ def test_assembly_script_keeps_command_policy_narrow() -> None:
     assert "includeallowlist" in lowered
     assert "compress-archive" in lowered
     assert "get-filehash" in lowered
+    assert "frontendmode" in lowered
+    assert "frontend-build-info.json" in lowered
     assert "invoke-expression" not in lowered
     assert "remove-item" not in lowered
     assert "supabase db reset" not in lowered
@@ -235,6 +275,9 @@ def test_assembly_copies_allowlist_and_rejects_denylist(tmp_path: Path) -> None:
 
     build_info = json.loads((package_root / "package-build-info.json").read_text(encoding="utf-8-sig"))
     assert build_info["runtimeMode"] == "operator-ready"
+    assert build_info["frontendMode"] == "mock"
+    assert build_info["frontendBuildMetadataPresent"] is True
+    assert build_info["frontendBuildInfoPath"] == "frontend/dist/frontend-build-info.json"
     assert build_info["zipCreated"] is False
 
 
@@ -271,7 +314,76 @@ def test_assembly_allows_explicit_incomplete_runtime_mode(tmp_path: Path) -> Non
     package_root = output_root / "incomplete-runtime" / "ExtrusionWebConsole"
     build_info = json.loads((package_root / "package-build-info.json").read_text(encoding="utf-8-sig"))
     assert build_info["runtimeMode"] == "maintainer-prep-incomplete"
+    assert build_info["frontendMode"] == "mock"
     assert not (package_root / ".venv").exists()
+
+
+def test_assembly_records_explicit_api_frontend_mode(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_root = tmp_path / "out"
+    repo_root.mkdir()
+    _copy_packaging_files(repo_root)
+    _create_minimal_repo(repo_root, frontend_mode="api")
+
+    result = _run_assembly(
+        repo_root,
+        output_root,
+        "-PackageLabel",
+        "api-mode-package",
+        "-FrontendMode",
+        "api",
+    )
+
+    assert result.returncode == 0, result.stderr
+    package_root = output_root / "api-mode-package" / "ExtrusionWebConsole"
+    build_info = json.loads((package_root / "package-build-info.json").read_text(encoding="utf-8-sig"))
+    assert build_info["frontendMode"] == "api"
+    assert build_info["frontendBuildMetadataPresent"] is True
+    assert "frontend mode: api" in result.stdout
+
+
+def test_assembly_rejects_api_package_with_mock_frontend_dist(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_root = tmp_path / "out"
+    repo_root.mkdir()
+    _copy_packaging_files(repo_root)
+    _create_minimal_repo(repo_root, frontend_mode="mock")
+
+    result = _run_assembly(
+        repo_root,
+        output_root,
+        "-PackageLabel",
+        "api-mode-mismatch",
+        "-FrontendMode",
+        "api",
+    )
+
+    assert result.returncode != 0
+    output = f"{result.stdout}\n{result.stderr}"
+    assert "Frontend mode mismatch: expected api but found mock" in output
+    assert not (output_root / "api-mode-mismatch").exists()
+
+
+def test_assembly_rejects_explicit_api_mode_without_frontend_metadata(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_root = tmp_path / "out"
+    repo_root.mkdir()
+    _copy_packaging_files(repo_root)
+    _create_minimal_repo(repo_root, include_frontend_metadata=False)
+
+    result = _run_assembly(
+        repo_root,
+        output_root,
+        "-PackageLabel",
+        "api-mode-missing-metadata",
+        "-FrontendMode",
+        "api",
+    )
+
+    assert result.returncode != 0
+    output = f"{result.stdout}\n{result.stderr}"
+    assert "Frontend build metadata is missing" in output
+    assert not (output_root / "api-mode-missing-metadata").exists()
 
 
 def test_assembly_fails_when_frontend_dist_is_missing(tmp_path: Path) -> None:

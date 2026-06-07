@@ -151,6 +151,12 @@
   "buildMetadata": {
     "sourceCommit": "filled-by-assembly",
     "createdUtc": "filled-by-assembly",
+    "frontendMode": "filled-by-assembly",
+    "frontendBuildInfoPath": "frontend/dist/frontend-build-info.json",
+    "supportedFrontendModes": [
+      "mock",
+      "api"
+    ],
     "zipSha256": "filled-by-assembly-when-created"
   }
 }

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/build.mjs mock",
+    "build:api": "node scripts/build.mjs api",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "qa:screenshots": "playwright test --config qa/playwright.config.ts"
   },

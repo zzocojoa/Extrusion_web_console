@@ -76,6 +76,14 @@ First build the frontend once from `frontend/`:
 npm run build
 ```
 
+For an API-mode operator package that uses the real backend APIs instead of frontend mock data, build with:
+
+```powershell
+npm run build:api
+```
+
+Both build commands write `frontend/dist/frontend-build-info.json`. The package assembly step records this as `frontendMode` in `package-build-info.json`.
+
 Then double-click:
 
 ```text
@@ -147,6 +155,14 @@ Maintainers can assemble a manifest-validated prepared package after building `f
 ```powershell
 .\packaging\assemble_operator_package.ps1
 ```
+
+For API-mode package assembly, require the API-mode frontend metadata:
+
+```powershell
+.\packaging\assemble_operator_package.ps1 -FrontendMode api
+```
+
+If `-FrontendMode api` is used with a mock-mode or metadata-missing `frontend/dist`, assembly fails before package copy. Mock/default package assembly remains available through the default build and default assembly path.
 
 The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. `OutputRoot` must be outside the repository root so package output cannot be created inside source control. The script validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and prunes `.venv` cache/test-only content such as `__pycache__`, compiled bytecode, pytest cache, and dependency test directories while preserving dependency metadata and license/notice files.
 
@@ -307,6 +323,7 @@ From `frontend/`:
 npm install
 npm run typecheck
 npm run build
+npm run build:api
 npm run dev
 ```
 
@@ -328,6 +345,14 @@ The Vite dev server proxies `/api` to `http://127.0.0.1:8000`.
 Important scaffold limitation: `?state=ready|attention|blocked|running` is implemented in the frontend mock data path. When `VITE_API_MODE="api"` is used, the backend mock currently returns the running Dashboard payload.
 
 The Upload Preview page also uses mock data by default so all five preview states can be inspected without local Supabase. To use the real backend preview API, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
+
+For release-maintainer API-mode package builds, prefer:
+
+```powershell
+npm run build:api
+```
+
+This compiles the frontend with API mode and writes build metadata consumed by package assembly validation.
 
 The Logs page shows mock audit rows by default and uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, raw `error_message` search, raw params JSON search, or arbitrary SQL query controls. API responses return sanitized `errorMessage` values and decoded redacted params from `params_json_redacted`.
 
