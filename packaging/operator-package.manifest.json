@@ -74,6 +74,7 @@
         "*.pyc",
         "*.pyo",
         ".pytest_cache",
+        ".agents",
         "test",
         "tests",
         "testing",
@@ -146,7 +147,8 @@
     "GET /api/config",
     "GET /api/audit?limit=1",
     "mutating API without local token returns 403",
-    "operator API docs routes return 404"
+    "operator API docs routes return 404",
+    "package and zip .agents entries count is 0"
   ],
   "buildMetadata": {
     "sourceCommit": "filled-by-assembly",

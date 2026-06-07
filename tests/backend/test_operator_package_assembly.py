@@ -90,6 +90,9 @@ def _create_minimal_repo(
         (cache.parent / "module.pyo").write_bytes(b"optimized")
         package_root = repo_root / ".venv" / "Lib" / "site-packages" / "demo"
         (package_root / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+        agents = package_root / ".agents" / "skills" / "demo"
+        agents.mkdir(parents=True)
+        (agents / "SKILL.md").write_text("# dependency agent skill\n", encoding="utf-8")
         for test_dir in ["test", "tests", "testing", "testsuite"]:
             (package_root / test_dir).mkdir(parents=True)
             (package_root / test_dir / "case.py").write_text("assert True\n", encoding="utf-8")
@@ -176,6 +179,9 @@ def test_manifest_json_contract_is_valid() -> None:
     assert "windows-absolute-path-marker" in manifest["redactionChecks"]
     assert "operational-filename-family-marker" in manifest["redactionChecks"]
     assert "credential-like-marker" in manifest["redactionChecks"]
+    venv_entry = next(entry for entry in manifest["includeAllowlist"] if entry["source"] == ".venv")
+    assert ".agents" in venv_entry["exclude"]
+    assert "package and zip .agents entries count is 0" in manifest["smokeChecks"]
     assert manifest["buildMetadata"]["frontendMode"] == "filled-by-assembly"
     assert manifest["buildMetadata"]["frontendBuildInfoPath"] == "frontend/dist/frontend-build-info.json"
     assert "api" in manifest["buildMetadata"]["supportedFrontendModes"]
@@ -225,6 +231,8 @@ def test_assembly_script_keeps_command_policy_narrow() -> None:
     assert "get-filehash" in lowered
     assert "frontendmode" in lowered
     assert "frontend-build-info.json" in lowered
+    assert "runtimeagentprunedcount" in lowered
+    assert "runtime agent entries pruned" in lowered
     assert "invoke-expression" not in lowered
     assert "remove-item" not in lowered
     assert "supabase db reset" not in lowered
@@ -258,6 +266,7 @@ def test_assembly_copies_allowlist_and_rejects_denylist(tmp_path: Path) -> None:
     assert not list(package_root.rglob("*.pyc"))
     assert not list(package_root.rglob("*.pyo"))
     assert not list(package_root.rglob("__pycache__"))
+    assert not list(package_root.rglob(".agents"))
     assert not list((package_root / ".venv").rglob(".pytest_cache"))
     assert not any(
         part.lower() in {"test", "tests", "testing", "testsuite"}
@@ -269,6 +278,7 @@ def test_assembly_copies_allowlist_and_rejects_denylist(tmp_path: Path) -> None:
     assert (metadata / "METADATA").exists()
     assert (metadata / "RECORD").exists()
     assert (metadata / "LICENSE").exists()
+    assert "runtime agent entries pruned:" in result.stdout
     assert (package_root / "README.md").read_text(encoding="utf-8") == "# Operator package\n"
     assert (package_root / "docs" / "operator_package_runtime_note.md").exists()
     assert not (package_root / "docs" / "27_operator_package_smoke.md").exists()
@@ -439,6 +449,7 @@ def test_assembly_create_zip_records_checksum(tmp_path: Path) -> None:
     assert "ExtrusionWebConsole/frontend/dist/index.html" in names
     assert not any(name.startswith("ExtrusionWebConsole/tests/") for name in names)
     assert not any(name.endswith(".csv") for name in names)
+    assert not any("/.agents/" in name or name.endswith("/.agents") for name in names)
     assert zipped_build_info["zipCreated"] is True
     assert zipped_build_info["zipSha256"] == "see-adjacent-sha256-file"
 

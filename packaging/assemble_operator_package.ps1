@@ -96,11 +96,15 @@ function Test-RuntimeMetadataPath {
 function Get-RuntimePruneClass {
   param([string]$Path)
 
+  $normalized = (ConvertTo-ForwardSlash $Path).ToLowerInvariant()
+  if ($normalized -match "(^|/)\.agents(/|$)") {
+    return "agent"
+  }
+
   if (Test-RuntimeMetadataPath $Path) {
     return ""
   }
 
-  $normalized = (ConvertTo-ForwardSlash $Path).ToLowerInvariant()
   if ($normalized -match "(^|/)__pycache__(/|$)" -or $normalized -match "\.(pyc|pyo)$") {
     return "cache"
   }
@@ -144,6 +148,10 @@ function Copy-ManifestDirectory {
       return
     }
     if ($FilterRuntime) {
+      if ($pruneClass -eq "agent") {
+        $script:runtimeAgentPrunedCount += 1
+        return
+      }
       if ($pruneClass -eq "test") {
         $script:runtimeTestPrunedCount += 1
         return
@@ -211,6 +219,9 @@ function Test-DenylistedPackagePath {
     return $true
   }
   if ($lower.StartsWith(".venv/") -and $lower -match "(^|/)(test|tests|testing|testsuite)(/|$)") {
+    return $true
+  }
+  if ($lower.StartsWith(".venv/") -and $lower -match "(^|/)\.agents(/|$)") {
     return $true
   }
   if ($lower -match "\.(db|db-shm|db-wal|sqlite|sqlite3|log|csv|pyc|pyo)$") {
@@ -316,6 +327,7 @@ function Assert-PackageContents {
   Write-AssemblyInfo "source cache pruned: $script:sourceCachePrunedCount"
   Write-AssemblyInfo "runtime cache pruned: $script:runtimeCachePrunedCount"
   Write-AssemblyInfo "runtime test segments pruned: $script:runtimeTestPrunedCount"
+  Write-AssemblyInfo "runtime agent entries pruned: $script:runtimeAgentPrunedCount"
   Write-AssemblyInfo "runtime metadata preserved: $script:runtimeMetadataPreservedCount"
 }
 
@@ -450,6 +462,7 @@ foreach ($entry in $manifest.includeAllowlist) {
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
 $script:runtimeCachePrunedCount = 0
 $script:runtimeTestPrunedCount = 0
+$script:runtimeAgentPrunedCount = 0
 $script:runtimeMetadataPreservedCount = 0
 $script:sourceCachePrunedCount = 0
 
