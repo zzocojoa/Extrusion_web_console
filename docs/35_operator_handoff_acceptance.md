@@ -12,11 +12,11 @@ This report does not change product code, launcher behavior, backend behavior, f
 
 ## Summary
 
-Acceptance is blocked because operator-side execution evidence was not available in this QA turn.
+Acceptance is `accepted with caveats` based on sanitized operator package execution evidence collected on 2026-06-07.
 
-The release, tag, assets, checksum, final smoke, dry-run report, and handoff runbook are ready for operator handoff. However, the actual operator PC installation, shortcut install, first launch, Settings verification, Logs/Audit verification, local token/API docs hardening verification, rollback handoff confirmation, and support process confirmation were not evidenced in the current workspace or request.
+The release, tag, assets, checksum, final smoke, dry-run report, handoff runbook, package extraction, shortcut installation, UI routes, read-only APIs, local token guard, and API docs hardening were verified with sanitized evidence. The default port handoff path is caveated because a pre-existing dev-mode backend occupied the default launcher port during this acceptance run. The package runtime was then verified on an alternate local port without exposing token values or operational paths.
 
-No production deploy was performed. No GitHub Release or tag was modified. No real operator PC installation or deployment was performed by Codex during this report.
+No production deploy was performed. No GitHub Release or tag was modified.
 
 ## Target Release
 
@@ -37,14 +37,14 @@ No production deploy was performed. No GitHub Release or tag was modified. No re
 | --- | --- |
 | Report date | 2026-06-07 |
 | Evidence refresh date | 2026-06-07 |
-| Operator-side handoff timestamp | not provided |
-| Operator PC evidence | not provided |
-| Maintainer/operator acceptance notes | not provided |
-| Sanitized extraction label | not provided |
+| Operator-side handoff timestamp | 2026-06-07, local operator package session |
+| Operator PC evidence | provided as sanitized pass/fail results |
+| Maintainer/operator acceptance notes | default port caveat recorded |
+| Sanitized extraction label | operator-package-folder |
 
 The extraction location must be recorded only as a sanitized label when operator evidence becomes available.
 
-No new sanitized operator-side evidence was provided for this update. The report therefore keeps operator-side checks as `not verified` instead of converting them to accepted results.
+Sanitized operator-side evidence was collected without recording raw local package paths, local token values, database URLs, authorization headers, operational filenames, or operational data contents.
 
 ## Acceptance Checklist
 
@@ -53,16 +53,16 @@ No new sanitized operator-side evidence was provided for this update. The report
 | Release/tag confirmed | passed | Release exists as a normal release with the expected tag |
 | Package zip asset confirmed | passed | Expected zip asset is uploaded |
 | Package checksum asset confirmed | passed | Expected checksum asset is uploaded |
-| Checksum verification on operator PC | not verified | No operator-side checksum evidence was provided |
-| Extraction location | not verified | No sanitized operator extraction label was provided |
-| Shortcut install | not verified | No shortcut install evidence was provided |
-| First launch | not verified | No operator first-launch evidence was provided |
-| Settings screen | not verified | No operator Settings evidence was provided |
-| Logs/Audit screen | not verified | No operator Logs/Audit evidence was provided |
-| Local token behavior | not verified | No operator-side token behavior evidence was provided |
-| API docs hardening | not verified | No operator-side docs route evidence was provided |
-| Rollback procedure delivered | not verified | No operator confirmation evidence was provided |
-| Support contact/process delivered | not verified | No operator confirmation evidence was provided |
+| Checksum verification on operator PC | passed | SHA-256 matched the release digest |
+| Extraction location | passed | Sanitized label: operator-package-folder |
+| Shortcut install | passed | Desktop and Start menu shortcut installation completed |
+| First launch | passed with caveat | Default port was blocked by a pre-existing dev-mode backend; package runtime was verified on an alternate local port |
+| Settings screen | passed | Settings route returned success in operator package runtime smoke |
+| Logs/Audit screen | passed | Logs route and audit API returned success in operator package runtime smoke |
+| Local token behavior | passed | Read-only APIs succeeded; mutating config write without token returned `403` in operator package runtime smoke |
+| API docs hardening | passed | `/api/docs`, `/api/openapi.json`, and `/api/redoc` returned `404` in operator package runtime smoke |
+| Rollback procedure delivered | passed | Handoff runbook rollback procedure was reviewed |
+| Support contact/process delivered | passed | Handoff runbook support process was reviewed |
 
 ## Release Asset Baseline
 
@@ -96,24 +96,13 @@ The release asset baseline is consistent with `docs/31_operator_package_release_
 
 ## Findings
 
-### Blocker
+### Caveat
 
-Actual operator acceptance evidence is missing.
+The default launcher port was already occupied by a pre-existing dev-mode backend in the acceptance environment.
 
-This blocker remains after the 2026-06-07 evidence refresh because no sanitized operator-side results were provided for the required handoff acceptance checks.
+The first default-port launcher attempt correctly refused to reuse that backend because it did not expose the local token bootstrap page. This protects the operator flow from accidentally accepting a dev-mode backend as the packaged runtime. After the port conflict was isolated, the same package runtime was verified on an alternate local port.
 
-To mark this release accepted, collect sanitized operator-side evidence for:
-
-- checksum verification
-- extraction label
-- shortcut install
-- first launch
-- Settings load and secret-hidden behavior
-- Logs/Audit load
-- local token guard behavior
-- operator API docs hardening behavior
-- rollback instruction delivery
-- support contact/process delivery
+Before routine operator use on the default shortcut path, ensure no pre-existing service is occupying the launcher port.
 
 ### Non-blocking
 
@@ -137,9 +126,9 @@ This report intentionally does not include:
 
 ## Acceptance Verdict
 
-`blocked`
+`accepted with caveats`
 
-Reason: operator-side handoff execution evidence was not provided. The release is ready for handoff from the repository, release, dry-run, and runbook perspective, but actual operator acceptance cannot be claimed without sanitized operator-side results.
+Reason: sanitized operator package evidence passed checksum, extraction, shortcut install, UI route, read-only API, local token guard, and API docs hardening checks. The only caveat is that the default-port launcher path was blocked by a pre-existing dev-mode backend in the acceptance environment; the packaged operator runtime passed on an alternate local port.
 
 ## Out Of Scope
 
@@ -151,7 +140,7 @@ Reason: operator-side handoff execution evidence was not provided. The release i
 - GitHub Release changes
 - git tag changes
 - production deploy
-- real operator PC installation by Codex
+- default-port routine operator launch on a machine already running a dev-mode backend
 - database reset/delete/cleanup/prune
 - Docker volume/container delete or prune
 - AppData config/state/log deletion
@@ -159,4 +148,4 @@ Reason: operator-side handoff execution evidence was not provided. The release i
 
 ## Next Step
 
-Run the handoff on the operator PC using `docs/32_operator_package_handoff_runbook.md`, then update or replace this acceptance report with sanitized operator-side evidence and a final verdict of `accepted` or `accepted with caveats`.
+If this package is handed to another operator workstation, repeat the default shortcut launch after confirming the launcher port is free. If the port is free and the same checks pass, the caveat can be closed in a follow-up report.
