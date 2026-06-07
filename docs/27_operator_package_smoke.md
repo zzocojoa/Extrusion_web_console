@@ -118,8 +118,7 @@ Count-only scans across package smoke logs and AppData launcher logs found no ma
 | Unsafe shortcut name smoke | Passed |
 | Launcher `-CheckOnly` smoke | Passed |
 | Package HTTP/token/docs smoke | Passed |
-
-`git diff --check` is expected to be run after this report is staged.
+| `git diff --check` | Passed |
 
 ## Findings
 
