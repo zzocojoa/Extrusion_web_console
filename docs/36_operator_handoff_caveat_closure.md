@@ -12,11 +12,13 @@ This report does not change product code, launcher behavior, backend behavior, f
 
 ## Summary
 
-Caveat closure is blocked.
+Caveat closure is accepted.
 
-The default launcher smoke was attempted with the released operator package on the default launcher port. The environment was not clean: the default port was already serving a dev-mode backend without the local token bootstrap page. The packaged launcher correctly refused to reuse that backend.
+The default launcher smoke was attempted with the released operator package on the default launcher port. The first attempt confirmed the previous caveat: the default port was still serving a dev-mode backend without the local token bootstrap page, and the packaged launcher correctly refused to reuse it.
 
-Because the clean-port precondition was not met, the caveat cannot be closed in this run. The acceptance verdict remains `accepted with caveats`.
+After that stale dev-mode backend was closed, the same released package runtime started on the default launcher port and passed the UI route, read-only API, no-token mutating API guard, and operator API docs hardening checks.
+
+The acceptance caveat recorded in `docs/35_operator_handoff_acceptance.md` is closed for a clean default-port environment. The package acceptance status is `accepted`.
 
 ## Target Release
 
@@ -32,8 +34,8 @@ Because the clean-port precondition was not met, the caveat cannot be closed in 
 | Precondition | Result |
 | --- | --- |
 | Use released operator package | passed |
-| Use default shortcut/launcher path | attempted |
-| Default launcher port is free | failed |
+| Use default shortcut/launcher path | passed |
+| Default launcher port is free | passed after stale dev-mode backend was closed |
 | No GitHub Release/tag mutation | passed |
 | No production deploy | passed |
 | No feature code changes | passed |
@@ -42,32 +44,34 @@ Because the clean-port precondition was not met, the caveat cannot be closed in 
 
 | Check | Result | Notes |
 | --- | --- | --- |
-| Default launcher start | blocked | Existing healthy backend was detected on the default port |
-| Token bootstrap on default port | failed | Existing backend did not expose the operator local token bootstrap page |
-| Launcher safety behavior | passed | Launcher refused to reuse the non-bootstrap backend |
-| `/` on default port | not accepted | Existing service responded, but it was not accepted as packaged operator runtime |
-| `/upload` | not run | Closure stopped after default-port precondition failed |
-| `/logs` | not run | Closure stopped after default-port precondition failed |
-| `/settings` | not run | Closure stopped after default-port precondition failed |
-| Read-only API smoke | not accepted | Existing dev-mode backend was not accepted as packaged runtime evidence |
-| Mutating no-token `403` | not run | Closure stopped after default-port precondition failed |
-| API docs hardening `404` | not run | Closure stopped after default-port precondition failed |
+| Default launcher start | passed | Released package runtime started on the default launcher port after the stale dev-mode backend was closed |
+| Token bootstrap on default port | passed | Packaged operator runtime exposed the local token bootstrap page; token value was not recorded |
+| Launcher safety behavior | passed | Initial non-bootstrap dev backend was rejected before the clean-port rerun |
+| `/` on default port | `200` | Packaged operator runtime served the app shell |
+| `/upload` | `200` | Upload route served successfully |
+| `/logs` | `200` | Logs route served successfully |
+| `/settings` | `200` | Settings route served successfully |
+| Read-only API smoke | `200` | `/api/health`, `/api/config`, and `/api/audit?limit=1` succeeded |
+| Mutating no-token `403` | `403` | No-token `PUT /api/config` was blocked |
+| API docs hardening `404` | `404` | `/api/docs`, `/api/openapi.json`, and `/api/redoc` were disabled |
 
 ## Observed Launcher Behavior
 
-The launcher reported that an existing backend was healthy but did not expose the local token bootstrap page, then exited instead of reusing it.
+The first launcher attempt reported that an existing backend was healthy but did not expose the local token bootstrap page, then exited instead of reusing it.
 
 This is the expected safety behavior. It prevents a dev-mode backend from being mistaken for the packaged operator runtime.
 
+After the stale dev-mode backend was closed, the released package launcher started the packaged runtime on the default port. The smoke used only sanitized pass/fail and HTTP status evidence.
+
 ## Findings
 
-### Blocker
+### Resolved caveat
 
-The default launcher port was still occupied by a dev-mode backend during the caveat closure attempt.
+The default launcher port caveat is closed for a clean-port environment.
 
 ### Non-blocking
 
-No package defect was found in this closure attempt. The run stopped because the environment did not satisfy the clean default-port requirement.
+No package defect was found. The initial dev-mode port conflict was environmental and the packaged runtime passed after the default port was freed.
 
 ## Security And Redaction
 
@@ -88,10 +92,10 @@ This report intentionally does not include:
 
 ## Closure Verdict
 
-`blocked`
+`accepted`
 
-Reason: the default launcher port was not clean. The packaged launcher correctly rejected the existing dev-mode backend, so the caveat remains open.
+Reason: the released package runtime passed default-port UI route, read-only API, local token guard, and API docs hardening smoke after the stale dev-mode backend was closed. The earlier launcher refusal remains valid safety behavior and no longer blocks acceptance in a clean-port environment.
 
 ## Next Step
 
-Close the pre-existing default-port backend, then rerun the default shortcut/launcher smoke. If the released package runtime starts on the default port and `/`, `/upload`, `/logs`, `/settings`, read-only APIs, mutating no-token `403`, and API docs hardening `404` all pass, update this report or add a follow-up report with closure verdict `accepted`.
+Proceed with operator handoff using the released package and handoff runbook. Before routine launch, verify that the default launcher port is free or close any stale dev-mode backend first.
