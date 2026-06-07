@@ -36,12 +36,15 @@ No production deploy was performed. No GitHub Release or tag was modified. No re
 | Item | Result |
 | --- | --- |
 | Report date | 2026-06-07 |
+| Evidence refresh date | 2026-06-07 |
 | Operator-side handoff timestamp | not provided |
 | Operator PC evidence | not provided |
 | Maintainer/operator acceptance notes | not provided |
 | Sanitized extraction label | not provided |
 
 The extraction location must be recorded only as a sanitized label when operator evidence becomes available.
+
+No new sanitized operator-side evidence was provided for this update. The report therefore keeps operator-side checks as `not verified` instead of converting them to accepted results.
 
 ## Acceptance Checklist
 
@@ -96,6 +99,8 @@ The release asset baseline is consistent with `docs/31_operator_package_release_
 ### Blocker
 
 Actual operator acceptance evidence is missing.
+
+This blocker remains after the 2026-06-07 evidence refresh because no sanitized operator-side results were provided for the required handoff acceptance checks.
 
 To mark this release accepted, collect sanitized operator-side evidence for:
 
