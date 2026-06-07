@@ -27,6 +27,21 @@ Implementation notes:
 - Package redaction checks now include credential-like assignment markers, operational filename-family markers, and Windows absolute path markers.
 - Assembly output remains count-oriented and does not print secret values.
 
+PR #38 QA result:
+
+- Targeted packaging tests: 11 passed.
+- Full backend tests from clean cwd: 176 passed.
+- Frontend typecheck, build, and screenshot QA: passed.
+- Package assembly with `-CreateZip`: passed.
+- Zip-entry scan: dependency test segments `0`, cache/bytecode entries `0`, marker-heavy docs `0`, denylist matches `0`.
+- Redaction scan: credential marker `0`, operational filename-family marker `0`, Windows path marker `0`, DB URL marker `0`, Authorization marker `0`, JWT marker `0`.
+- Runtime `.py`, native files, dist-info metadata, `METADATA`, `RECORD`, and license/notice/copying material were preserved.
+- Packaged import smoke returned `import_ok`.
+- Launcher `-CheckOnly`, shortcut installer `-CheckOnly`, HTTP route smoke, no-token `PUT /api/config` returning `403`, and `/api/docs`, `/api/openapi.json`, `/api/redoc` returning `404` all passed.
+- Python cache generated after package import or HTTP smoke is treated as post-runtime output and is distinct from clean zip contents.
+
+Known future hardening: split redaction marker tests into marker-specific parametrized fixtures so each marker class has an independent assertion.
+
 ## Release Blocker Analysis
 
 PR #36 release-candidate smoke found two blocker classes:

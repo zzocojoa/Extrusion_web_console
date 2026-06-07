@@ -21,9 +21,12 @@ Implementation result on branch `codex/operator-package-assembly-impl`:
 - Package root remains `ExtrusionWebConsole/`.
 - Required path, operator readiness, denylist, and redaction validation run after assembly.
 - `.venv` is required for operator-ready packages unless `-AllowIncompleteRuntime` is explicitly used.
-- `.venv` runtime contents are allowed, but `__pycache__`, `*.pyc`, and `*.pyo` are filtered out during copy and rejected by validation.
+- `.venv` runtime contents are allowed, but dependency test segments, `__pycache__`, `.pytest_cache`, `*.pyc`, and `*.pyo` are filtered out during copy and rejected by validation.
+- Runtime `.py`, native/runtime files, dist-info metadata, `METADATA`, `RECORD`, and license/notice/copying files are preserved.
+- Package docs now use a small release-safe subset: `README.md`, `CHANGELOG.md`, `VERSION`, and `docs/operator_package_runtime_note.md`.
 - The script prints package smoke guidance without running shortcut install, AppData cleanup, database cleanup, or Docker cleanup.
 - QA passed after the OutputRoot guard and zip metadata fix: targeted packaging tests 10 passed, full backend tests from clean cwd 175 passed, frontend typecheck/build/screenshot QA passed, and package assembly plus launcher/shortcut/HTTP/token/docs smoke passed.
+- PR #38 runtime prune QA passed targeted packaging tests 11 passed, full backend tests from clean cwd 176 passed, frontend typecheck/build/screenshot QA, package assembly with `-CreateZip`, zip-entry prune/redaction scans, packaged import smoke, launcher/shortcut `-CheckOnly`, HTTP route smoke, no-token mutation guard, and operator docs hardening smoke.
 
 ## Goal
 
@@ -58,11 +61,7 @@ ExtrusionWebConsole/
     install_shortcuts.ps1
     install_shortcuts.bat
   docs/
-    23_launcher_integration_plan.md
-    24_launcher_local_token_phase2_plan.md
-    26_windows_shortcut_packaging_plan.md
-    27_operator_package_smoke.md
-    28_operator_package_manifest_plan.md
+    operator_package_runtime_note.md
   .venv/
     Scripts/
       python.exe
@@ -86,18 +85,10 @@ The future assembly script must copy only allowlisted paths. It must not copy th
 | `README.md` | Yes | Operator and maintainer launch guidance. |
 | `CHANGELOG.md` | Yes | Release history and package notes. |
 | `VERSION` | Yes | Package version marker when present. |
-| selected `docs/` files | Yes | Operator launcher, token, shortcut, package smoke, and manifest guidance. |
+| `docs/operator_package_runtime_note.md` | Yes | Operator-safe package runtime note. |
 | `.venv/` | Yes for operator-ready package | Target-PC prepared Python runtime. |
 
-Selected docs for v1 operator package:
-
-- `docs/23_launcher_integration_plan.md`
-- `docs/24_launcher_local_token_phase2_plan.md`
-- `docs/26_windows_shortcut_packaging_plan.md`
-- `docs/27_operator_package_smoke.md`
-- `docs/28_operator_package_manifest_plan.md`
-
-Other docs can be added later only when they are operator-facing or directly needed for package validation.
+Marker-heavy engineering docs stay in the repository and are not copied into the operator package by default. Additional package docs can be added later only when they are operator-facing, marker-safe, and directly needed for launch or package validation.
 
 ## Exclude Denylist
 
@@ -108,7 +99,8 @@ The future manifest and assembly validation must reject these paths if they appe
 | `.git/` | Source-control metadata is not runtime material. |
 | `.gstack/` | Generated QA artifacts and screenshots are not package contents. |
 | `.agents/`, `.codex/`, `.bkit-codex/` | Developer-agent configuration is not operator runtime material. |
-| `.pytest_cache/`, `__pycache__/`, `*.pyc` | Test/cache artifacts are not package contents. |
+| `.pytest_cache/`, `__pycache__/`, `*.pyc`, `*.pyo` | Test/cache artifacts are not package contents. |
+| dependency test segments under `.venv/` | Dependency tests are not operator runtime material. |
 | `frontend/node_modules/` | Operator mode must not require Node/npm runtime dependencies. |
 | `frontend/src/`, `frontend/qa/` | Frontend source and QA tooling are not served in operator mode. |
 | `tests/` | Test fixtures and test code are not operator runtime material. |
@@ -345,6 +337,19 @@ Implementation QA result:
 - Package assembly smoke to a repo-external `C:\tmp` output root: passed.
 - Launcher `-CheckOnly`, shortcut `-CheckOnly`, HTTP route smoke, no-token mutation guard, and operator docs hardening smoke: passed.
 - Generated package folder, zip, checksum, `.gstack` artifacts, `frontend/dist`, and untracked operational CSV fixture were not committed.
+
+Runtime prune QA result:
+
+- Targeted packaging tests: 11 passed.
+- Full backend tests from clean cwd: 176 passed.
+- Frontend typecheck, build, and screenshot QA: passed.
+- Package assembly with `-CreateZip`: passed.
+- Zip-entry scan: dependency test segments `0`, cache/bytecode entries `0`, marker-heavy docs `0`, denylist matches `0`.
+- Redaction scan: credential marker `0`, operational filename-family marker `0`, Windows path marker `0`, DB URL marker `0`, Authorization marker `0`, JWT marker `0`.
+- Runtime material retained in the zip: runtime `.py`, native files, dist-info metadata, `METADATA`, `RECORD`, and license/notice/copying material.
+- Packaged import smoke returned `import_ok`.
+- Launcher `-CheckOnly`, shortcut installer `-CheckOnly`, HTTP route smoke, no-token `PUT /api/config` returning `403`, and `/api/docs`, `/api/openapi.json`, `/api/redoc` returning `404` all passed.
+- Python cache generated after import or HTTP smoke is post-runtime output and is distinct from clean zip contents.
 
 ## Implementation Order
 
