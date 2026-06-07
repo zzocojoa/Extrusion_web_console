@@ -115,6 +115,27 @@ def _run_assembly(repo_root: Path, output_root: Path, *extra_args: str) -> subpr
     )
 
 
+def _marker_text(marker_class: str) -> str:
+    marker_builders = {
+        "credential-like-marker": lambda: "credential" + ": " + "synthetic-value",
+        "database-url-marker": lambda: "postgres" + "://" + "user" + ":pass" + "@example.invalid/db",
+        "authorization-bearer-marker": lambda: "Authorization" + ": Bearer " + "synthetic-token",
+        "jwt-like-marker": lambda: ".".join(
+            [
+                "eyJ" + "syntheticHeader",
+                "syntheticPayload",
+                "syntheticSignature",
+            ]
+        ),
+        "windows-absolute-path-marker": lambda: "C:" + "\\synthetic\\operator\\data",
+        "operational-filename-family-marker": lambda: "Factory" + "_Synthetic_Log",
+        "timestamp-style-csv-marker": lambda: "20260209" + "_" + "074100" + ".csv",
+        "anon-key-assignment-marker": lambda: "anon" + "_key" + ": " + "synthetic-value",
+        "service-role-assignment-marker": lambda: "service" + "_role" + ": " + "synthetic-value",
+    }
+    return marker_builders[marker_class]()
+
+
 def test_manifest_json_contract_is_valid() -> None:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
@@ -318,27 +339,37 @@ def test_assembly_create_zip_records_checksum(tmp_path: Path) -> None:
     assert build_info["zipSha256"] == checksum.split()[0]
 
 
-def test_assembly_redaction_blocks_release_marker_classes(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "marker_class",
+    [
+        "credential-like-marker",
+        "database-url-marker",
+        "authorization-bearer-marker",
+        "jwt-like-marker",
+        "windows-absolute-path-marker",
+        "operational-filename-family-marker",
+        "timestamp-style-csv-marker",
+        "anon-key-assignment-marker",
+        "service-role-assignment-marker",
+    ],
+)
+def test_assembly_redaction_blocks_release_marker_class(tmp_path: Path, marker_class: str) -> None:
     repo_root = tmp_path / "repo"
     output_root = tmp_path / "out"
     repo_root.mkdir()
     _copy_packaging_files(repo_root)
     _create_minimal_repo(repo_root)
-    marker_text = "\n".join(
-        [
-            "credential" + ": " + "example-value",
-            "Factory" + "_Example_Log",
-            "C:" + "\\example\\operator\\data",
-        ]
+    (repo_root / "docs" / "operator_package_runtime_note.md").write_text(
+        _marker_text(marker_class),
+        encoding="utf-8",
     )
-    (repo_root / "docs" / "operator_package_runtime_note.md").write_text(marker_text, encoding="utf-8")
 
-    result = _run_assembly(repo_root, output_root, "-PackageLabel", "redaction-block")
+    result = _run_assembly(repo_root, output_root, "-PackageLabel", f"redaction-block-{marker_class}")
 
     assert result.returncode != 0
     output = f"{result.stdout}\n{result.stderr}"
     assert "Package redaction validation failed" in output
-    assert "credential-like-marker" in output
+    assert marker_class in output
 
 
 def test_assembly_default_output_is_repeatable_without_deleting_existing_output(tmp_path: Path) -> None:
