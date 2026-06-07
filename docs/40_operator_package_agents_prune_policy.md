@@ -1,12 +1,19 @@
 # Operator Package Dependency Agents Prune Policy
 
-Status: policy decided
+Status: implemented on branch `codex/operator-package-runtime-agents-prune-impl`
 
 Date: 2026-06-08
 
 Scope: document-only engineering policy for dependency-provided `.agents` entries found in API-mode operator package release-candidate smoke.
 
-This policy does not change feature code, launcher code, backend code, frontend code, package assembly scripts, local Supabase data, Docker data, AppData state, package outputs, release tags, or GitHub Release assets.
+This implementation changes package manifest, assembly script, packaging tests, and documentation only. It does not change product API behavior, launcher behavior, backend runtime behavior, frontend runtime behavior, local Supabase data, Docker data, AppData state, package outputs, release tags, or GitHub Release assets.
+
+Implementation result:
+
+- `packaging/operator-package.manifest.json` now lists `.agents` as a runtime `.venv` exclude class and records the package/zip `.agents` count `0` smoke contract.
+- `packaging/assemble_operator_package.ps1` now prunes `.agents` paths under `.venv`, reports a count-only `runtime agent entries pruned` metric, and keeps root/source `.agents` denylist validation unchanged.
+- `tests/backend/test_operator_package_assembly.py` now creates a synthetic dependency `.agents` fixture, asserts package output contains no `.agents` entries, and asserts zip output contains no `.agents` entries.
+- Dependency metadata, license, notice, copying, native/runtime files, and runtime `.py` preservation policy remains unchanged.
 
 ## Goal
 
