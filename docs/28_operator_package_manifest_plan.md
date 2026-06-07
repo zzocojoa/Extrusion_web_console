@@ -1,12 +1,29 @@
 # Operator Package Manifest / Assembly Plan
 
-Status: planned
+Status: implemented on branch `codex/operator-package-assembly-impl`
 
 Date: 2026-06-07
 
 Scope: prepared operator package manifest and safe assembly plan.
 
-This plan defines the package contents contract for the prepared Windows operator folder. It does not implement the manifest file or assembly script in this step.
+This plan defines the package contents contract for the prepared Windows operator folder.
+
+Implementation result on branch `codex/operator-package-assembly-impl`:
+
+- Added `packaging/operator-package.manifest.json`.
+- Added `packaging/assemble_operator_package.ps1`.
+- The script copies only manifest allowlist entries and never performs a repository-root recursive copy.
+- Default output is a new timestamped package folder under `C:\tmp\ExtrusionWebConsole-packages\`.
+- Existing package output is not deleted; explicit duplicate package labels fail safely.
+- `-CreateZip` creates an optional zip and writes a SHA-256 checksum next to it.
+- `OutputRoot` must be outside the repository root; repository-root and repository-internal output paths fail before package creation.
+- Zip-internal build metadata records `zipCreated=true` and points to the adjacent checksum file, while the package folder metadata records the actual SHA-256 after zip creation.
+- Package root remains `ExtrusionWebConsole/`.
+- Required path, operator readiness, denylist, and redaction validation run after assembly.
+- `.venv` is required for operator-ready packages unless `-AllowIncompleteRuntime` is explicitly used.
+- `.venv` runtime contents are allowed, but `__pycache__`, `*.pyc`, and `*.pyo` are filtered out during copy and rejected by validation.
+- The script prints package smoke guidance without running shortcut install, AppData cleanup, database cleanup, or Docker cleanup.
+- QA passed after the OutputRoot guard and zip metadata fix: targeted packaging tests 10 passed, full backend tests from clean cwd 175 passed, frontend typecheck/build/screenshot QA passed, and package assembly plus launcher/shortcut/HTTP/token/docs smoke passed.
 
 ## Goal
 
@@ -166,6 +183,7 @@ Required behavior:
 - Run from the repository root or resolve the repository root from the script location.
 - Copy only manifest allowlist entries.
 - Create a new timestamped output folder by default.
+- Reject `OutputRoot` values that point at the repository root or any path inside the repository.
 - Avoid deleting existing package output by default.
 - Write output outside the tracked source tree.
 - Fail before copying when required source paths are missing.
@@ -195,6 +213,11 @@ Zip creation is a future maintainer option:
 ```
 
 When a zip is created, the assembly script must also write a SHA-256 checksum next to it. The checksum is required for zip handoff verification.
+
+Build metadata behavior:
+
+- `ExtrusionWebConsole/package-build-info.json` in the package folder records the actual zip SHA-256 after zip creation.
+- The `package-build-info.json` file inside the zip records `zipCreated=true` and `zipSha256=see-adjacent-sha256-file`, because the final zip hash is only known after compression completes.
 
 Folder output validation is based on manifest verification and package smoke, not on a single folder checksum.
 
@@ -313,6 +336,15 @@ Future implementation validation:
   - database connection marker absent
   - secret-like marker absent
   - operational CSV path/content absent
+
+Implementation QA result:
+
+- Targeted packaging tests: 10 passed.
+- Full backend tests from clean cwd: 175 passed.
+- Frontend typecheck, build, and screenshot QA: passed.
+- Package assembly smoke to a repo-external `C:\tmp` output root: passed.
+- Launcher `-CheckOnly`, shortcut `-CheckOnly`, HTTP route smoke, no-token mutation guard, and operator docs hardening smoke: passed.
+- Generated package folder, zip, checksum, `.gstack` artifacts, `frontend/dist`, and untracked operational CSV fixture were not committed.
 
 ## Implementation Order
 

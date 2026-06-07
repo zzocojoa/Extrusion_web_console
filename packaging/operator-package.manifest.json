@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "packageName": "ExtrusionWebConsole",
+  "packageRoot": "ExtrusionWebConsole",
+  "requiredPaths": [
+    "backend/app",
+    "backend/requirements.txt",
+    "frontend/dist/index.html",
+    "launcher/start_web_console.ps1",
+    "launcher/start_web_console.bat",
+    "launcher/install_shortcuts.ps1",
+    "launcher/install_shortcuts.bat",
+    "README.md",
+    "CHANGELOG.md",
+    "VERSION"
+  ],
+  "includeAllowlist": [
+    {
+      "source": "backend/app",
+      "target": "backend/app",
+      "type": "directory",
+      "required": true
+    },
+    {
+      "source": "backend/requirements.txt",
+      "target": "backend/requirements.txt",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "frontend/dist",
+      "target": "frontend/dist",
+      "type": "directory",
+      "required": true
+    },
+    {
+      "source": "launcher",
+      "target": "launcher",
+      "type": "directory",
+      "required": true
+    },
+    {
+      "source": "README.md",
+      "target": "README.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "CHANGELOG.md",
+      "target": "CHANGELOG.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "VERSION",
+      "target": "VERSION",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "docs/23_launcher_integration_plan.md",
+      "target": "docs/23_launcher_integration_plan.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "docs/24_launcher_local_token_phase2_plan.md",
+      "target": "docs/24_launcher_local_token_phase2_plan.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "docs/26_windows_shortcut_packaging_plan.md",
+      "target": "docs/26_windows_shortcut_packaging_plan.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "docs/27_operator_package_smoke.md",
+      "target": "docs/27_operator_package_smoke.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "docs/28_operator_package_manifest_plan.md",
+      "target": "docs/28_operator_package_manifest_plan.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": ".venv",
+      "target": ".venv",
+      "type": "directory",
+      "required": true,
+      "allowIncompleteSwitch": "AllowIncompleteRuntime",
+      "exclude": [
+        "__pycache__",
+        "*.pyc",
+        "*.pyo"
+      ]
+    }
+  ],
+  "excludeDenylist": [
+    ".git",
+    ".gstack",
+    ".agents",
+    ".codex",
+    ".bkit-codex",
+    ".pytest_cache",
+    "frontend/node_modules",
+    "frontend/src",
+    "frontend/qa",
+    "tests",
+    ".env*",
+    "logs",
+    "*.db",
+    "*.db-shm",
+    "*.db-wal",
+    "*.sqlite",
+    "*.sqlite3",
+    "*.log",
+    "*.csv",
+    "__pycache__",
+    "*.pyc",
+    "*.pyo",
+    "tmp",
+    "temp"
+  ],
+  "operatorReadyChecks": [
+    "frontend/dist/index.html",
+    ".venv/Scripts/python.exe",
+    "launcher/start_web_console.ps1",
+    "launcher/install_shortcuts.ps1"
+  ],
+  "redactionChecks": [
+    "database-url-marker",
+    "authorization-bearer-marker",
+    "jwt-like-marker",
+    "service-role-assignment-marker",
+    "anon-key-assignment-marker",
+    "timestamp-style-csv-marker"
+  ],
+  "smokeChecks": [
+    "launcher/start_web_console.ps1 -CheckOnly",
+    "launcher/install_shortcuts.ps1 -CheckOnly",
+    "GET /",
+    "GET /upload",
+    "GET /logs",
+    "GET /settings",
+    "GET /api/health",
+    "GET /api/config",
+    "GET /api/audit?limit=1",
+    "mutating API without local token returns 403",
+    "operator API docs routes return 404"
+  ],
+  "buildMetadata": {
+    "sourceCommit": "filled-by-assembly",
+    "createdUtc": "filled-by-assembly",
+    "zipSha256": "filled-by-assembly-when-created"
+  }
+}
