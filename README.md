@@ -148,7 +148,7 @@ Maintainers can assemble a manifest-validated prepared package after building `f
 .\packaging\assemble_operator_package.ps1
 ```
 
-The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. It validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and excludes `.venv` cache files such as `__pycache__` and `*.pyc`.
+The assembly script copies only manifest-allowlisted runtime files into a new timestamped folder under `C:\tmp\ExtrusionWebConsole-packages\` by default. `OutputRoot` must be outside the repository root so package output cannot be created inside source control. The script validates required package contents, blocks denylisted files such as raw `.env*`, tests, developer artifacts, logs, state DB files, generated screenshots, and operational CSV data, and excludes `.venv` cache files such as `__pycache__` and `*.pyc`.
 
 Zip handoff is optional:
 
@@ -156,7 +156,7 @@ Zip handoff is optional:
 .\packaging\assemble_operator_package.ps1 -CreateZip
 ```
 
-When `-CreateZip` is used, a SHA-256 checksum file is written next to the zip. The script does not install shortcuts, delete existing package folders, delete AppData config/state/logs, run database cleanup, or run Docker cleanup.
+When `-CreateZip` is used, a SHA-256 checksum file is written next to the zip. The package folder metadata records the actual zip hash after creation; the metadata inside the zip marks `zipCreated=true` and points to the adjacent checksum file. The script does not install shortcuts, delete existing package folders, delete AppData config/state/logs, run database cleanup, or run Docker cleanup.
 
 ## Backend Development
 
