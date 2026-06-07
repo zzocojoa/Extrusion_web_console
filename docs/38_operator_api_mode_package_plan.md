@@ -1,6 +1,6 @@
 # API-Mode Operator Package Release Plan
 
-Status: plan, implementation not started
+Status: plan, build metadata implementation started on `codex/operator-api-mode-build-metadata`
 
 Date: 2026-06-07
 
@@ -33,7 +33,7 @@ API-mode package release readiness requires:
 | `docs/36_operator_handoff_caveat_closure.md` | Default-port launcher behavior is accepted when stale dev-mode backends are closed. Reuse this as a required smoke. |
 | `docs/37_operator_api_mode_preview_smoke.md` | Existing release cannot prove API-mode Preview because the frontend remained mock-mode built and local Supabase readiness was unavailable. This is the direct release gap. |
 | `packaging/operator-package.manifest.json` | Existing allowlist/denylist is appropriate. Future work should not broaden package contents for API mode. |
-| `packaging/assemble_operator_package.ps1` | Existing script is safe for package assembly but currently does not record or enforce frontend build mode as a first-class release contract. |
+| `packaging/assemble_operator_package.ps1` | Existing script is safe for package assembly. The next implementation must record and enforce frontend build mode as a first-class release contract. |
 
 ## Decision Summary
 
@@ -88,23 +88,29 @@ VITE_API_MODE=api
 
 The build must be a release-maintainer step before assembly. The operator double-click flow must not run `npm run build`.
 
-Required future implementation decisions:
+Implementation contract:
 
 | Decision | Requirement |
 | --- | --- |
-| Build command | Maintainer runs frontend build with API mode explicitly set. |
-| Mock/API distinction | API-mode package must fail validation if built artifacts still contain mock-only runtime signals that indicate the app is not using API mode. |
-| Package metadata | `package-build-info.json` should include `frontendMode=api` and source commit. |
+| Build command | Maintainer runs `npm run build:api` from `frontend/` for API-mode packages. |
+| Mock/API distinction | `npm run build` writes mock/default frontend metadata; `npm run build:api` writes API-mode frontend metadata. |
+| Package metadata | `package-build-info.json` includes `frontendMode` and source commit. |
+| Validation gate | `packaging/assemble_operator_package.ps1 -FrontendMode api` fails if `frontend/dist` is mock-mode or missing mode metadata. |
+| Backward compatibility | Default `-FrontendMode auto` keeps legacy mock/default assembly available and can record `frontendMode=unknown` when old dist metadata is absent. API-mode release packages must not use `auto`. |
 | Release note | GitHub Release notes must state `API mode frontend build`. |
 | Existing mock build | Keep available for screenshot QA and mock-mode package line. |
 
-Plan recommendation:
+Implemented first step:
 
-1. Add a future release-maintainer build command or script flag that runs the frontend build with API mode.
-2. Add an assembly-time or pre-assembly verification that confirms the built app no longer renders Settings as mock mode.
-3. Record the mode in package metadata and in smoke reports.
+1. `npm run build` keeps the mock/default package path.
+2. `npm run build:api` creates API-mode `frontend/dist`.
+3. `frontend/dist/frontend-build-info.json` records frontend mode.
+4. Assembly records `frontendMode` in package metadata.
+5. Explicit API-mode assembly fails fast on mode mismatch.
 
-This plan does not implement that flag or script change.
+Remaining future work is to run API-mode package assembly, smoke, tag, and release only after separate approval.
+
+QA smoke on 2026-06-08 reconfirmed the maintainer flow: `npm run build` records `frontendMode=mock`, `npm run build:api` records `frontendMode=api`, mock/default package assembly records `frontendMode=mock`, API package assembly with `-FrontendMode api` records `frontendMode=api`, and mock dist plus `-FrontendMode api` fails before package copy.
 
 ## 3. Package Contents
 

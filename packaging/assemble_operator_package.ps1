@@ -2,6 +2,8 @@
 param(
   [string]$OutputRoot = "C:\tmp\ExtrusionWebConsole-packages",
   [string]$PackageLabel = "",
+  [ValidateSet("auto", "mock", "api")]
+  [string]$FrontendMode = "auto",
   [switch]$CreateZip,
   [switch]$AllowIncompleteRuntime
 )
@@ -317,6 +319,57 @@ function Assert-PackageContents {
   Write-AssemblyInfo "runtime metadata preserved: $script:runtimeMetadataPreservedCount"
 }
 
+function Get-FrontendBuildInfo {
+  param([string]$RepoRoot)
+
+  $buildInfoPath = Join-Path $RepoRoot "frontend/dist/frontend-build-info.json"
+  if (-not (Test-Path -LiteralPath $buildInfoPath)) {
+    return [pscustomobject]@{
+      Mode = "unknown"
+      MetadataPresent = $false
+      MetadataPath = "frontend/dist/frontend-build-info.json"
+    }
+  }
+
+  try {
+    $decoded = Get-Content -LiteralPath $buildInfoPath -Raw | ConvertFrom-Json
+  } catch {
+    throw "Frontend build metadata is invalid JSON: frontend/dist/frontend-build-info.json"
+  }
+
+  $mode = [string]$decoded.frontendMode
+  if ($mode -ne "mock" -and $mode -ne "api") {
+    throw "Frontend build metadata has unsupported frontendMode: $mode"
+  }
+
+  return [pscustomobject]@{
+    Mode = $mode
+    MetadataPresent = $true
+    MetadataPath = "frontend/dist/frontend-build-info.json"
+  }
+}
+
+function Resolve-FrontendMode {
+  param(
+    [string]$ExpectedMode,
+    [object]$BuildInfo
+  )
+
+  if ($ExpectedMode -eq "auto") {
+    return $BuildInfo.Mode
+  }
+
+  if (-not $BuildInfo.MetadataPresent) {
+    throw "Frontend build metadata is missing. Run npm run build for mock mode or npm run build:api for API mode before package assembly."
+  }
+
+  if ($BuildInfo.Mode -ne $ExpectedMode) {
+    throw "Frontend mode mismatch: expected $ExpectedMode but found $($BuildInfo.Mode). Rebuild frontend/dist with the matching npm build script before package assembly."
+  }
+
+  return $BuildInfo.Mode
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptRoot ".."))
 $manifestPath = Join-Path $scriptRoot "operator-package.manifest.json"
@@ -362,6 +415,9 @@ $packageRoot = Join-Path $packageContainer $manifest.packageRoot
 if (Test-Path -LiteralPath $packageContainer) {
   throw "Package output already exists. Choose a new PackageLabel or omit it for timestamped output."
 }
+
+$frontendBuildInfo = Get-FrontendBuildInfo -RepoRoot $repoRoot
+$resolvedFrontendMode = Resolve-FrontendMode -ExpectedMode $FrontendMode -BuildInfo $frontendBuildInfo
 
 $runtimeIncomplete = $false
 foreach ($entry in $manifest.includeAllowlist) {
@@ -437,6 +493,9 @@ $buildInfo = [ordered]@{
   sourceCommit = $sourceCommit
   createdUtc = (Get-Date).ToUniversalTime().ToString("o")
   runtimeMode = $(if ($runtimeIncomplete) { "maintainer-prep-incomplete" } else { "operator-ready" })
+  frontendMode = $resolvedFrontendMode
+  frontendBuildMetadataPresent = [bool]$frontendBuildInfo.MetadataPresent
+  frontendBuildInfoPath = $frontendBuildInfo.MetadataPath
   zipCreated = $false
   zipSha256 = $null
 }
@@ -469,6 +528,7 @@ if ($CreateZip) {
 }
 
 Write-AssemblyInfo "package output: $packageRoot"
+Write-AssemblyInfo "frontend mode: $resolvedFrontendMode"
 if ($zipPath) {
   Write-AssemblyInfo "zip output: $zipPath"
 }
