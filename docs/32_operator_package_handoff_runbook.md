@@ -1,0 +1,324 @@
+# Operator Package Handoff Runbook
+
+Status: draft for maintainer handoff
+
+Date: 2026-06-07
+
+Scope: operator handoff procedure for a prepared Extrusion Web Console package that has passed final release smoke.
+
+## Goal
+
+Give a maintainer a repeatable, non-destructive handoff flow for delivering a prepared operator package to an operator PC.
+
+This runbook covers:
+
+- package zip and checksum handoff
+- extraction location
+- shortcut install
+- first launch
+- Settings verification
+- log locations
+- rollback
+- support escalation
+
+This document does not change product code, launcher behavior, package assembly, local Supabase runtime policy, AppData state, Docker state, database state, or operational CSV data.
+
+## Preconditions
+
+Before handoff, the maintainer must have:
+
+| Item | Requirement |
+| --- | --- |
+| Package folder or zip | Built from a release-smoked package branch or `main` |
+| Checksum file | Adjacent SHA-256 checksum for zip handoff |
+| Final release smoke | Passed and documented |
+| Target PC | Windows operator PC with expected local runtime access |
+| Prepared runtime | Package contains `.venv/Scripts/python.exe` |
+| Built frontend | Package contains `frontend/dist/index.html` |
+| Local config | Operator settings remain outside the package under AppData |
+
+Do not ask the operator to install Node, npm, or Python packages during normal launch.
+
+## Handoff Artifacts
+
+For zip handoff, deliver exactly these release artifacts:
+
+| Artifact | Purpose |
+| --- | --- |
+| `<package-label>.zip` | Prepared operator package |
+| `<package-label>.zip.sha256` | Checksum verification |
+
+Optional maintainer-only evidence:
+
+| Artifact | Purpose |
+| --- | --- |
+| Release smoke report | Shows package readiness and known limitations |
+| Package build metadata | Confirms source commit and runtime mode |
+
+Do not deliver raw `.env` files, logs, state databases, generated screenshots, package assembly temp folders, source-control folders, developer source trees, test fixtures, or operational CSV data.
+
+## Verify Checksum
+
+On the handoff machine, verify that the zip matches its checksum before extraction.
+
+PowerShell example:
+
+```powershell
+$zip = "<package-label>.zip"
+$checksum = "<package-label>.zip.sha256"
+$actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+$expected = (Get-Content -LiteralPath $checksum -Raw).Split()[0].ToLowerInvariant()
+if ($actual -ne $expected) { throw "Package checksum mismatch" }
+```
+
+If checksum verification fails, stop the handoff. Do not extract or run the package.
+
+## Extraction Location
+
+Extract the package into a stable operator-owned folder.
+
+Recommended shape:
+
+```text
+<operator-app-root>\
+  ExtrusionWebConsole\
+```
+
+The package root must contain:
+
+```text
+ExtrusionWebConsole\
+  backend\
+  frontend\dist\
+  launcher\
+  .venv\
+  README.md
+  CHANGELOG.md
+  VERSION
+```
+
+Do not extract into:
+
+- a source repository folder
+- a temporary download folder that may be cleaned automatically
+- a synced folder that can lock files during launch
+- an existing package folder unless this is an intentional replacement
+
+## Pre-Launch Checks
+
+From the extracted `ExtrusionWebConsole` folder, run:
+
+```powershell
+.\launcher\start_web_console.ps1 -CheckOnly
+```
+
+Expected result:
+
+- package prerequisites are present
+- local token policy is required in operator mode
+- API docs policy is disabled in operator mode
+- no backend process is started
+- no token value is printed
+
+Then run:
+
+```powershell
+.\launcher\install_shortcuts.ps1 -CheckOnly
+```
+
+Expected result:
+
+- Desktop and Start menu shortcut targets are shown
+- working directory is the package root
+- no shortcut is written in check-only mode
+- AppData config, state, logs, Docker data, database data, and operational CSV data are not deleted
+
+If either check fails, stop and contact the maintainer before first launch.
+
+## Install Shortcuts
+
+After check-only passes, install or refresh shortcuts:
+
+```powershell
+.\launcher\install_shortcuts.ps1
+```
+
+This creates or updates:
+
+- Desktop shortcut: `Extrusion Web Console`
+- Start menu shortcut: `Extrusion Web Console`
+
+Shortcut install is idempotent. Re-running updates existing shortcuts instead of creating duplicates.
+
+Do not manually edit the shortcut target unless instructed by the maintainer.
+
+## First Launch
+
+Launch through one of these paths:
+
+```text
+Extrusion Web Console desktop shortcut
+```
+
+or:
+
+```text
+launcher\start_web_console.bat
+```
+
+Expected first-launch behavior:
+
+- backend binds to `127.0.0.1`
+- browser opens the local web console
+- frontend is served from the package
+- mutating APIs are protected by a per-run local token
+- token is not printed or placed in the URL
+- API docs routes are disabled in operator mode
+
+The operator should see the Dashboard first. If the browser does not open, the maintainer can open the localhost URL reported by the launcher log without copying any token values.
+
+## Settings Verification
+
+After first launch, open Settings and verify:
+
+| Setting area | Expected check |
+| --- | --- |
+| Local Supabase settings | Presence and status are understandable |
+| Source/config paths | Displayed only as intended by the app |
+| Env/process overrides | Read-only fields are clearly disabled |
+| Secret fields | Raw values are hidden |
+| Save behavior | Operator-facing validation appears on invalid input |
+
+Do not paste secrets into chat, tickets, screenshots, or runbook notes.
+
+If Settings save is required, verify Audit Logs after save:
+
+```text
+Logs > Audit Logs
+```
+
+Expected result:
+
+- `settings.save` row appears
+- raw secret values are not visible
+- raw DB URLs, tokens, and authorization values are not visible
+
+## Runtime Smoke
+
+For handoff acceptance, check these pages:
+
+| Page | Expected result |
+| --- | --- |
+| Dashboard | Loads without browser console-visible crash |
+| Upload | Upload Preview and Upload Job tabs are visible |
+| Logs | Job Logs and Audit Logs are visible |
+| Settings | Config sections load |
+
+If Upload Preview or Upload Job requires local Supabase, verify local Supabase readiness separately using the operator site's runtime status. Do not run database reset, cleanup, prune, Docker cleanup, or destructive repair as part of handoff.
+
+## Log Locations
+
+Launcher logs are stored under:
+
+```text
+%APPDATA%\ExtrusionWebConsole\logs\launcher\
+```
+
+Application config and state remain under:
+
+```text
+%APPDATA%\ExtrusionWebConsole\
+```
+
+When collecting support evidence:
+
+- include timestamps
+- include high-level error text
+- do not include raw secret values
+- do not include DB URLs
+- do not include token values
+- do not include operational CSV paths or CSV contents
+
+## Rollback
+
+Rollback means returning the operator shortcut to the previous known-good package folder.
+
+Recommended rollback flow:
+
+1. Close the browser tab.
+2. Stop the current launcher/backend window if it is still running.
+3. Keep the failed package folder for maintainer inspection.
+4. Point shortcuts back to the previous known-good package folder by running that folder's shortcut installer.
+5. Launch the previous package.
+6. Verify Dashboard, Settings, and Logs load.
+
+Do not delete AppData config, state databases, logs, local Supabase data, Docker containers, Docker volumes, or operational CSV files during rollback.
+
+## Replacement Policy
+
+When replacing a package:
+
+- create or extract into a new versioned package folder
+- verify checksum before extraction
+- run launcher `-CheckOnly`
+- run shortcut installer `-CheckOnly`
+- update shortcuts only after checks pass
+- keep the previous known-good package until the new package is accepted
+
+Avoid overwriting the previous package folder in place. Keeping both folders makes rollback straightforward.
+
+## Support Escalation
+
+Escalate to the maintainer when:
+
+- checksum verification fails
+- launcher `-CheckOnly` fails
+- shortcut `-CheckOnly` fails
+- first launch does not open the local web console
+- Settings cannot load
+- Settings save fails unexpectedly
+- Audit Logs cannot be opened after a Settings save
+- local Supabase runtime status is unclear or blocked
+- Upload Preview or Upload Job shows unexpected blocking errors
+
+Support notes should include:
+
+- package label
+- package `VERSION`
+- whether checksum verification passed
+- whether `-CheckOnly` passed
+- first failed step
+- relevant timestamp
+- sanitized error summary
+
+Support notes must not include secret values, DB URLs, local API tokens, authorization headers, raw environment files, operational CSV paths, CSV contents, or raw row contents.
+
+## Handoff Acceptance Checklist
+
+| Check | Status |
+| --- | --- |
+| Zip checksum verified |  |
+| Package extracted into stable folder |  |
+| `launcher\start_web_console.ps1 -CheckOnly` passed |  |
+| `launcher\install_shortcuts.ps1 -CheckOnly` passed |  |
+| Shortcuts installed or refreshed |  |
+| First launch opened Dashboard |  |
+| Settings loaded |  |
+| Logs page loaded |  |
+| Secret values hidden in UI |  |
+| Previous known-good package retained |  |
+| Rollback path understood |  |
+
+## Out Of Scope
+
+- feature implementation
+- package assembly changes
+- launcher behavior changes
+- shortcut installer behavior changes
+- production deploy
+- database reset/delete/cleanup/prune
+- Docker volume/container delete or prune
+- AppData config/state/log deletion
+- packaging raw `.env` files
+- packaging operational CSV fixtures, paths, or contents
+- collecting or sharing secret values
