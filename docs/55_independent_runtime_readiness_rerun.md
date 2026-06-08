@@ -12,11 +12,11 @@ This rerun did not modify feature code, launcher code, backend code, frontend co
 
 ## Summary
 
-Readiness verdict: `blocked`.
+Readiness verdict: `ready_with_caveats`.
 
-The independent runtime was not still ready at rerun time because Docker Desktop's Linux engine was unavailable. Direct Docker inspection could not reach the daemon, `supabase status` exited non-zero, API/DB/Studio ports were unreachable, and the backend readiness endpoint reported `blocked` with reason code `docker_unavailable`.
+Docker Desktop was available for this rerun. The independent `supabase_*_Extrusion_web_console` container family was present, and API, DB, and Studio reachability passed on the configured independent ports. The previous Docker-unavailable blocker from the earlier same-branch attempt is resolved.
 
-The PR #67 backend Edge probe discrepancy could not be meaningfully re-evaluated while the runtime was down. Direct no-auth Edge route reachability was also unavailable, and backend Edge readiness reported timeout-class unreachable. Treat the prior discrepancy as unresolved, not fixed.
+The runtime is not fully ready for Preview or Start Upload because the Edge path remains unhealthy. A direct no-auth Edge route request returned a `503` class response, while backend readiness repeatedly reported Edge as `unreachable` with a timeout-class detail. This means the PR #67 backend Edge probe discrepancy is still unresolved: direct and backend probes disagree on the failure shape, but both indicate Edge is not healthy enough for upload work.
 
 ## QA Environment
 
@@ -47,26 +47,42 @@ The PR #67 backend Edge probe discrepancy could not be meaningfully re-evaluated
 
 | Check | Result |
 | --- | --- |
-| Docker daemon | unavailable |
-| Docker API error class | daemon endpoint missing/unreachable |
-| Independent container count from direct Docker inspection | not verifiable |
-| Legacy container family from direct Docker inspection | not verifiable |
-| `supabase status` exit code | non-zero |
+| Docker daemon | available |
+| Supabase CLI | available |
+| Independent container count | `12` |
+| Independent container family | `supabase_*_Extrusion_web_console` |
+| Legacy container family present | yes |
+| `supabase status` exit code | `0` |
 | `supabase status` raw output | suppressed |
-| Credential-like markers in `supabase status` raw output | no |
+| Credential-like markers in `supabase status` raw output | yes |
 
-No Docker repair, Docker start, Docker delete, Docker prune, Supabase start, Supabase reset, or migration command was run.
+Observed independent containers:
+
+- `supabase_analytics_Extrusion_web_console`
+- `supabase_auth_Extrusion_web_console`
+- `supabase_db_Extrusion_web_console`
+- `supabase_edge_runtime_Extrusion_web_console`
+- `supabase_inbucket_Extrusion_web_console`
+- `supabase_kong_Extrusion_web_console`
+- `supabase_pg_meta_Extrusion_web_console`
+- `supabase_realtime_Extrusion_web_console`
+- `supabase_rest_Extrusion_web_console`
+- `supabase_storage_Extrusion_web_console`
+- `supabase_studio_Extrusion_web_console`
+- `supabase_vector_Extrusion_web_console`
+
+Container caveat: `supabase_vector_Extrusion_web_console` was still restarting during the rerun. Core API/DB/Studio services remained reachable.
 
 ## Reachability Results
 
 | Probe | Result |
 | --- | --- |
-| API TCP `55321` | unreachable |
-| DB TCP `25433` | unreachable |
-| Studio TCP `55323` | unreachable |
-| API HTTP root | unreachable |
-| Studio HTTP root | unreachable |
-| Edge no-auth route | unreachable |
+| API TCP `55321` | reachable |
+| DB TCP `25433` | reachable |
+| Studio TCP `55323` | reachable |
+| API HTTP root | reachable with not-found class response |
+| Studio HTTP root | reachable with success class response |
+| Edge no-auth route | reachable with `503` class response |
 
 No authenticated Edge call was made.
 
@@ -80,34 +96,34 @@ The unsupported alias `GET /api/runtime/status` was not used.
 | --- | --- |
 | `/api/health` | `ok` |
 | `/api/config` | reachable |
-| Runtime overall status | `blocked` |
-| Runtime reason code | `docker_unavailable` |
+| Runtime overall status | `attention` |
+| Runtime reason code | `non_core_runtime_attention` |
 | Project id | `Extrusion_web_console` |
-| Docker status | `unhealthy` |
+| Docker status | `ready` |
 | Supabase CLI status | `ready` |
-| API status | `unreachable` |
-| DB status | `unreachable` |
-| Studio status | `unreachable` |
+| API status | `ready` |
+| DB status | `ready` |
+| Studio status | `ready` |
 | Backend Edge status | `unreachable` |
 | Backend Edge detail class | timeout |
 | Grafana status | `unreachable` |
-| Runtime container rows | `12` expected rows |
-| Runtime container exists count | `0` |
-| Runtime container missing count | `12` |
+| Runtime container rows | `12` |
+| Runtime container exists count | `12` |
+| Runtime container missing count | `0` |
 | Legacy containers in runtime response | `0` |
 
-Assessment: the app continues to target `Extrusion_web_console`, but the runtime cannot be considered ready while Docker is unavailable. The previous `required_container_missing` blocker is effectively reintroduced from the backend perspective because no expected containers can be confirmed through Docker.
+Assessment: the independent stack is present and core runtime readiness is no longer blocked by Docker or missing containers. Full readiness remains `attention` because Edge and Grafana are not ready.
 
 ## Edge Probe Discrepancy
 
 | Check | Result |
 | --- | --- |
-| Direct no-auth Edge route | unreachable |
+| Direct no-auth Edge route | reachable with `503` class response |
 | Backend Edge probe | unreachable / timeout |
 | Discrepancy resolved | no |
-| Discrepancy reproduced | not meaningfully testable while Docker is unavailable |
+| Edge upload readiness | not ready |
 
-PR #67 showed direct no-auth Edge route reachability with backend Edge probe timeout/503-class attention. This rerun cannot prove whether that discrepancy is fixed or still present because both direct and backend paths are blocked by runtime unavailability.
+PR #67 showed a direct-vs-backend Edge probe discrepancy. This rerun still shows a discrepancy, but the direct path now returns `503` rather than an auth-required class response. The actionable interpretation is unchanged: Edge is not healthy enough for Preview-to-Start-Upload progression, and the backend probe behavior should be investigated without running authenticated Edge calls.
 
 ## Settings And Redaction
 
@@ -136,20 +152,20 @@ Settings UI caveat from PR #67 reproduced. API-level redaction passed, but the h
 | --- | --- |
 | Runtime project id | `Extrusion_web_console` |
 | Backend runtime response includes legacy containers | no |
-| Direct Docker legacy container inspection | not verifiable while Docker is unavailable |
+| Direct Docker legacy container family present | yes |
 | Legacy fallback selected | no evidence |
 
-The backend response did not confuse the target project id with the legacy runtime. Direct host-level legacy container presence could not be verified because Docker was unavailable.
+The host still has legacy container family presence, but backend runtime readiness remains scoped to the independent project id and did not use legacy containers as substitutes.
 
 ## Grafana And Vector Caveats
 
 | Item | Result |
 | --- | --- |
 | Grafana | unreachable |
-| Vector container | not verifiable while Docker is unavailable |
-| Upload readiness impact | blocked by Docker/runtime unavailability before Grafana/vector can be evaluated |
+| Vector container | restarting |
+| Upload readiness impact | secondary caveat; Edge remains the primary upload-readiness blocker |
 
-Grafana and vector are not the primary blocker in this rerun. Docker unavailability blocks the runtime first.
+Grafana remains link/status-only for the web console. Vector is a non-core runtime caveat in this smoke. Neither should be treated as resolved.
 
 ## Redaction Result
 
@@ -173,10 +189,10 @@ Grafana and vector are not the primary blocker in this rerun. Docker unavailabil
 | `npm run typecheck` | passed |
 | `npm run build` | passed |
 | `npm run build:api` | passed |
-| Docker/Supabase current-state smoke | blocked by Docker unavailable |
-| API/DB/Studio direct reachability | unreachable |
-| Edge no-auth direct reachability | unreachable |
-| Backend runtime readiness | `blocked` |
+| Docker/Supabase current-state smoke | independent containers present |
+| API/DB/Studio direct reachability | passed |
+| Edge no-auth direct reachability | `503` class response |
+| Backend runtime readiness | `attention` |
 | Settings redaction smoke | raw secret pattern absent |
 
 Pre-PR hygiene checks still required after this report is staged:
@@ -190,30 +206,31 @@ Pre-PR hygiene checks still required after this report is staged:
 
 ### Blockers
 
-1. `docker_unavailable`: Docker Desktop's Linux engine was not reachable, so independent runtime readiness is blocked.
-2. `independent_runtime_unreachable`: API, DB, Studio, and Edge route reachability all failed because the runtime was unavailable.
-3. `required_container_presence_unverified`: expected containers could not be confirmed by direct Docker inspection; backend readiness reported all expected container rows as missing.
+1. `edge_unhealthy`: direct no-auth Edge route returns `503` class response and backend Edge probe times out.
+2. `edge_probe_discrepancy_unresolved`: direct and backend Edge probes disagree on failure shape, so the PR #67 discrepancy is not resolved.
 
 ### Caveats
 
-1. `edge_probe_discrepancy_unresolved`: PR #67's direct-vs-backend Edge discrepancy could not be reassessed while the runtime was down.
-2. `settings_ui_identity_visibility`: Settings DOM scan still did not show project id, Studio port, or password-type secret inputs.
-3. `grafana_unreachable`: Grafana remains unreachable, but Docker/runtime unavailability is the primary blocker.
-4. `vector_not_assessed`: vector state could not be checked while Docker was unavailable.
+1. `grafana_unreachable`: Grafana remains unreachable. It is not the primary independent Supabase upload blocker.
+2. `vector_container_restarting`: the vector container is still restarting while core services are reachable.
+3. `settings_ui_identity_visibility`: Settings DOM scan still did not show project id, Studio port, or password-type secret inputs.
 
 ### Passed
 
-1. `config_defaults_ready`: config API still reports project id `Extrusion_web_console` and ports `55321` / `25433` / `55323`.
-2. `secret_redaction_ready`: config/app shell/Settings DOM scans did not expose raw secret-like patterns.
-3. `legacy_not_selected`: backend runtime response targeted `Extrusion_web_console` and did not report legacy containers.
-4. `dangerous_operations_avoided`: no prohibited Supabase, DB, Docker delete, Upload, Edge auth, release, tag, or deploy action was run.
+1. `docker_available`: Docker daemon is reachable again.
+2. `independent_containers_present`: all 12 expected independent container rows exist.
+3. `core_runtime_ready`: API, DB, and Studio are reachable and backend readiness reports them as `ready`.
+4. `config_defaults_ready`: config API reports project id `Extrusion_web_console` and ports `55321` / `25433` / `55323`.
+5. `secret_redaction_ready`: config/app shell/Settings DOM scans did not expose raw secret-like patterns.
+6. `legacy_not_selected`: backend runtime response targeted `Extrusion_web_console` and did not report legacy containers.
+7. `dangerous_operations_avoided`: no prohibited Supabase, DB, Docker delete, Upload, Edge auth, release, tag, or deploy action was run.
 
 ## Merge Blocker Assessment
 
 This QA report PR is documentation-only and has no feature-code merge blocker.
 
-The runtime readiness result itself is blocked. Do not proceed to Preview smoke or Start Upload smoke until Docker is available, independent containers are confirmed, and backend runtime readiness is rerun. The Edge probe discrepancy from PR #67 remains unresolved and must be retested only after the runtime is reachable again.
+The runtime itself is `ready_with_caveats`, not ready for Preview smoke. Do not proceed to Preview or Start Upload until the Edge unhealthy state and direct-vs-backend Edge probe discrepancy are investigated and a subsequent readiness rerun shows an acceptable Edge result.
 
 ## Next Step
 
-Restore Docker Desktop availability outside the app, without Docker delete/prune or DB reset. Then rerun independent runtime readiness on a fresh QA branch before deciding whether an independent Preview smoke is allowed.
+Investigate the Edge runtime health and backend Edge probe discrepancy without authenticated Edge calls or upload execution. After Edge readiness is fixed or explained, rerun independent runtime readiness again before approving any independent Preview smoke.
