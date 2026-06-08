@@ -30,6 +30,19 @@ Decision summary:
 | Packaging | Include Supabase assets in operator packages, but never include DB state, raw `.env`, operational CSV data, logs, screenshots, package outputs, or generated artifacts. |
 | Rollout | Keep `Extrusion_data` as fallback until independent Preview and Start Upload smoke are accepted. |
 
+## Phase 1 Assets Implementation Status
+
+Status: implemented on branch `codex/independent-supabase-assets`.
+
+Phase 1 adds static repo-owned Supabase assets only:
+
+- `supabase/config.toml` with project id `Extrusion_web_console` and independent local ports;
+- `supabase/functions/upload-metrics`;
+- `supabase/migrations/20260608000001_create_all_metrics_upload_contract.sql`;
+- `supabase/README.md` and `supabase/.gitignore` guardrails for generated/runtime files.
+
+This phase does not change backend runtime control, launcher behavior, frontend behavior, or package assembly. It also does not run Supabase init/bootstrap/start/reset, DB migrations, Edge Function deploy/execution, Upload Preview, or Start Upload.
+
 ## Current Architecture Problem
 
 The current web console is still coupled to the legacy local Supabase runtime:
