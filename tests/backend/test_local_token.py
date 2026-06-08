@@ -131,6 +131,17 @@ def test_protected_route_groups_block_without_token(tmp_path: Path, monkeypatch)
     get_settings.cache_clear()
 
 
+def test_runtime_token_failure_uses_configured_project_id_target(tmp_path: Path, monkeypatch) -> None:
+    client, audit_repository = _client(tmp_path, monkeypatch)
+
+    response = client.post("/api/runtime/local-supabase/start", json={})
+
+    assert response.status_code == 403
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="runtime.start")).rows[0]
+    assert row["target_id"] == "Extrusion_web_console"
+    get_settings.cache_clear()
+
+
 def test_repeated_missing_token_audit_is_rate_limited(tmp_path: Path, monkeypatch) -> None:
     client, audit_repository = _client(tmp_path, monkeypatch)
 

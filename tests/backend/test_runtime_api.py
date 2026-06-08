@@ -26,7 +26,7 @@ def test_runtime_routes_are_registered_in_openapi(monkeypatch) -> None:
 
 def test_runtime_status_returns_graceful_blocked_state_without_docker(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
-    project_path = tmp_path / "Extrusion_data"
+    project_path = tmp_path / "Extrusion_web_console"
     write_supabase_config(project_path)
     app.dependency_overrides[get_settings] = lambda: Settings(
         state_db_path=str(db_path),
@@ -52,7 +52,7 @@ def test_runtime_start_blocks_active_preview_via_api(tmp_path: Path) -> None:
     from backend.app.db.preview_repository import PreviewRepository
 
     db_path = tmp_path / "state.db"
-    project_path = tmp_path / "Extrusion_data"
+    project_path = tmp_path / "Extrusion_web_console"
     write_supabase_config(project_path)
     preview = PreviewRepository(db_path)
     preview.create_run(

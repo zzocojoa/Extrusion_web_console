@@ -217,17 +217,19 @@ $env:EWC_STATE_DB_PATH="<local state DB path>"
 
 Upload Job responses and job events expose `acceptedRows` as the canonical count of rows accepted/upserted by the Edge Function and Supabase upsert path. This is not a net-new physical insert count: duplicate-safe reruns can report positive `acceptedRows` while the DB row count delta stays `0`. The legacy `insertedRows` response field remains available as a deprecated compatibility alias for v1, but operator-facing Upload UI labels use `Accepted` / `수락` and avoid inserted-row wording. The existing SQLite `inserted_rows` storage column is retained without rename or migration.
 
-Local Supabase runtime control uses the existing `Extrusion_data` local stack by default:
+Local Supabase runtime control defaults to this repository's independent local Supabase assets:
 
 ```powershell
 $env:EWC_LOCAL_SUPABASE_PROJECT_PATH="<local Supabase project path>"
-$env:EWC_LOCAL_SUPABASE_PROJECT_ID="Extrusion_data"
-$env:EWC_LOCAL_SUPABASE_API_PORT="54321"
-$env:EWC_LOCAL_SUPABASE_DB_PORT="25432"
-$env:EWC_LOCAL_SUPABASE_STUDIO_PORT="54323"
+$env:EWC_LOCAL_SUPABASE_PROJECT_ID="Extrusion_web_console"
+$env:EWC_LOCAL_SUPABASE_API_PORT="55321"
+$env:EWC_LOCAL_SUPABASE_DB_PORT="25433"
+$env:EWC_LOCAL_SUPABASE_STUDIO_PORT="55323"
 ```
 
 Runtime control is intentionally non-destructive. It does not run bootstrap, reset, cleanup, Docker delete, volume delete, prune, `supabase init`, `supabase db reset`, `docker run/create/rm`, or `docker compose up/down`. If required Supabase containers are missing, start is blocked as `required_container_missing`; v1 does not create a new local Supabase stack.
+
+The legacy local stack can still be selected explicitly through env/config overrides for rollback during rollout, but it is no longer the built-in default.
 
 Config API smoke check:
 
@@ -237,7 +239,7 @@ Invoke-RestMethod http://127.0.0.1:8000/api/config
 $body = @{
   values = @{
     grafanaUrl = "http://localhost:3001"
-    localSupabaseApiPort = 54321
+    localSupabaseApiPort = 55321
   }
 } | ConvertTo-Json -Depth 4
 
@@ -536,7 +538,7 @@ If the backend fails after pulling this branch with `ModuleNotFoundError: psycop
 If Upload Preview reports `partial_failed` with `risky/db_unreachable`, check:
 
 - `EWC_SUPABASE_DB_URL` is set for the backend process.
-- Local Supabase is running and its Postgres port is reachable. For the referenced `Extrusion_data` local stack, use `127.0.0.1:25432` from `supabase/config.toml`.
+- Local Supabase is running and its Postgres port is reachable. For the independent web-console stack, the default DB TCP port is `127.0.0.1:25433` from `supabase/config.toml`.
 - The local database contains `public.all_metrics` with the existing `timestamp, device_id` uniqueness policy.
 
 This failure state is expected when the DB cannot be checked. The app should show the risk in the UI instead of treating files as upload targets.

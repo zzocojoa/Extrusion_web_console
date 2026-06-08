@@ -6,22 +6,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-REQUIRED_SUPABASE_CONTAINERS = (
-    "supabase_db_Extrusion_data",
-    "supabase_kong_Extrusion_data",
-    "supabase_auth_Extrusion_data",
-    "supabase_rest_Extrusion_data",
-    "supabase_realtime_Extrusion_data",
-    "supabase_storage_Extrusion_data",
-    "supabase_pg_meta_Extrusion_data",
-    "supabase_studio_Extrusion_data",
-    "supabase_inbucket_Extrusion_data",
-    "supabase_edge_runtime_Extrusion_data",
-    "supabase_analytics_Extrusion_data",
-    "supabase_vector_Extrusion_data",
+SUPABASE_CONTAINER_SERVICES = (
+    "db",
+    "kong",
+    "auth",
+    "rest",
+    "realtime",
+    "storage",
+    "pg_meta",
+    "studio",
+    "inbucket",
+    "edge_runtime",
+    "analytics",
+    "vector",
 )
 
-ALLOWED_CONTAINERS = set(REQUIRED_SUPABASE_CONTAINERS)
+DEFAULT_SUPABASE_PROJECT_ID = "Extrusion_web_console"
+REQUIRED_SUPABASE_CONTAINERS = tuple(
+    f"supabase_{service}_{DEFAULT_SUPABASE_PROJECT_ID}"
+    for service in SUPABASE_CONTAINER_SERVICES
+)
 
 FORBIDDEN_WORDS = {
     "init",
@@ -70,9 +74,18 @@ def redact_command_output(value: str | bytes | None) -> str:
 
 
 class AllowedCommandRunner:
-    def __init__(self, project_path: str, default_timeout_seconds: int = 20) -> None:
+    def __init__(
+        self,
+        project_path: str,
+        default_timeout_seconds: int = 20,
+        *,
+        project_id: str = DEFAULT_SUPABASE_PROJECT_ID,
+    ) -> None:
         self.project_path = Path(project_path)
         self.default_timeout_seconds = default_timeout_seconds
+        self.project_id = project_id.strip() or DEFAULT_SUPABASE_PROJECT_ID
+        self.required_supabase_containers = required_supabase_containers(self.project_id)
+        self.allowed_containers = set(self.required_supabase_containers)
 
     def validate(self, args: Sequence[str], *, required_containers_verified: bool = False) -> tuple[str, ...]:
         command = tuple(str(arg) for arg in args)
@@ -147,10 +160,10 @@ class AllowedCommandRunner:
         }:
             return command
         if len(command) == 3 and command[1] in {"start", "stop"}:
-            if command[2] not in ALLOWED_CONTAINERS:
+            if command[2] not in self.allowed_containers:
                 raise CommandPolicyError("container_not_allowed")
             return command
-        if len(command) == 5 and command[1] == "inspect" and command[2] in ALLOWED_CONTAINERS and command[3] == "--format":
+        if len(command) == 5 and command[1] == "inspect" and command[2] in self.allowed_containers and command[3] == "--format":
             allowed_formats = {"{{json .State}}", "{{.State.Status}}", "{{.State.Health.Status}}"}
             if command[4] in allowed_formats:
                 return command
@@ -159,3 +172,12 @@ class AllowedCommandRunner:
         if len(command) > 2 and command[1] == "compose" and command[2] in {"up", "down", "rm"}:
             raise CommandPolicyError("docker_compose_command_forbidden")
         raise CommandPolicyError("docker_command_not_allowed")
+
+
+def required_supabase_containers(project_id: str) -> tuple[str, ...]:
+    normalized = project_id.strip()
+    if not normalized:
+        raise CommandPolicyError("project_id_required")
+    if re.search(r"\s", normalized) or any(token in normalized for token in ("&&", "||", ";", "|", "`", "$(", ">", "<", "/", "\\")):
+        raise CommandPolicyError("project_id_not_allowed")
+    return tuple(f"supabase_{service}_{normalized}" for service in SUPABASE_CONTAINER_SERVICES)

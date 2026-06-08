@@ -98,7 +98,7 @@ async def audit_local_token_failure(
     settings: Settings,
     failure: LocalTokenFailure,
 ) -> None:
-    action = action_for_request(request)
+    action = action_for_request(request, settings)
     bucket = (action.action, action.route_group, failure.reason_code)
     now = time.monotonic()
     last = _LAST_AUDIT_BY_BUCKET.get(bucket)
@@ -128,7 +128,7 @@ async def audit_local_token_failure(
         _LOGGER.exception("Failed to write local token failure audit row.")
 
 
-def action_for_request(request: Request) -> ProtectedAction:
+def action_for_request(request: Request, settings: Settings | None = None) -> ProtectedAction:
     path = request.url.path
     parts = [part for part in path.split("/") if part]
 
@@ -154,10 +154,20 @@ def action_for_request(request: Request) -> ProtectedAction:
         return ProtectedAction(action_name, "upload_job", job_id, "upload.jobs")
 
     if path == "/api/runtime/local-supabase/start":
-        return ProtectedAction("runtime.start", "local_supabase", "Extrusion_data", "runtime")
+        return ProtectedAction(
+            "runtime.start",
+            "local_supabase",
+            settings.local_supabase_project_id if settings is not None else None,
+            "runtime",
+        )
 
     if path == "/api/runtime/local-supabase/stop":
-        return ProtectedAction("runtime.stop", "local_supabase", "Extrusion_data", "runtime")
+        return ProtectedAction(
+            "runtime.stop",
+            "local_supabase",
+            settings.local_supabase_project_id if settings is not None else None,
+            "runtime",
+        )
 
     return ProtectedAction("local.token", "api", None, "api")
 

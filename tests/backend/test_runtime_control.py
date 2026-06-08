@@ -16,15 +16,17 @@ from backend.app.schemas.runtime import (
     RuntimeServiceStatus,
     RuntimeStatusResponse,
 )
-from backend.app.services.command_runner import REQUIRED_SUPABASE_CONTAINERS
+from backend.app.services.command_runner import required_supabase_containers
 from backend.app.services.command_runner import CommandResult
 from backend.app.services.runtime_control import RuntimeConflictError, RuntimeControlService
 
 
 class FakeRunner:
-    def __init__(self, docker_ps_output: str = "") -> None:
+    def __init__(self, docker_ps_output: str = "", *, project_id: str = "Extrusion_web_console") -> None:
         self.docker_ps_output = docker_ps_output
         self.commands: list[tuple[str, ...]] = []
+        self.project_id = project_id
+        self.required_supabase_containers = required_supabase_containers(project_id)
 
     def run(self, args: Sequence[str], *, timeout_seconds: int | None = None, required_containers_verified: bool = False) -> CommandResult:
         command = tuple(args)
@@ -41,17 +43,18 @@ class FakeRunner:
 
 
 def settings(tmp_path: Path) -> Settings:
-    project_path = tmp_path / "Extrusion_data"
+    project_path = tmp_path / "Extrusion_web_console"
     write_supabase_config(project_path)
     return Settings(
         state_db_path=str(tmp_path / "state.db"),
         local_supabase_project_path=str(project_path),
+        local_supabase_wsl_path="/mnt/c/tmp/Extrusion_web_console",
         supabase_edge_url="",
         runtime_readiness_timeout_seconds=1,
     )
 
 
-def write_supabase_config(project_path: Path, *, api_port: int = 54321, db_port: int = 25432, studio_port: int = 54323) -> None:
+def write_supabase_config(project_path: Path, *, api_port: int = 55321, db_port: int = 25433, studio_port: int = 55323) -> None:
     supabase_path = project_path / "supabase"
     supabase_path.mkdir(parents=True)
     (supabase_path / "config.toml").write_text(
@@ -188,13 +191,25 @@ def test_passive_status_success_does_not_write_audit(tmp_path: Path) -> None:
 
 
 def test_default_edge_url_uses_local_supabase_api_port() -> None:
-    app_settings = Settings(supabase_edge_url="", supabase_url="", local_supabase_api_port=54321)
+    app_settings = Settings(supabase_edge_url="", supabase_url="", local_supabase_api_port=55321)
+
+    assert app_settings.upload_edge_url == "http://127.0.0.1:55321/functions/v1/upload-metrics"
+
+
+def test_default_edge_url_uses_independent_api_port_when_supabase_url_unset() -> None:
+    app_settings = Settings(_env_file=None, supabase_edge_url="")
+
+    assert app_settings.upload_edge_url == "http://127.0.0.1:55321/functions/v1/upload-metrics"
+
+
+def test_default_edge_url_follows_legacy_api_port_override_when_supabase_url_unset() -> None:
+    app_settings = Settings(_env_file=None, supabase_edge_url="", local_supabase_api_port=54321)
 
     assert app_settings.upload_edge_url == "http://127.0.0.1:54321/functions/v1/upload-metrics"
 
 
 def test_status_blocks_when_config_ports_do_not_match(tmp_path: Path) -> None:
-    project_path = tmp_path / "Extrusion_data"
+    project_path = tmp_path / "Extrusion_web_console"
     write_supabase_config(project_path, api_port=54322)
     app_settings = Settings(
         state_db_path=str(tmp_path / "state.db"),
@@ -429,19 +444,19 @@ def runtime_status(
         reason_code="test",
         reason_text="test",
         checked_at=datetime.now(timezone.utc),
-        project_path="C:\\tmp\\Extrusion_data",
-        project_id="Extrusion_data",
+        project_path="C:\\tmp\\Extrusion_web_console",
+        project_id="Extrusion_web_console",
         docker=RuntimeProbeStatus(name="Docker", status=docker, detail="test"),
         wsl=RuntimeProbeStatus(name="WSL", status=RuntimeServiceStatus.ready, detail="test"),
         supabase_cli=RuntimeProbeStatus(name="Supabase CLI", status=RuntimeServiceStatus.ready, detail="test"),
-        api=RuntimePortStatus(name="Supabase API", port=54321, status=api, detail="test"),
-        db=RuntimePortStatus(name="Supabase DB", port=25432, status=db, detail="test"),
-        studio=RuntimePortStatus(name="Supabase Studio", port=54323, status=studio, detail="test"),
+        api=RuntimePortStatus(name="Supabase API", port=55321, status=api, detail="test"),
+        db=RuntimePortStatus(name="Supabase DB", port=25433, status=db, detail="test"),
+        studio=RuntimePortStatus(name="Supabase Studio", port=55323, status=studio, detail="test"),
         edge_runtime=RuntimeProbeStatus(name="Edge Function", status=edge, detail="test"),
         grafana=RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.unreachable, detail="test"),
         containers=[
             container_status(name, running=docker == RuntimeServiceStatus.ready)
-            for name in REQUIRED_SUPABASE_CONTAINERS
+            for name in required_supabase_containers("Extrusion_web_console")
         ],
         config=[],
     )
@@ -462,4 +477,4 @@ def container_status(name: str, *, running: bool):
 
 def all_containers_output(*, running: bool) -> str:
     status = "Up 10 seconds" if running else "Exited (0)"
-    return "\n".join(f'{{"Names":"{name}","Status":"{status}"}}' for name in REQUIRED_SUPABASE_CONTAINERS)
+    return "\n".join(f'{{"Names":"{name}","Status":"{status}"}}' for name in required_supabase_containers("Extrusion_web_console"))

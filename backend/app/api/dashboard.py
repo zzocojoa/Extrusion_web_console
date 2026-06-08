@@ -47,7 +47,7 @@ def build_mock_dashboard(settings: Settings) -> DashboardResponse:
                 label="Local Supabase",
                 tone="ready",
                 value="DB + Edge OK",
-                detail="127.0.0.1:54321",
+                detail="127.0.0.1:55321",
             ),
             StatusMatrixItem(
                 id="storage",
@@ -129,7 +129,7 @@ def build_mock_dashboard(settings: Settings) -> DashboardResponse:
                 id="supabase",
                 label="Local Supabase",
                 tone="ready",
-                detail="127.0.0.1:54321",
+                detail="127.0.0.1:55321",
                 last_checked_at=now,
             ),
             RuntimeCheckRow(

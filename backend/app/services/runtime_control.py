@@ -9,7 +9,7 @@ from backend.app.db.preview_repository import PreviewRepository
 from backend.app.db.runtime_repository import RuntimeRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.runtime import RuntimeOperationDto, RuntimeOperationKind, RuntimeOperationStatus, RuntimeStatusResponse
-from backend.app.services.command_runner import REQUIRED_SUPABASE_CONTAINERS, AllowedCommandRunner
+from backend.app.services.command_runner import AllowedCommandRunner
 from backend.app.services.runtime_readiness import RuntimeReadinessService
 
 
@@ -56,7 +56,7 @@ class RuntimeControlService:
                 "apiPort": self.settings.local_supabase_api_port,
                 "dbPort": self.settings.local_supabase_db_port,
                 "studioPort": self.settings.local_supabase_studio_port,
-                "edgeContainer": self.settings.local_supabase_edge_container,
+                "edgeContainer": f"supabase_edge_runtime_{self.settings.local_supabase_project_id}",
             },
             target_id=self.settings.local_supabase_project_id,
         )
@@ -171,7 +171,7 @@ class RuntimeControlService:
             self.runtime_repository.append_event(operation_id, event_type="runtime.stop.noop", level="info", message="Local Supabase containers are already stopped.")
             self._finish_success(operation_id, "runtime.stop")
             return
-        for container_name in reversed(list(REQUIRED_SUPABASE_CONTAINERS)):
+        for container_name in reversed(list(self.runner.required_supabase_containers)):
             if container_name not in running:
                 continue
             result = self.runner.run(["docker", "stop", container_name], timeout_seconds=self.settings.runtime_command_timeout_seconds)

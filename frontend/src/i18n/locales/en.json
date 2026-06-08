@@ -146,7 +146,7 @@
       },
       "runtime": {
         "title": "Runtime",
-        "subtitle": "Settings used to inspect and control the existing Local Supabase stack."
+        "subtitle": "Settings used to inspect and control the configured Local Supabase stack."
       },
       "interface": {
         "title": "Interface",
@@ -199,7 +199,7 @@
       "configLabel": "Runtime configuration values",
       "source": "Source",
       "commandPolicyTitle": "Command policy",
-      "commandPolicy": "v1 only runs allowlisted status/start/stop commands against the existing Extrusion_data Supabase stack. Bootstrap, reset, deletion, and cleanup commands are not supported."
+      "commandPolicy": "v1 only runs allowlisted status/start/stop commands against the configured Local Supabase project. Bootstrap, reset, deletion, and cleanup commands are not supported."
     },
     "source": {
       "default": "Default",

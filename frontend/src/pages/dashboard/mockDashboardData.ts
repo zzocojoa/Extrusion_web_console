@@ -26,7 +26,7 @@ export const mockDashboardData: DashboardResponse = {
       label: "Local Supabase",
       tone: "ready",
       value: "DB + Edge OK",
-      detail: "127.0.0.1:54321",
+      detail: "127.0.0.1:55321",
     },
     {
       id: "storage",
@@ -104,7 +104,7 @@ export const mockDashboardData: DashboardResponse = {
       id: "supabase",
       label: "Local Supabase",
       tone: "ready",
-      detail: "127.0.0.1:54321",
+      detail: "127.0.0.1:55321",
       lastCheckedAt: "2026-06-01T09:18:00+09:00",
     },
     {
@@ -261,7 +261,7 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
       value: item.id === "supabase" ? "연결 실패" : item.id === "upload" ? "차단됨" : item.value,
       detail:
         item.id === "supabase"
-          ? "127.0.0.1:54321 연결 실패"
+          ? "127.0.0.1:55321 연결 실패"
           : item.id === "upload"
             ? "Supabase 복구 필요"
             : item.detail,
@@ -272,7 +272,7 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
         ? {
             ...row,
             tone: "blocked",
-            detail: "127.0.0.1:54321 연결 실패",
+            detail: "127.0.0.1:55321 연결 실패",
           }
         : row.id === "edge_function"
           ? {
@@ -405,8 +405,8 @@ export function getLocalizedMockDashboard(
             ? "2 retryable failures"
             : item.detail === "Supabase 복구 필요"
               ? "Restore Supabase first"
-              : item.detail === "127.0.0.1:54321 연결 실패"
-                ? "127.0.0.1:54321 unreachable"
+              : item.detail === "127.0.0.1:55321 연결 실패"
+                ? "127.0.0.1:55321 unreachable"
                 : item.detail,
     action: item.action ? { ...item.action, label: "Open Grafana" } : item.action,
   }));
@@ -428,8 +428,8 @@ export function getLocalizedMockDashboard(
     ...row,
     label: row.id === "state_store" ? "State Store" : row.label,
     detail:
-      row.detail === "127.0.0.1:54321 연결 실패"
-        ? "127.0.0.1:54321 unreachable"
+      row.detail === "127.0.0.1:55321 연결 실패"
+        ? "127.0.0.1:55321 unreachable"
         : row.detail === "Supabase 복구 후 확인 가능"
           ? "Available after Supabase recovery"
           : row.detail,
