@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     plc_data_dir: str = ""
     temperature_data_dir: str = ""
     supabase_db_url: str = ""
-    supabase_url: str = f"http://127.0.0.1:{DEFAULT_LOCAL_SUPABASE_API_PORT}"
+    supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_edge_url: str = ""
     local_supabase_project_path: str = str(DEFAULT_REPO_ROOT)

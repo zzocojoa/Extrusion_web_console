@@ -271,6 +271,7 @@ def test_saved_config_json_is_loaded_by_new_settings_instance(tmp_path: Path, mo
     loaded = Settings()
     assert loaded.grafana_url == "http://localhost:4000"
     assert loaded.local_supabase_api_port == 54322
+    assert loaded.upload_edge_url == "http://127.0.0.1:54322/functions/v1/upload-metrics"
 
 
 def test_environment_overrides_saved_config_json(tmp_path: Path, monkeypatch) -> None:
@@ -332,7 +333,7 @@ def test_config_get_uses_independent_local_supabase_defaults(tmp_path: Path, mon
     assert items["localSupabaseApiPort"]["value"] == 55321
     assert items["localSupabaseDbPort"]["value"] == 25433
     assert items["localSupabaseStudioPort"]["value"] == 55323
-    assert items["supabaseUrl"]["value"] == "http://127.0.0.1:55321"
+    assert items["supabaseUrl"]["value"] == ""
 
 
 def test_config_save_is_queryable_through_audit_api(tmp_path: Path, monkeypatch) -> None:

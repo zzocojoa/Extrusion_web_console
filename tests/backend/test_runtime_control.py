@@ -196,6 +196,18 @@ def test_default_edge_url_uses_local_supabase_api_port() -> None:
     assert app_settings.upload_edge_url == "http://127.0.0.1:55321/functions/v1/upload-metrics"
 
 
+def test_default_edge_url_uses_independent_api_port_when_supabase_url_unset() -> None:
+    app_settings = Settings(_env_file=None, supabase_edge_url="")
+
+    assert app_settings.upload_edge_url == "http://127.0.0.1:55321/functions/v1/upload-metrics"
+
+
+def test_default_edge_url_follows_legacy_api_port_override_when_supabase_url_unset() -> None:
+    app_settings = Settings(_env_file=None, supabase_edge_url="", local_supabase_api_port=54321)
+
+    assert app_settings.upload_edge_url == "http://127.0.0.1:54321/functions/v1/upload-metrics"
+
+
 def test_status_blocks_when_config_ports_do_not_match(tmp_path: Path) -> None:
     project_path = tmp_path / "Extrusion_web_console"
     write_supabase_config(project_path, api_port=54322)

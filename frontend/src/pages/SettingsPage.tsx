@@ -53,7 +53,7 @@ const mockConfig: ConfigResponse = {
       overridden: false,
     },
     { key: "supabaseDbUrl", label: "Supabase DB URL", value: null, source: "env", secret: true, envKey: "EWC_SUPABASE_DB_URL", overridden: true },
-    { key: "supabaseUrl", label: "Supabase URL", value: "http://127.0.0.1:55321", source: "default", secret: false, envKey: "EWC_SUPABASE_URL", overridden: false },
+    { key: "supabaseUrl", label: "Supabase URL", value: "", source: "default", secret: false, envKey: "EWC_SUPABASE_URL", overridden: false },
     {
       key: "supabaseAnonKey",
       label: "Supabase anon key",
