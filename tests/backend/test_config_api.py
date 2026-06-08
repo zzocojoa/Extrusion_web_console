@@ -52,6 +52,7 @@ def _clear_overrides() -> None:
 
 def test_config_save_success_writes_settings_save_audit_without_raw_values(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, audit_repository, config_path = _client(tmp_path)
 
     try:
@@ -86,6 +87,7 @@ def test_config_save_success_writes_settings_save_audit_without_raw_values(tmp_p
 
 def test_config_save_validation_failure_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, audit_repository, config_path = _client(tmp_path)
 
     try:
@@ -106,6 +108,7 @@ def test_config_save_validation_failure_writes_failure_audit(tmp_path: Path, mon
 
 def test_config_save_malformed_json_body_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, audit_repository, config_path = _client(tmp_path)
 
     try:
@@ -131,6 +134,7 @@ def test_config_save_malformed_json_body_writes_failure_audit(tmp_path: Path, mo
 
 def test_config_save_malformed_values_request_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, audit_repository, config_path = _client(tmp_path)
 
     try:
@@ -151,6 +155,7 @@ def test_config_save_malformed_values_request_writes_failure_audit(tmp_path: Pat
 
 def test_config_save_actor_validation_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, audit_repository, config_path = _client(tmp_path)
 
     try:
@@ -167,6 +172,7 @@ def test_config_save_actor_validation_writes_failure_audit(tmp_path: Path, monke
 
 def test_config_save_actor_type_validation_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, audit_repository, config_path = _client(tmp_path)
 
     try:
@@ -183,6 +189,7 @@ def test_config_save_actor_type_validation_writes_failure_audit(tmp_path: Path, 
 
 def test_config_save_extra_field_validation_writes_failure_audit(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, audit_repository, config_path = _client(tmp_path)
 
     try:
@@ -201,6 +208,7 @@ def test_config_save_extra_field_validation_writes_failure_audit(tmp_path: Path,
 
 def test_config_save_env_override_is_blocked_and_audited(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("EWC_GRAFANA_URL", "http://env.example")
     client, audit_repository, config_path = _client(tmp_path)
 
@@ -247,6 +255,7 @@ def test_config_save_dotenv_override_is_blocked_and_audited(tmp_path: Path, monk
 
 def test_saved_config_json_is_loaded_by_new_settings_instance(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, _, config_path = _client(tmp_path)
 
     try:
@@ -266,6 +275,7 @@ def test_saved_config_json_is_loaded_by_new_settings_instance(tmp_path: Path, mo
 
 def test_environment_overrides_saved_config_json(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps({"grafanaUrl": "http://config.example"}), encoding="utf-8")
     monkeypatch.setenv("EWC_CONFIG_FILE_PATH", str(config_path))
@@ -278,6 +288,7 @@ def test_environment_overrides_saved_config_json(tmp_path: Path, monkeypatch) ->
 
 def test_config_get_hides_secret_values_and_reports_sources(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("EWC_GRAFANA_URL", "http://env.example")
     client, _, config_path = _client(tmp_path)
     config_path.write_text(
@@ -305,8 +316,28 @@ def test_config_get_hides_secret_values_and_reports_sources(tmp_path: Path, monk
     assert items["grafanaUrl"]["overridden"] is True
 
 
+def test_config_get_uses_independent_local_supabase_defaults(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    client, _, _ = _client(tmp_path)
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    items = {item["key"]: item for item in response.json()["items"]}
+    assert items["localSupabaseProjectId"]["value"] == "Extrusion_web_console"
+    assert items["localSupabaseApiPort"]["value"] == 55321
+    assert items["localSupabaseDbPort"]["value"] == 25433
+    assert items["localSupabaseStudioPort"]["value"] == 55323
+    assert items["supabaseUrl"]["value"] == "http://127.0.0.1:55321"
+
+
 def test_config_save_is_queryable_through_audit_api(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
     client, _, _ = _client(tmp_path)
 
     try:

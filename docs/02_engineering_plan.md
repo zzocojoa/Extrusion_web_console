@@ -162,7 +162,7 @@ Backend가 고정 allowlist command만 실행한다.
 - status: `wsl.exe ... supabase status`, Docker container health, Edge runtime probe, DB `pg_isready`
 - start: WSL project dir에서 `supabase start`, DB ready wait, required migrations check
 - stop: `supabase stop`
-- fallback: Supabase CLI 없으면 `docker start/stop supabase_*_Extrusion_data` 패턴만 허용
+- fallback: Supabase CLI 없으면 configured `local_supabase_project_id`에서 계산한 `supabase_*_<project_id>` 컨테이너만 `docker start/stop` 허용. Legacy `Extrusion_data` stack은 명시적 config/env override로 해당 project id를 선택한 경우에만 제어한다.
 
 임의 shell 입력은 받지 않는다.
 

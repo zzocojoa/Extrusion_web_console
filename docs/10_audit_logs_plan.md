@@ -597,7 +597,7 @@ Rules:
 
 - Do not merge Job Logs and Audit Logs into one timeline in v1.
 - A failed upload job must be traceable in both tabs with the same `jobId`.
-- A runtime operation should be traceable by `targetType=local_supabase` and `targetId=Extrusion_data`; if an `operationId` exists, put it in `targetId` or params consistently.
+- A runtime operation should be traceable by `targetType=local_supabase` and `targetId=<configured local_supabase_project_id>`; if an `operationId` exists, put it in params consistently.
 - Job Logs may link to related Audit Logs by `jobId`.
 - Audit Logs may link to Job Logs by `jobId`.
 

@@ -43,21 +43,35 @@ Phase 1 adds static repo-owned Supabase assets only:
 
 This phase does not change backend runtime control, launcher behavior, frontend behavior, or package assembly. It also does not run Supabase init/bootstrap/start/reset, DB migrations, Edge Function deploy/execution, Upload Preview, or Start Upload.
 
+## Phase 2 Runtime/Config Generalization Status
+
+Status: implemented on branch `codex/independent-runtime-config-generalization`.
+
+Phase 2 updates backend runtime/config defaults and command policy only:
+
+- backend defaults now point to the repo-owned `supabase/` project with project id `Extrusion_web_console`;
+- default API, DB, Studio, and computed Edge ports match `supabase/config.toml`;
+- runtime command allowlists are derived from configured project id as `supabase_*_<project_id>`;
+- local token blocked audit target ids use the configured project id;
+- Settings copy no longer describes the legacy stack as the default.
+
+This phase does not run Supabase init/bootstrap/start/reset, DB migrations, Edge Function calls, Upload Preview, Start Upload, package assembly, production deploy, or GitHub Release/tag operations.
+
 ## Current Architecture Problem
 
-The current web console is still coupled to the legacy local Supabase runtime:
+At plan approval time, the web console was still coupled to the legacy local Supabase runtime:
 
-- backend defaults point the local Supabase project path and WSL path at the legacy project;
-- `local_supabase_project_id` defaults to `Extrusion_data`;
-- command policy allowlists exact `supabase_*_Extrusion_data` containers;
-- readiness messages and config checks refer to the legacy project;
-- local token blocked-audit target ids use `Extrusion_data` for runtime start/stop routes;
+- backend defaults pointed the local Supabase project path and WSL path at the legacy project;
+- `local_supabase_project_id` defaulted to `Extrusion_data`;
+- command policy allowlisted exact `supabase_*_Extrusion_data` containers;
+- readiness messages and config checks referred to the legacy project;
+- local token blocked-audit target ids used `Extrusion_data` for runtime start/stop routes;
 - runtime control is designed around existing containers and does not bootstrap a new stack;
 - operator package manifest does not include `supabase/` assets;
-- README and planning docs describe the legacy runtime as the default;
+- README and planning docs described the legacy runtime as the default;
 - PR #61 readiness remains blocked for Start Upload because Edge runtime is unreachable, no-auth Edge route returns `503`, and the latest Preview has `dbStatus=not_checked`.
 
-This means an operator can run the web console UI while still depending on the legacy Supabase assets, container namespace, Edge Function, and database schema. That is not the target product boundary for a replacement web console.
+Phase 2 removes the default runtime/config coupling, but independent runtime acceptance still requires packaging updates and controlled readiness, Preview, Start Upload, and final operator package smoke PRs. Until those are complete, rollback to the legacy runtime remains explicit config/env override only.
 
 ## Target Architecture
 

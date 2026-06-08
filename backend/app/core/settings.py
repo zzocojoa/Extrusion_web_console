@@ -8,7 +8,20 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_CONFIG_FILE_PATH = str(Path.home() / "AppData" / "Roaming" / "ExtrusionWebConsole" / "config.json")
-DEFAULT_FRONTEND_DIST_PATH = str(Path(__file__).resolve().parents[3] / "frontend" / "dist")
+DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_FRONTEND_DIST_PATH = str(DEFAULT_REPO_ROOT / "frontend" / "dist")
+DEFAULT_LOCAL_SUPABASE_PROJECT_ID = "Extrusion_web_console"
+DEFAULT_LOCAL_SUPABASE_API_PORT = 55321
+DEFAULT_LOCAL_SUPABASE_DB_PORT = 25433
+DEFAULT_LOCAL_SUPABASE_STUDIO_PORT = 55323
+
+
+def default_wsl_path(path: Path) -> str:
+    drive = path.drive.rstrip(":").lower()
+    if drive and len(drive) == 1:
+        parts = "/".join(path.parts[1:])
+        return f"/mnt/{drive}/{parts}"
+    return str(path).replace("\\", "/")
 
 CONFIG_JSON_KEY_TO_FIELD = {
     "plcDataDir": "plc_data_dir",
@@ -59,16 +72,16 @@ class Settings(BaseSettings):
     plc_data_dir: str = ""
     temperature_data_dir: str = ""
     supabase_db_url: str = ""
-    supabase_url: str = ""
+    supabase_url: str = f"http://127.0.0.1:{DEFAULT_LOCAL_SUPABASE_API_PORT}"
     supabase_anon_key: str = ""
     supabase_edge_url: str = ""
-    local_supabase_project_path: str = r"C:\Users\user\Documents\GitHub\Extrusion_data"
-    local_supabase_wsl_path: str = "/mnt/c/Users/user/Documents/GitHub/Extrusion_data"
-    local_supabase_project_id: str = "Extrusion_data"
-    local_supabase_api_port: int = 54321
-    local_supabase_db_port: int = 25432
-    local_supabase_studio_port: int = 54323
-    local_supabase_edge_container: str = "supabase_edge_runtime_Extrusion_data"
+    local_supabase_project_path: str = str(DEFAULT_REPO_ROOT)
+    local_supabase_wsl_path: str = default_wsl_path(DEFAULT_REPO_ROOT)
+    local_supabase_project_id: str = DEFAULT_LOCAL_SUPABASE_PROJECT_ID
+    local_supabase_api_port: int = DEFAULT_LOCAL_SUPABASE_API_PORT
+    local_supabase_db_port: int = DEFAULT_LOCAL_SUPABASE_DB_PORT
+    local_supabase_studio_port: int = DEFAULT_LOCAL_SUPABASE_STUDIO_PORT
+    local_supabase_edge_container: str = f"supabase_edge_runtime_{DEFAULT_LOCAL_SUPABASE_PROJECT_ID}"
     local_supabase_grafana_container: str = "grafana_local"
     runtime_command_timeout_seconds: int = 20
     runtime_readiness_timeout_seconds: int = 90

@@ -20,7 +20,7 @@ from backend.app.schemas.runtime import (
     RuntimeServiceStatus,
     RuntimeStatusResponse,
 )
-from backend.app.services.command_runner import AllowedCommandRunner, CommandResult, REQUIRED_SUPABASE_CONTAINERS
+from backend.app.services.command_runner import AllowedCommandRunner, CommandResult
 
 
 def now_utc() -> datetime:
@@ -88,7 +88,7 @@ class RuntimeReadinessService:
         elif not project_path.exists():
             overall = RuntimeOverallStatus.blocked
             reason_code = "project_path_missing"
-            reason_text = "The configured Extrusion_data project path does not exist."
+            reason_text = f"The configured local Supabase project path does not exist for {self.settings.local_supabase_project_id}."
         elif config_error_code:
             overall = RuntimeOverallStatus.blocked
             reason_code = config_error_code
@@ -145,7 +145,7 @@ class RuntimeReadinessService:
         if not project_path.exists():
             return None, None
         if not config_path.exists():
-            return "config_toml_missing", "supabase/config.toml was not found in the configured Extrusion_data project."
+            return "config_toml_missing", "supabase/config.toml was not found in the configured local Supabase project."
         try:
             payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
         except (OSError, tomllib.TOMLDecodeError) as exc:
@@ -189,7 +189,7 @@ class RuntimeReadinessService:
                         rows[name] = payload
 
         containers: list[RuntimeContainerStatus] = []
-        for name in REQUIRED_SUPABASE_CONTAINERS:
+        for name in self.runner.required_supabase_containers:
             payload = rows.get(name)
             status_text = None if payload is None else str(payload.get("Status") or payload.get("State") or "")
             running = bool(status_text and status_text.lower().startswith("up"))

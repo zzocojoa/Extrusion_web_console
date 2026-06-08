@@ -37,7 +37,11 @@ def get_runtime_upload_repository(settings: Settings = Depends(get_settings)) ->
 
 
 def get_command_runner(settings: Settings = Depends(get_settings)) -> AllowedCommandRunner:
-    return AllowedCommandRunner(settings.local_supabase_project_path, settings.runtime_command_timeout_seconds)
+    return AllowedCommandRunner(
+        settings.local_supabase_project_path,
+        settings.runtime_command_timeout_seconds,
+        project_id=settings.local_supabase_project_id,
+    )
 
 
 def get_runtime_service(

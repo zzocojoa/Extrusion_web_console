@@ -44,7 +44,7 @@ function mockAuditLogs(query: AuditQuery, language: string): AuditLogListRespons
       actor: "local_operator",
       action: "runtime.start",
       targetType: "local_supabase",
-      targetId: "Extrusion_data",
+      targetId: "Extrusion_web_console",
       params: { operationId: "mock_runtime_start" },
       result: "success",
       errorCode: null,

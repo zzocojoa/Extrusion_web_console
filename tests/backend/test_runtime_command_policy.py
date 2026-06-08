@@ -2,11 +2,11 @@ import subprocess
 
 import pytest
 
-from backend.app.services.command_runner import AllowedCommandRunner, CommandPolicyError, redact_command_output
+from backend.app.services.command_runner import AllowedCommandRunner, CommandPolicyError, redact_command_output, required_supabase_containers
 
 
-def runner() -> AllowedCommandRunner:
-    return AllowedCommandRunner(r"C:\Users\user\Documents\GitHub\Extrusion_data")
+def runner(project_id: str = "Extrusion_web_console") -> AllowedCommandRunner:
+    return AllowedCommandRunner(r"C:\Users\user\Documents\GitHub\Extrusion_web_console", project_id=project_id)
 
 
 def test_command_policy_allows_read_only_commands() -> None:
@@ -34,7 +34,7 @@ def test_supabase_start_requires_container_precheck() -> None:
         ["supabase", "db", "reset"],
         ["docker", "run", "postgres"],
         ["docker", "create", "postgres"],
-        ["docker", "rm", "supabase_db_Extrusion_data"],
+        ["docker", "rm", "supabase_db_Extrusion_web_console"],
         ["docker", "volume", "rm", "anything"],
         ["docker", "prune"],
         ["docker", "compose", "up"],
@@ -46,6 +46,37 @@ def test_supabase_start_requires_container_precheck() -> None:
 def test_command_policy_rejects_destructive_or_arbitrary_commands(command: list[str]) -> None:
     with pytest.raises(CommandPolicyError):
         runner().validate(command)
+
+
+def test_command_policy_derives_allowed_containers_from_project_id() -> None:
+    policy = runner()
+
+    assert required_supabase_containers("Extrusion_web_console")[0] == "supabase_db_Extrusion_web_console"
+    assert policy.validate(["docker", "start", "supabase_db_Extrusion_web_console"]) == (
+        "docker",
+        "start",
+        "supabase_db_Extrusion_web_console",
+    )
+    with pytest.raises(CommandPolicyError, match="container_not_allowed"):
+        policy.validate(["docker", "start", "supabase_db_Extrusion_data"])
+
+
+def test_command_policy_legacy_fallback_requires_explicit_project_id() -> None:
+    policy = runner(project_id="Extrusion_data")
+
+    assert policy.validate(["docker", "stop", "supabase_db_Extrusion_data"]) == (
+        "docker",
+        "stop",
+        "supabase_db_Extrusion_data",
+    )
+    with pytest.raises(CommandPolicyError, match="container_not_allowed"):
+        policy.validate(["docker", "stop", "supabase_db_Extrusion_web_console"])
+
+
+@pytest.mark.parametrize("project_id", ["", "bad project", "../bad", "bad;name", "bad|name"])
+def test_required_supabase_containers_rejects_unsafe_project_id(project_id: str) -> None:
+    with pytest.raises(CommandPolicyError):
+        required_supabase_containers(project_id)
 
 
 def test_command_runner_uses_subprocess_without_shell(monkeypatch: pytest.MonkeyPatch) -> None:

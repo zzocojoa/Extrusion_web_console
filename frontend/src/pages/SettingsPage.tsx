@@ -53,7 +53,7 @@ const mockConfig: ConfigResponse = {
       overridden: false,
     },
     { key: "supabaseDbUrl", label: "Supabase DB URL", value: null, source: "env", secret: true, envKey: "EWC_SUPABASE_DB_URL", overridden: true },
-    { key: "supabaseUrl", label: "Supabase URL", value: "http://127.0.0.1:54321", source: "default", secret: false, envKey: "EWC_SUPABASE_URL", overridden: false },
+    { key: "supabaseUrl", label: "Supabase URL", value: "http://127.0.0.1:55321", source: "default", secret: false, envKey: "EWC_SUPABASE_URL", overridden: false },
     {
       key: "supabaseAnonKey",
       label: "Supabase anon key",
@@ -83,10 +83,10 @@ const mockConfig: ConfigResponse = {
       envKey: "EWC_LOCAL_SUPABASE_WSL_PATH",
       overridden: false,
     },
-    { key: "localSupabaseProjectId", label: "Project id", value: "extrusion-local", source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_PROJECT_ID", overridden: false },
-    { key: "localSupabaseApiPort", label: "API port", value: 54321, source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_API_PORT", overridden: false },
-    { key: "localSupabaseDbPort", label: "DB port", value: 25432, source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_DB_PORT", overridden: false },
-    { key: "localSupabaseStudioPort", label: "Studio port", value: 54323, source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_STUDIO_PORT", overridden: false },
+    { key: "localSupabaseProjectId", label: "Project id", value: "Extrusion_web_console", source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_PROJECT_ID", overridden: false },
+    { key: "localSupabaseApiPort", label: "API port", value: 55321, source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_API_PORT", overridden: false },
+    { key: "localSupabaseDbPort", label: "DB port", value: 25433, source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_DB_PORT", overridden: false },
+    { key: "localSupabaseStudioPort", label: "Studio port", value: 55323, source: "default", secret: false, envKey: "EWC_LOCAL_SUPABASE_STUDIO_PORT", overridden: false },
     {
       key: "runtimeCommandTimeoutSeconds",
       label: "Runtime command timeout",

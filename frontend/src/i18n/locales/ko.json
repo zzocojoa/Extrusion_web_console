@@ -199,7 +199,7 @@
       "configLabel": "런타임 설정 값",
       "source": "출처",
       "commandPolicyTitle": "명령 정책",
-      "commandPolicy": "v1은 기존 Extrusion_data Supabase 스택에 대해 허용된 status/start/stop 명령만 실행합니다. bootstrap, reset, 삭제, cleanup 명령은 지원하지 않습니다."
+      "commandPolicy": "v1은 설정된 Local Supabase 프로젝트에 대해 허용된 status/start/stop 명령만 실행합니다. bootstrap, reset, 삭제, cleanup 명령은 지원하지 않습니다."
     },
     "source": {
       "default": "기본값",
