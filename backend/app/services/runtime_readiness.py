@@ -77,7 +77,7 @@ class RuntimeReadinessService:
         api = port_status("Supabase API", self.settings.local_supabase_api_port)
         db = port_status("Supabase DB", self.settings.local_supabase_db_port)
         studio = port_status("Supabase Studio", self.settings.local_supabase_studio_port)
-        edge = probe_edge_route(self.settings.upload_edge_url, timeout_seconds=2.0)
+        edge = probe_edge_route(self.settings.local_runtime_edge_url, timeout_seconds=2.0)
         grafana = self._probe_grafana()
 
         missing_required = [container.name for container in containers if container.required and not container.exists]
@@ -221,7 +221,7 @@ class RuntimeReadinessService:
             self._config_item("localSupabaseApiPort", "API port", str(self.settings.local_supabase_api_port), "EWC_LOCAL_SUPABASE_API_PORT"),
             self._config_item("localSupabaseDbPort", "DB port", str(self.settings.local_supabase_db_port), "EWC_LOCAL_SUPABASE_DB_PORT"),
             self._config_item("localSupabaseStudioPort", "Studio port", str(self.settings.local_supabase_studio_port), "EWC_LOCAL_SUPABASE_STUDIO_PORT"),
-            self._config_item("supabaseEdgeUrl", "Edge URL", self.settings.upload_edge_url, "EWC_SUPABASE_EDGE_URL"),
+            self._config_item("supabaseEdgeUrl", "Edge URL", self.settings.local_runtime_edge_url, "EWC_SUPABASE_EDGE_URL"),
             self._config_item("grafanaUrl", "Grafana URL", self.settings.grafana_url, "EWC_GRAFANA_URL"),
         ]
 

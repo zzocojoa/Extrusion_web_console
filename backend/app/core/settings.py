@@ -97,6 +97,12 @@ class Settings(BaseSettings):
         base_url = self.supabase_url or f"http://127.0.0.1:{self.local_supabase_api_port}"
         return base_url.rstrip("/") + "/functions/v1/upload-metrics"
 
+    @property
+    def local_runtime_edge_url(self) -> str:
+        if self.supabase_edge_url:
+            return self.supabase_edge_url
+        return f"http://127.0.0.1:{self.local_supabase_api_port}/functions/v1/upload-metrics"
+
     @field_validator("api_docs_mode")
     @classmethod
     def validate_api_docs_mode(cls, value: str) -> str:
