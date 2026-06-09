@@ -198,13 +198,10 @@ The next task may run exactly one bounded Start Upload smoke in a separate branc
 | Direct runtime reachability | API/DB/Studio reachable, Edge auth-class |
 | Backend runtime endpoint | API/DB/Studio/Edge ready, Grafana attention |
 | Browser `/upload`, `/logs`, `/settings` smoke | loaded, console clean, marker clean |
-
-Pre-PR hygiene checks still required after this report is staged:
-
-- `git diff --check`;
-- new report marker scan;
-- PR file-scope check;
-- forbidden artifact staged-file check.
+| `git diff --check` | passed |
+| New report marker scan | clean |
+| PR file-scope check | docs-only |
+| Forbidden artifact staged-file check | clean |
 
 ## Next Step
 
