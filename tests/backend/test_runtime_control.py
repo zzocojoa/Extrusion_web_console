@@ -19,6 +19,7 @@ from backend.app.schemas.runtime import (
 from backend.app.services.command_runner import required_supabase_containers
 from backend.app.services.command_runner import CommandResult
 from backend.app.services.runtime_control import RuntimeConflictError, RuntimeControlService
+from backend.app.services.runtime_readiness import RuntimeReadinessService
 
 
 class FakeRunner:
@@ -206,6 +207,74 @@ def test_default_edge_url_follows_legacy_api_port_override_when_supabase_url_uns
     app_settings = Settings(_env_file=None, supabase_edge_url="", local_supabase_api_port=54321)
 
     assert app_settings.upload_edge_url == "http://127.0.0.1:54321/functions/v1/upload-metrics"
+
+
+def test_upload_edge_url_preserves_supabase_url_fallback_for_upload_jobs() -> None:
+    app_settings = Settings(
+        _env_file=None,
+        supabase_edge_url="",
+        supabase_url="http://supabase.example",
+        local_supabase_api_port=55321,
+    )
+
+    assert app_settings.upload_edge_url == "http://supabase.example/functions/v1/upload-metrics"
+
+
+def test_local_runtime_edge_url_ignores_supabase_url_without_explicit_edge_url() -> None:
+    app_settings = Settings(
+        _env_file=None,
+        supabase_edge_url="",
+        supabase_url="http://supabase.example",
+        local_supabase_api_port=55321,
+    )
+
+    assert app_settings.local_runtime_edge_url == "http://127.0.0.1:55321/functions/v1/upload-metrics"
+
+
+def test_local_runtime_edge_url_uses_explicit_edge_url() -> None:
+    app_settings = Settings(
+        _env_file=None,
+        supabase_edge_url="http://edge.example/functions/v1/upload-metrics",
+        supabase_url="http://supabase.example",
+        local_supabase_api_port=55321,
+    )
+
+    assert app_settings.local_runtime_edge_url == "http://edge.example/functions/v1/upload-metrics"
+
+
+def test_runtime_readiness_probes_local_edge_url_when_supabase_url_is_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_path = tmp_path / "Extrusion_web_console"
+    write_supabase_config(project_path)
+    captured_urls: list[str] = []
+
+    def fake_probe_edge_route(url: str, *, timeout_seconds: float = 2.0) -> RuntimeProbeStatus:
+        captured_urls.append(url)
+        return RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url)
+
+    monkeypatch.setattr("backend.app.services.runtime_readiness.probe_edge_route", fake_probe_edge_route)
+    app_settings = Settings(
+        _env_file=None,
+        state_db_path=str(tmp_path / "state.db"),
+        local_supabase_project_path=str(project_path),
+        supabase_edge_url="",
+        supabase_url="http://supabase.example",
+        local_supabase_api_port=55321,
+        local_supabase_db_port=25433,
+        local_supabase_studio_port=55323,
+    )
+    service = RuntimeReadinessService(
+        app_settings,
+        FakeRunner(docker_ps_output=all_containers_output(running=True)),
+    )
+
+    status = service.check_status()
+
+    assert captured_urls == ["http://127.0.0.1:55321/functions/v1/upload-metrics"]
+    edge_config = next(item for item in status.config if item.key == "supabaseEdgeUrl")
+    assert edge_config.value == "http://127.0.0.1:55321/functions/v1/upload-metrics"
 
 
 def test_status_blocks_when_config_ports_do_not_match(tmp_path: Path) -> None:
