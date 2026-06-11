@@ -10,6 +10,11 @@
     "launcher/start_web_console.bat",
     "launcher/install_shortcuts.ps1",
     "launcher/install_shortcuts.bat",
+    "supabase/config.toml",
+    "supabase/README.md",
+    "supabase/.gitignore",
+    "supabase/functions/upload-metrics/index.ts",
+    "supabase/migrations/20260608000001_create_all_metrics_upload_contract.sql",
     "README.md",
     "CHANGELOG.md",
     "VERSION"
@@ -36,6 +41,36 @@
     {
       "source": "launcher",
       "target": "launcher",
+      "type": "directory",
+      "required": true
+    },
+    {
+      "source": "supabase/config.toml",
+      "target": "supabase/config.toml",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "supabase/README.md",
+      "target": "supabase/README.md",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "supabase/.gitignore",
+      "target": "supabase/.gitignore",
+      "type": "file",
+      "required": true
+    },
+    {
+      "source": "supabase/functions/upload-metrics",
+      "target": "supabase/functions/upload-metrics",
+      "type": "directory",
+      "required": true
+    },
+    {
+      "source": "supabase/migrations",
+      "target": "supabase/migrations",
       "type": "directory",
       "required": true
     },
@@ -103,8 +138,12 @@
     "frontend/src",
     "frontend/qa",
     "tests",
+    "supabase/.branches",
+    "supabase/.temp",
     ".env*",
     "logs",
+    "*.dump",
+    "*.backup",
     "*.db",
     "*.db-shm",
     "*.db-wal",
@@ -112,6 +151,8 @@
     "*.sqlite3",
     "*.log",
     "*.csv",
+    "*.zip",
+    "*.sha256",
     "__pycache__",
     "*.pyc",
     "*.pyo",

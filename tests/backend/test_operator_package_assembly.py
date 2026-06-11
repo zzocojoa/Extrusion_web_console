@@ -80,6 +80,43 @@ def _create_minimal_repo(
     (repo_root / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
     (repo_root / "VERSION").write_text("0.1.0.0\n", encoding="utf-8")
 
+    supabase = repo_root / "supabase"
+    (supabase / "functions" / "upload-metrics").mkdir(parents=True)
+    (supabase / "migrations").mkdir(parents=True)
+    (supabase / "config.toml").write_text(
+        '\n'.join(
+            [
+                'project_id = "Extrusion_web_console"',
+                "",
+                "[api]",
+                "port = 55321",
+                "",
+                "[db]",
+                "port = 25433",
+                "",
+                "[studio]",
+                "port = 55323",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (supabase / "README.md").write_text("# Supabase assets\n", encoding="utf-8")
+    (supabase / ".gitignore").write_text(".temp/\n.branches/\n.env\n*.dump\n*.csv\n", encoding="utf-8")
+    (supabase / "functions" / "upload-metrics" / "index.ts").write_text(
+        "Deno.serve(() => new Response('ok'));\n",
+        encoding="utf-8",
+    )
+    (supabase / "migrations" / "20260608000001_create_all_metrics_upload_contract.sql").write_text(
+        "CREATE TABLE IF NOT EXISTS public.all_metrics (timestamp timestamptz, device_id text);\n",
+        encoding="utf-8",
+    )
+    for state_dir in [".temp", ".branches"]:
+        (supabase / state_dir).mkdir(parents=True)
+        (supabase / state_dir / "state").write_text("must-not-copy\n", encoding="utf-8")
+    (supabase / ".env").write_text("SECRET_VALUE=must-not-copy\n", encoding="utf-8")
+    (supabase / "local.dump").write_text("must-not-copy\n", encoding="utf-8")
+
     if include_venv:
         scripts = repo_root / ".venv" / "Scripts"
         scripts.mkdir(parents=True)
@@ -169,13 +206,24 @@ def test_manifest_json_contract_is_valid() -> None:
     assert "backend/app" in manifest["requiredPaths"]
     assert "frontend/dist/index.html" in manifest["requiredPaths"]
     assert ".venv/Scripts/python.exe" in manifest["operatorReadyChecks"]
+    assert "supabase/config.toml" in manifest["requiredPaths"]
+    assert "supabase/functions/upload-metrics/index.ts" in manifest["requiredPaths"]
+    assert "supabase/migrations/20260608000001_create_all_metrics_upload_contract.sql" in manifest["requiredPaths"]
     assert any(entry["source"] == ".venv" for entry in manifest["includeAllowlist"])
+    assert any(entry["source"] == "supabase/config.toml" for entry in manifest["includeAllowlist"])
+    assert any(entry["source"] == "supabase/functions/upload-metrics" for entry in manifest["includeAllowlist"])
+    assert any(entry["source"] == "supabase/migrations" for entry in manifest["includeAllowlist"])
     assert any(entry["source"] == "docs/operator_package_runtime_note.md" for entry in manifest["includeAllowlist"])
     assert not any(entry["source"] == "README.md" for entry in manifest["includeAllowlist"])
     assert not any(entry["source"] == "docs/27_operator_package_smoke.md" for entry in manifest["includeAllowlist"])
     assert ".git" in manifest["excludeDenylist"]
     assert "tests" in manifest["excludeDenylist"]
+    assert "supabase/.temp" in manifest["excludeDenylist"]
+    assert "supabase/.branches" in manifest["excludeDenylist"]
     assert "*.csv" in manifest["excludeDenylist"]
+    assert "*.dump" in manifest["excludeDenylist"]
+    assert "*.zip" in manifest["excludeDenylist"]
+    assert "*.sha256" in manifest["excludeDenylist"]
     assert "windows-absolute-path-marker" in manifest["redactionChecks"]
     assert "operational-filename-family-marker" in manifest["redactionChecks"]
     assert "credential-like-marker" in manifest["redactionChecks"]
@@ -233,6 +281,12 @@ def test_assembly_script_keeps_command_policy_narrow() -> None:
     assert "frontend-build-info.json" in lowered
     assert "runtimeagentprunedcount" in lowered
     assert "runtime agent entries pruned" in lowered
+    assert "assert-supabasepackageassets" in lowered
+    assert "supabase assets: present" in lowered
+    assert '".toml"' in lowered
+    assert '".ts"' in lowered
+    assert '".sql"' in lowered
+    assert '".gitignore"' in lowered
     assert "invoke-expression" not in lowered
     assert "remove-item" not in lowered
     assert "supabase db reset" not in lowered
@@ -256,10 +310,24 @@ def test_assembly_copies_allowlist_and_rejects_denylist(tmp_path: Path) -> None:
     assert package_root.exists()
     assert (package_root / "backend" / "app" / "main.py").exists()
     assert (package_root / "frontend" / "dist" / "index.html").exists()
+    assert (package_root / "supabase" / "config.toml").exists()
+    assert (package_root / "supabase" / "README.md").exists()
+    assert (package_root / "supabase" / ".gitignore").exists()
+    assert (package_root / "supabase" / "functions" / "upload-metrics" / "index.ts").exists()
+    assert (
+        package_root
+        / "supabase"
+        / "migrations"
+        / "20260608000001_create_all_metrics_upload_contract.sql"
+    ).exists()
     assert (package_root / ".venv" / "Scripts" / "python.exe").exists()
     assert not (package_root / ".git").exists()
     assert not (package_root / ".gstack").exists()
     assert not (package_root / ".env").exists()
+    assert not (package_root / "supabase" / ".env").exists()
+    assert not (package_root / "supabase" / ".temp").exists()
+    assert not (package_root / "supabase" / ".branches").exists()
+    assert not list((package_root / "supabase").rglob("*.dump"))
     assert not (package_root / "tests").exists()
     assert not (package_root / "frontend" / "src").exists()
     assert not list(package_root.rglob("*.csv"))
@@ -279,6 +347,7 @@ def test_assembly_copies_allowlist_and_rejects_denylist(tmp_path: Path) -> None:
     assert (metadata / "RECORD").exists()
     assert (metadata / "LICENSE").exists()
     assert "runtime agent entries pruned:" in result.stdout
+    assert "supabase assets: present" in result.stdout
     assert (package_root / "README.md").read_text(encoding="utf-8") == "# Operator package\n"
     assert (package_root / "docs" / "operator_package_runtime_note.md").exists()
     assert not (package_root / "docs" / "27_operator_package_smoke.md").exists()
@@ -493,6 +562,26 @@ def test_assembly_redaction_blocks_release_marker_class(tmp_path: Path, marker_c
     output = f"{result.stdout}\n{result.stderr}"
     assert "Package redaction validation failed" in output
     assert marker_class in output
+
+
+def test_assembly_redaction_scans_supabase_asset_text_files(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_root = tmp_path / "out"
+    repo_root.mkdir()
+    _copy_packaging_files(repo_root)
+    _create_minimal_repo(repo_root)
+    (repo_root / "supabase" / "functions" / "upload-metrics" / "index.ts").write_text(
+        _marker_text("credential-like-marker"),
+        encoding="utf-8",
+    )
+
+    result = _run_assembly(repo_root, output_root, "-PackageLabel", "redaction-block-supabase-asset")
+
+    assert result.returncode != 0
+    output = f"{result.stdout}\n{result.stderr}"
+    assert "Package redaction validation failed" in output
+    assert "credential-like-marker" in output
+    assert "supabase/functions/upload-metrics/index.ts" in output
 
 
 def test_assembly_default_output_is_repeatable_without_deleting_existing_output(tmp_path: Path) -> None:

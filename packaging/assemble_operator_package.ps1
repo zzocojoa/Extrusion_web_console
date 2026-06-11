@@ -199,6 +199,8 @@ function Test-DenylistedPackagePath {
     "frontend/src/",
     "frontend/qa/",
     "tests/",
+    "supabase/.branches/",
+    "supabase/.temp/",
     "logs/",
     "tmp/",
     "temp/"
@@ -224,11 +226,30 @@ function Test-DenylistedPackagePath {
   if ($lower.StartsWith(".venv/") -and $lower -match "(^|/)\.agents(/|$)") {
     return $true
   }
-  if ($lower -match "\.(db|db-shm|db-wal|sqlite|sqlite3|log|csv|pyc|pyo)$") {
+  if ($lower -match "\.(dump|backup|db|db-shm|db-wal|sqlite|sqlite3|log|csv|zip|sha256|pyc|pyo)$") {
     return $true
   }
 
   return $false
+}
+
+function Assert-SupabasePackageAssets {
+  param([string]$PackageRoot)
+
+  $requiredSupabaseAssets = @(
+    "supabase/config.toml",
+    "supabase/README.md",
+    "supabase/.gitignore",
+    "supabase/functions/upload-metrics/index.ts",
+    "supabase/migrations/20260608000001_create_all_metrics_upload_contract.sql"
+  )
+
+  foreach ($assetPath in $requiredSupabaseAssets) {
+    $fullPath = Join-Path $PackageRoot $assetPath
+    if (-not (Test-Path -LiteralPath $fullPath)) {
+      throw "Package Supabase asset is missing: $assetPath"
+    }
+  }
 }
 
 function Test-TextFileForRedaction {
@@ -236,8 +257,8 @@ function Test-TextFileForRedaction {
 
   $fileName = [System.IO.Path]::GetFileName($Path).ToLowerInvariant()
   $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
-  $textExtensions = @(".bat", ".css", ".html", ".js", ".json", ".md", ".ps1", ".txt")
-  return $textExtensions.Contains($extension) -or $fileName -eq "version"
+  $textExtensions = @(".bat", ".css", ".html", ".js", ".json", ".md", ".ps1", ".sql", ".toml", ".ts", ".txt")
+  return $textExtensions.Contains($extension) -or $fileName -eq "version" -or $fileName -eq ".gitignore"
 }
 
 function Find-RedactionMatches {
@@ -249,8 +270,8 @@ function Find-RedactionMatches {
     @{ Name = "authorization-bearer-marker"; Regex = "(?i)authorization\s*[:=]\s*bearer\s+\S+" },
     @{ Name = "credential-like-marker"; Regex = "(?i)(^|[^A-Z0-9_])(credential|secret|token|api[_ -]?key)\s*[:=]\s*['""]?[A-Za-z0-9._-]{8,}" },
     @{ Name = "jwt-like-marker"; Regex = "\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b" },
-    @{ Name = "service-role-assignment-marker"; Regex = "(?i)(^|[^A-Z0-9_])service[_ -]?role\s*[:=]" },
-    @{ Name = "anon-key-assignment-marker"; Regex = "(?i)(^|[^A-Z0-9_])anon[_ -]?key\s*[:=]" },
+    @{ Name = "service-role-assignment-marker"; Regex = "(?i)(^|[^A-Z0-9_])service[_ -]role\s*[:=]" },
+    @{ Name = "anon-key-assignment-marker"; Regex = "(?i)(^|[^A-Z0-9_])anon[_ -]key\s*[:=]" },
     @{ Name = "timestamp-style-csv-marker"; Regex = "\b\d{8}_\d{6}\.csv\b" },
     @{ Name = "operational-filename-family-marker"; Regex = "(?i)\bfactory[_-][A-Za-z0-9_-]*log\b" },
     @{ Name = "windows-absolute-path-marker"; Regex = "\b[A-Za-z]:\\[^\r\n`"'<>)]+" }
@@ -303,6 +324,8 @@ function Assert-PackageContents {
     }
   }
 
+  Assert-SupabasePackageAssets -PackageRoot $PackageRoot
+
   $denylistMatches = New-Object System.Collections.Generic.List[string]
   Get-ChildItem -LiteralPath $PackageRoot -Force -Recurse | ForEach-Object {
     $relativePath = Get-RelativePackagePath -PackageRoot $PackageRoot -FullPath $_.FullName
@@ -321,6 +344,7 @@ function Assert-PackageContents {
   }
 
   Write-AssemblyInfo "required paths: present"
+  Write-AssemblyInfo "supabase assets: present"
   Write-AssemblyInfo "operator readiness: $(if ($RuntimeIncomplete) { 'incomplete runtime allowed' } else { 'ready' })"
   Write-AssemblyInfo "denylist matches: 0"
   Write-AssemblyInfo "redaction matches: 0"
