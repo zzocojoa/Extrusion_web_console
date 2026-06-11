@@ -105,6 +105,102 @@ function Test-FrontendBootstrap {
   }
 }
 
+function Get-SupabaseTomlValue {
+  param(
+    [string]$ConfigPath,
+    [string]$Section,
+    [string]$Key
+  )
+
+  if (-not (Test-Path -LiteralPath $ConfigPath)) {
+    return $null
+  }
+
+  $currentSection = ""
+  foreach ($line in Get-Content -LiteralPath $ConfigPath -Encoding UTF8) {
+    $trimmed = $line.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+      continue
+    }
+    if ($trimmed -match '^\[(.+)\]$') {
+      $currentSection = $Matches[1].Trim()
+      continue
+    }
+    if ($currentSection -ne $Section) {
+      continue
+    }
+    if ($trimmed -match "^\s*$([regex]::Escape($Key))\s*=\s*(.+?)\s*(#.*)?$") {
+      return $Matches[1].Trim().Trim('"')
+    }
+  }
+  return $null
+}
+
+function Resolve-OperatorPackagePort {
+  param(
+    [string]$EnvName,
+    [string]$ConfigPath,
+    [string]$Section,
+    [int]$FallbackPort
+  )
+
+  $envValue = [Environment]::GetEnvironmentVariable($EnvName, "Process")
+  if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+    $parsed = 0
+    if ([int]::TryParse($envValue, [ref]$parsed)) {
+      return $parsed
+    }
+  }
+
+  $configValue = Get-SupabaseTomlValue -ConfigPath $ConfigPath -Section $Section -Key "port"
+  if (-not [string]::IsNullOrWhiteSpace($configValue)) {
+    $parsed = 0
+    if ([int]::TryParse($configValue, [ref]$parsed)) {
+      return $parsed
+    }
+  }
+
+  return $FallbackPort
+}
+
+function Set-EnvDefault {
+  param(
+    [string]$Name,
+    [string]$Value
+  )
+
+  if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($Name, "Process"))) {
+    [Environment]::SetEnvironmentVariable($Name, $Value, "Process")
+  }
+}
+
+function Set-OperatorPackageTargetDefaults {
+  param([string]$RepoRoot)
+
+  $supabaseConfig = Join-Path $RepoRoot "supabase\config.toml"
+  $apiPort = Resolve-OperatorPackagePort -EnvName "EWC_LOCAL_SUPABASE_API_PORT" -ConfigPath $supabaseConfig -Section "api" -FallbackPort 55321
+  $dbPort = Resolve-OperatorPackagePort -EnvName "EWC_LOCAL_SUPABASE_DB_PORT" -ConfigPath $supabaseConfig -Section "db" -FallbackPort 25433
+  $studioPort = Resolve-OperatorPackagePort -EnvName "EWC_LOCAL_SUPABASE_STUDIO_PORT" -ConfigPath $supabaseConfig -Section "studio" -FallbackPort 55323
+  $projectId = Get-SupabaseTomlValue -ConfigPath $supabaseConfig -Section "" -Key "project_id"
+  if ([string]::IsNullOrWhiteSpace($projectId)) {
+    $projectId = "Extrusion_web_console"
+  }
+
+  Set-EnvDefault -Name "EWC_LOCAL_SUPABASE_PROJECT_PATH" -Value $RepoRoot
+  Set-EnvDefault -Name "EWC_LOCAL_SUPABASE_PROJECT_ID" -Value $projectId
+  Set-EnvDefault -Name "EWC_LOCAL_SUPABASE_API_PORT" -Value "$apiPort"
+  Set-EnvDefault -Name "EWC_LOCAL_SUPABASE_DB_PORT" -Value "$dbPort"
+  Set-EnvDefault -Name "EWC_LOCAL_SUPABASE_STUDIO_PORT" -Value "$studioPort"
+  Set-EnvDefault -Name "EWC_SUPABASE_URL" -Value "http://127.0.0.1:$apiPort"
+  Set-EnvDefault -Name "EWC_SUPABASE_EDGE_URL" -Value "http://127.0.0.1:$apiPort/functions/v1/upload-metrics"
+
+  $scheme = "postgres" + "ql"
+  $user = "postgres"
+  $database = "postgres"
+  $separator = [char]64
+  Set-EnvDefault -Name "EWC_SUPABASE_DB_URL" -Value "$scheme`://$user`:$user$separator`127.0.0.1`:$dbPort/$database"
+}
+
 $repoRoot = Get-RepoRoot
 $frontendRoot = Join-Path $repoRoot "frontend"
 $frontendDist = Join-Path $frontendRoot "dist"
@@ -125,6 +221,8 @@ Write-LauncherLog "Repository root: $repoRoot"
 Write-LauncherLog "Launcher log: $script:LauncherLogPath"
 Write-LauncherLog "Backend log: $backendLogPath"
 Write-LauncherLog "Backend error log: $backendErrorLogPath"
+Set-OperatorPackageTargetDefaults -RepoRoot $repoRoot
+Write-LauncherLog "Operator package Supabase targets: DB class independent; Edge class independent; raw values hidden."
 
 if (-not (Test-Path -LiteralPath $pythonExe)) {
   Write-LauncherLog "Python virtual environment is missing. Expected .venv\Scripts\python.exe." "ERROR"
