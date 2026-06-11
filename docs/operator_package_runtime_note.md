@@ -16,15 +16,19 @@ Use `-CheckOnly` on either launcher script when validating a package without sta
 
 ## Package Contents
 
-The package contains the backend application, built frontend, launcher scripts, a prepared Python runtime folder, version metadata, and this package note.
+The package contains the backend application, built frontend, launcher scripts, a prepared Python runtime folder, repository-owned Supabase source assets, version metadata, and this package note.
 
-The package intentionally does not include repository history, developer frontend source, Node dependencies, tests, raw local config files, logs, state databases, screenshots, temporary package output, or operational CSV data.
+The included Supabase assets are source-only: `supabase/config.toml`, the `upload-metrics` Edge Function source, and the schema migration required for `all_metrics`.
+
+The package intentionally does not include repository history, developer frontend source, Node dependencies, tests, raw local config files, Supabase local state, generated credentials, database files, logs, state databases, screenshots, temporary package output, or operational CSV data.
 
 ## Safety
 
 Normal operator launch does not require Node or npm.
 
 The launcher does not run database reset, database cleanup, Docker cleanup, package deletion, or AppData deletion.
+
+The package does not bootstrap, reset, migrate, or start Supabase by itself. Maintainer-approved runtime setup remains separate from normal operator launch.
 
 Local config, state, and logs remain outside this package and are managed by the running application.
 
