@@ -222,7 +222,7 @@ Write-LauncherLog "Launcher log: $script:LauncherLogPath"
 Write-LauncherLog "Backend log: $backendLogPath"
 Write-LauncherLog "Backend error log: $backendErrorLogPath"
 Set-OperatorPackageTargetDefaults -RepoRoot $repoRoot
-Write-LauncherLog "Operator package Supabase targets: DB class independent; Edge class independent; raw values hidden."
+Write-LauncherLog "Operator package Supabase target defaults prepared; explicit process overrides respected; raw values hidden."
 
 if (-not (Test-Path -LiteralPath $pythonExe)) {
   Write-LauncherLog "Python virtual environment is missing. Expected .venv\Scripts\python.exe." "ERROR"

@@ -30,7 +30,7 @@ The launcher does not run database reset, database cleanup, Docker cleanup, pack
 
 The package does not bootstrap, reset, migrate, or start Supabase by itself. Maintainer-approved runtime setup remains separate from normal operator launch.
 
-When launched from the prepared package, the launcher sets process-only defaults for the package-local independent `Extrusion_web_console` Supabase target. DB reconciliation uses the package-local DB port from `supabase/config.toml`, and Edge routing uses the matching package-local API/Edge target class. Raw DB URLs and secret values are not printed. Explicit process environment overrides still take precedence for approved fallback or maintenance runs.
+When launched from the prepared package, the launcher sets process-only defaults for the package-local independent `Extrusion_web_console` Supabase target. Without explicit process overrides, DB reconciliation uses the package-local DB port from `supabase/config.toml`, and Edge routing uses the matching package-local API/Edge target class. Raw DB URLs and secret values are not printed. Explicit process environment overrides still take precedence for approved fallback or maintenance runs.
 
 Local config, state, and logs remain outside this package and are managed by the running application.
 

@@ -51,7 +51,7 @@ def test_launcher_script_keeps_allowlist_narrow() -> None:
     assert "EWC_SUPABASE_DB_URL" in script
     assert "EWC_SUPABASE_URL" in script
     assert "EWC_SUPABASE_EDGE_URL" in script
-    assert "DB class independent; Edge class independent; raw values hidden." in script
+    assert "target defaults prepared; explicit process overrides respected; raw values hidden." in script
     assert "required" in script
     assert "API docs policy: disabled in operator mode." in script
     assert "token value is hidden" in script
@@ -147,10 +147,67 @@ def test_launcher_check_only_sets_package_independent_target_defaults_without_ra
 
     assert result.returncode == 0, result.stderr
     combined = f"{result.stdout}\n{result.stderr}"
-    assert "DB class independent; Edge class independent; raw values hidden." in combined
+    assert "target defaults prepared; explicit process overrides respected; raw values hidden." in combined
     assert "db-class=independent" in combined
     assert "edge-class=independent" in combined
     assert "postgresql://" not in combined.lower()
+    assert ("Author" + "ization:") not in combined
+    assert "Bearer " not in combined
+
+
+def test_launcher_check_only_preserves_explicit_supabase_overrides_without_overstating_class(tmp_path: Path) -> None:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    package_root = tmp_path / "ExtrusionWebConsole"
+    launcher_dir = package_root / "launcher"
+    launcher_dir.mkdir(parents=True)
+    (package_root / "frontend" / "dist").mkdir(parents=True)
+    (package_root / "frontend" / "dist" / "index.html").write_text("<html></html>\n", encoding="utf-8")
+    (package_root / ".venv" / "Scripts").mkdir(parents=True)
+    (package_root / ".venv" / "Scripts" / "python.exe").write_text("stub\n", encoding="utf-8")
+    (package_root / "supabase").mkdir()
+    (package_root / "supabase" / "config.toml").write_text(
+        '\n'.join(
+            [
+                'project_id = "Extrusion_web_console"',
+                "[api]",
+                "port = 55321",
+                "[db]",
+                "port = 25433",
+                "[studio]",
+                "port = 55323",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    shutil.copy2(LAUNCHER_PS1, launcher_dir / "start_web_console.ps1")
+
+    command = (
+        "$env:APPDATA = '" + str(tmp_path / "appdata") + "'; "
+        "$env:EWC_SUPABASE_DB_URL = 'explicit-hidden-db-target'; "
+        "$env:EWC_LOCAL_SUPABASE_DB_PORT = '25432'; "
+        "& '" + str(launcher_dir / "start_web_console.ps1") + "' -CheckOnly; "
+        "Write-Output ('db-override-preserved=' + ($env:EWC_SUPABASE_DB_URL -eq 'explicit-hidden-db-target')); "
+        "Write-Output ('db-port-override-preserved=' + ($env:EWC_LOCAL_SUPABASE_DB_PORT -eq '25432'))"
+    )
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert result.returncode == 0, result.stderr
+    combined = f"{result.stdout}\n{result.stderr}"
+    assert "db-override-preserved=True" in combined
+    assert "db-port-override-preserved=True" in combined
+    assert "DB class independent" not in combined
+    assert "Edge class independent" not in combined
+    assert "postgresql://" not in combined.lower()
+    assert "explicit-hidden-db-target" not in combined
     assert ("Author" + "ization:") not in combined
     assert "Bearer " not in combined
 
