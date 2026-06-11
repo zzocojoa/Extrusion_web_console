@@ -16,11 +16,11 @@ Alignment verdict: `blocked`.
 
 PR #79 fixed the package asset blocker. The assembled API-mode operator package contains `supabase/config.toml`, the `upload-metrics` function source, the upload contract migration, `supabase/README.md`, and `supabase/.gitignore`. Package denylist and redaction validation passed with zero matches, and package-local settings confirmed that the default project path resolves to the package root and can see `supabase/config.toml`.
 
-The previous `config_toml_missing` runtime blocker is resolved. The package-launched backend returned `/api/runtime/local-supabase` with `reasonCode=docker_unavailable`, not `config_toml_missing`.
+The previous `config_toml_missing` runtime blocker is resolved. After Docker was started and the package path was rerun, `/api/runtime/local-supabase` returned `reasonCode=non_core_runtime_attention`, not `config_toml_missing`.
 
 Target alignment is still blocked. Package-local settings classified `supabaseDbUrl` as `legacy`, while the computed Edge target class was `independent`. That means Preview DB reconciliation and Start Upload Edge routing are not proven to target the same independent stack from the operator package path.
 
-Runtime reachability was also blocked because Docker was unavailable during this QA. Independent API port `55321`, DB port `25433`, Studio port `55323`, and direct no-auth Edge route probes were unreachable. Because DB was unreachable and token/header use was out of scope, this QA did not run Preview-only, Upload Start, duplicate rerun, or an authenticated Edge call.
+After Docker was started and the package-path QA was rerun, independent API port `55321`, DB port `25433`, and Studio port `55323` were reachable. The package runtime endpoint moved from blocked Docker availability to `attention` with core API/DB/Studio ready. Edge remains unhealthy: direct no-auth Edge `GET` and `POST {}` returned `503`, and backend readiness reported Edge as unreachable. Because target classes were already mismatched and token/header use was out of scope, this QA did not run Preview-only, Upload Start, duplicate rerun, or an authenticated Edge call.
 
 ## QA Environment
 
@@ -75,20 +75,20 @@ Forbidden package classes were absent: raw env files, Supabase local state direc
 
 | Check | Result |
 | --- | --- |
-| Docker daemon | unavailable |
-| Independent API port `55321` | unreachable |
-| Independent DB port `25433` | unreachable |
-| Independent Studio port `55323` | unreachable |
-| Direct no-auth Edge `GET` | unreachable |
-| Direct no-auth Edge `POST {}` | unreachable |
+| Docker daemon | ready |
+| Independent API port `55321` | reachable |
+| Independent DB port `25433` | reachable |
+| Independent Studio port `55323` | reachable |
+| Direct no-auth Edge `GET` | `503` |
+| Direct no-auth Edge `POST {}` | `503` |
 | Package runtime endpoint | HTTP `200` |
-| Package runtime overall status | `blocked` |
-| Package runtime reason | `docker_unavailable` |
+| Package runtime overall status | `attention` |
+| Package runtime reason | `non_core_runtime_attention` |
 | Package runtime project id | `Extrusion_web_console` |
-| Package Docker / API / DB / Studio / Edge | `unreachable` / `unreachable` / `unreachable` / `unreachable` / `unreachable` |
-| Missing required containers | `12` |
+| Package Docker / API / DB / Studio / Edge | `ready` / `ready` / `ready` / `ready` / `unreachable` |
+| Missing required containers | `0` |
 
-Assessment: package asset ownership is fixed, but live runtime readiness cannot pass until Docker and the independent local Supabase stack are available.
+Assessment: package asset ownership is fixed, and Docker/core independent runtime reachability is available. Live runtime readiness still needs attention because Edge does not reach the expected auth/validation class.
 
 ## Target Class Comparison
 
@@ -114,12 +114,12 @@ Conclusion: DB reconciliation target class and Edge target class are not aligned
 | Preview-only rerun | not run |
 | Preview latest read-only query | reachable, marker caveat |
 | Preview `dbStatus` from rerun | not applicable |
-| Independent DB read-only exact-key count | not run, DB port unreachable |
+| Independent DB read-only exact-key count | not run, target mismatch already blocks alignment |
 | Upload Start | not run |
 | Duplicate rerun | not run |
 | Authenticated Edge upload call | not run |
 
-Preview-only was not rerun because it would require protected write flow token use, and runtime DB reachability was already blocked. The latest Preview read-only API response contained operational filename marker classes from prior state; raw values were not recorded in this report.
+Preview-only was not rerun because it would require protected write flow token use, and the DB/Edge target class mismatch already blocks Start Upload readiness. The latest Preview read-only API response contained operational filename marker classes from prior state; raw values were not recorded in this report.
 
 ## Browser, Audit, And Redaction
 
@@ -146,13 +146,13 @@ Preview-only was not rerun because it would require protected write flow token u
 ### Blockers
 
 1. `db_edge_target_class_mismatch`: package-local settings classified `supabaseDbUrl` as legacy and computed Edge target as independent.
-2. `docker_unavailable`: Docker was unavailable, so independent runtime reachability and container state could not pass.
-3. `independent_runtime_unreachable`: API, DB, Studio, and Edge route probes for the independent stack were unreachable.
+2. `edge_route_503`: direct no-auth Edge `GET` and `POST {}` returned `503`, so the route did not reach the expected auth/validation class.
+3. `runtime_attention_edge`: package runtime readiness reports core Docker/API/DB/Studio ready, but Edge remains unreachable.
 
 ### Caveats
 
 1. `preview_not_rerun`: Preview-only was not rerun because protected token use was out of scope and DB reachability was already blocked.
-2. `read_only_db_count_not_available`: independent DB exact-key count was not run because the DB port was unreachable.
+2. `read_only_db_count_not_available`: independent DB exact-key count was not run because the target class mismatch already blocks alignment.
 3. `latest_preview_marker_caveat`: the latest Preview read-only response contained operational filename marker classes from prior state. Raw values were not recorded.
 4. `legacy_config_persistence`: the DB target mismatch appears to come from persisted package-loaded config or inherited environment. It must be corrected without documenting raw values.
 
@@ -162,7 +162,8 @@ Preview-only was not rerun because it would require protected write flow token u
 2. `config_toml_missing_resolved`: package runtime no longer blocks on missing `supabase/config.toml`.
 3. `operator_launcher_backend_reachable`: packaged launcher path started a reachable backend on the alternate local port.
 4. `package_redaction_safe`: package assembly denylist and redaction checks reported zero matches.
-5. `dangerous_operations_avoided`: no forbidden Supabase, DB, Docker delete, Upload Start, duplicate rerun, Edge authenticated upload, release, tag, or deploy action was run.
+5. `docker_core_runtime_available`: Docker, independent API, DB, and Studio were reachable after rerun.
+6. `dangerous_operations_avoided`: no forbidden Supabase, DB, Docker delete, Upload Start, duplicate rerun, Edge authenticated upload, release, tag, or deploy action was run.
 
 ## Duplicate-Safe Rerun Decision
 
@@ -172,8 +173,8 @@ Do not proceed to a duplicate-safe rerun or any upload execution from the operat
 
 1. the hidden DB target class is corrected to independent or the legacy fallback is explicitly selected and documented as fallback;
 2. package-launched config proves DB and Edge target classes are both independent with raw values hidden;
-3. Docker and the independent local Supabase runtime are available;
-4. package runtime readiness is no longer blocked;
+3. Edge no-auth route reaches the expected auth/validation response class instead of `503`;
+4. package runtime readiness is no longer in Edge attention;
 5. a separate QA confirms Preview `dbStatus=reachable` through the operator package path.
 
 ## Validation
@@ -186,7 +187,7 @@ Do not proceed to a duplicate-safe rerun or any upload execution from the operat
 | Package shortcut installer `-CheckOnly` | passed |
 | Package launcher backend smoke | backend reachable |
 | Package-local settings smoke | config exists, DB class legacy, Edge class independent |
-| Runtime endpoint smoke | HTTP `200`, blocked with `docker_unavailable` |
+| Runtime endpoint smoke | HTTP `200`, `attention` with Edge unreachable |
 | Browser `/`, `/upload`, `/logs`, `/settings` HTTP smoke | loaded, marker clean |
 | API `/api/health`, `/api/config`, `/api/audit?limit=1` smoke | loaded, marker clean |
 | Upload Preview | not run |
@@ -194,4 +195,4 @@ Do not proceed to a duplicate-safe rerun or any upload execution from the operat
 
 ## Next Step
 
-Open a config/QA follow-up to remove the legacy DB target from the operator package path without exposing raw config values, then rerun operator package target alignment after Docker and the independent local Supabase runtime are available.
+Open a config/QA follow-up to remove the legacy DB target from the operator package path without exposing raw config values. In parallel, investigate why the independent Edge no-auth route returns `503`. Rerun operator package target alignment only after DB and Edge target classes are both independent and Edge reaches the expected auth/validation response class.
