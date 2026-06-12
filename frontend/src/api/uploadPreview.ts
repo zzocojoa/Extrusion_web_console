@@ -2,6 +2,7 @@ import { apiFetch } from "./client";
 
 export type PreviewRangeMode = "today" | "yesterday" | "last_2_days" | "custom";
 export type PreviewSource = "plc" | "temperature";
+export type PreviewProfile = "default" | "stage3_profile_a_bounded_full_scan";
 export type PreviewItemStatus =
   | "target"
   | "already_in_db"
@@ -22,6 +23,7 @@ export type PreviewSortKey = "status" | "fileDate" | "filename" | "uploadRows" |
 export type SortOrder = "asc" | "desc";
 
 export interface PreviewOptions {
+  profile: PreviewProfile;
   stableLagMinutes: number;
   sampleRows: number;
   chunkRows: number;
@@ -125,6 +127,7 @@ export class ActivePreviewRunError extends Error {
 }
 
 const defaultOptions: PreviewOptions = {
+  profile: "default",
   stableLagMinutes: 3,
   sampleRows: 200,
   chunkRows: 20_000,
@@ -132,6 +135,15 @@ const defaultOptions: PreviewOptions = {
   maxRunSeconds: 120,
   maxFileSeconds: 30,
   forceFullScan: false,
+};
+
+export const stage3ProfileABoundedFullScanOptions: PreviewOptions = {
+  ...defaultOptions,
+  profile: "stage3_profile_a_bounded_full_scan",
+  maxFiles: 3,
+  maxRunSeconds: 300,
+  maxFileSeconds: 120,
+  forceFullScan: true,
 };
 
 export function createDefaultPreviewRequest(
@@ -144,7 +156,22 @@ export function createDefaultPreviewRequest(
     startDate,
     endDate,
     sources: ["plc"],
-    options: defaultOptions,
+    options: { ...defaultOptions },
+    retryOfRunId: null,
+  };
+}
+
+export function createStage3ProfileABoundedFullScanPreviewRequest(
+  rangeMode: PreviewRangeMode,
+  startDate: string | null,
+  endDate: string | null,
+): PreviewCreateRequest {
+  return {
+    rangeMode,
+    startDate,
+    endDate,
+    sources: ["plc"],
+    options: { ...stage3ProfileABoundedFullScanOptions },
     retryOfRunId: null,
   };
 }

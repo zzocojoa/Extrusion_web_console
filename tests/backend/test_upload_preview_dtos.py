@@ -54,6 +54,53 @@ def test_preview_create_request_accepts_camel_case_api_payload_and_defaults() ->
     assert "forceFullScan" in api_payload["options"]
 
 
+def test_preview_default_profile_keeps_short_interactive_timeout_budget() -> None:
+    schema = _schema_module()
+
+    request = schema.PreviewCreateRequest.model_validate(
+        {"rangeMode": "today", "sources": ["plc"]}
+    )
+
+    assert _enum_value(request.options.profile) == "default"
+    assert request.options.max_files == 500
+    assert request.options.max_run_seconds == 120
+    assert request.options.max_file_seconds == 30
+    assert request.options.force_full_scan is False
+
+
+def test_stage3_profile_a_bounded_full_scan_applies_bounded_timeout_budget() -> None:
+    schema = _schema_module()
+
+    request = schema.PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-05-23",
+            "endDate": "2026-05-23",
+            "sources": ["plc"],
+            "options": {
+                "profile": "stage3_profile_a_bounded_full_scan",
+                "maxFiles": 500,
+                "maxRunSeconds": 120,
+                "maxFileSeconds": 30,
+                "forceFullScan": False,
+            },
+        }
+    )
+
+    assert _enum_value(request.options.profile) == "stage3_profile_a_bounded_full_scan"
+    assert request.options.max_files == 3
+    assert request.options.max_run_seconds == 300
+    assert request.options.max_file_seconds == 120
+    assert request.options.force_full_scan is True
+
+    api_payload = request.model_dump(by_alias=True)
+    assert api_payload["options"]["profile"] == "stage3_profile_a_bounded_full_scan"
+    assert api_payload["options"]["maxFiles"] == 3
+    assert api_payload["options"]["maxRunSeconds"] == 300
+    assert api_payload["options"]["maxFileSeconds"] == 120
+    assert api_payload["options"]["forceFullScan"] is True
+
+
 def test_preview_create_request_custom_range_requires_both_dates_and_valid_order() -> None:
     schema = _schema_module()
 

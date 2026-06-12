@@ -150,6 +150,29 @@ Exceeding a numeric gate does not mean the data is bad. It means the batch is
 too broad for the current approval. Split it into a smaller batch and restart at
 Preview-only.
 
+## Preview Timeout Profile Requirement
+
+Stage 3 Profile A full-scan Preview must use the explicit
+`stage3_profile_a_bounded_full_scan` Preview option profile:
+
+| Option | Required Profile A value |
+| --- | ---: |
+| `profile` | `stage3_profile_a_bounded_full_scan` |
+| `forceFullScan` | `true` |
+| `maxFiles` | `3` |
+| `maxRunSeconds` | `300` |
+| `maxFileSeconds` | `120` |
+
+This profile exists only for operator-approved Stage 3 Profile A bounded
+Preview. It must not be treated as a default Preview profile and must not be
+used to broaden a full operational dataset rollout. The source eligibility
+precheck and Profile A numeric gates still apply before and after Preview.
+
+If a Stage 3 Profile A Preview times out with the default `30` second per-file
+budget, stop and update the procedure or code path before any rerun. Do not
+repair the evidence by running a second Preview, Start Upload, Retry Failed,
+duplicate rerun, or full rollout in the same PR.
+
 ## Stage 3 Execution Sequence
 
 Each Stage 3 batch must follow this exact sequence.
