@@ -7,3 +7,6 @@ class HealthResponse(BaseModel):
     version: str
     environment: str
     localhost_only: bool
+    startup_id: str
+    started_at: str
+    process_id: int

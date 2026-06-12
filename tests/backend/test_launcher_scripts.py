@@ -40,6 +40,8 @@ def test_launcher_script_keeps_allowlist_narrow() -> None:
     assert "did not produce frontend\\dist\\index.html" in script
     assert "npm run dev" not in script
     assert "-BuildFrontend" in script
+    assert "-RequireFreshBackend" in script
+    assert "Backend port $BackendPort is already in use, and -RequireFreshBackend was set." in script
     assert "Start-Process \"http://127.0.0.1:$BackendPort/\"" in script
     assert "New-LocalApiToken" in script
     assert "RandomNumberGenerator" in script
