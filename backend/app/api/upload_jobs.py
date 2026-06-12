@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, stat
 from starlette.responses import StreamingResponse
 
 from backend.app.core.settings import Settings, get_settings
+from backend.app.core.target_class import build_upload_target_preflight
 from backend.app.db.upload_job_repository import (
     ACTIVE_JOB_STATUSES,
     UploadJobRepository,
@@ -200,6 +201,18 @@ def ensure_upload_config(settings: Settings, repository: UploadJobRepository, ac
             reason="upload_config_missing",
             params=params,
         )
+    target_preflight = build_upload_target_preflight(settings)
+    if not target_preflight.passed:
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action=action,
+            target_type="upload_job",
+            target_id=None,
+            reason="upload_target_preflight_failed",
+            params={**params, "targetClassPreflight": target_preflight.to_api()},
+            detail_extra={"targetClassPreflight": target_preflight.to_api()},
+        )
 
 
 @router.post("", response_model=UploadJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -227,6 +240,7 @@ def create_upload_job(
         config_snapshot={
             "uploadEdgeUrlConfigured": bool(settings.upload_edge_url),
             "supabaseAnonKeyConfigured": bool(settings.supabase_anon_key),
+            "targetClassPreflight": build_upload_target_preflight(settings).to_api(),
             "enableSmartSync": False,
         },
     )
@@ -318,6 +332,7 @@ def retry_upload_job(
         config_snapshot={
             "uploadEdgeUrlConfigured": bool(settings.upload_edge_url),
             "supabaseAnonKeyConfigured": bool(settings.supabase_anon_key),
+            "targetClassPreflight": build_upload_target_preflight(settings).to_api(),
             "enableSmartSync": False,
         },
     )

@@ -320,7 +320,7 @@ def test_config_get_hides_secret_values_and_reports_sources(tmp_path: Path, monk
 def test_config_get_uses_independent_local_supabase_defaults(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    client, _, _ = _client(tmp_path)
+    client, _, _ = _client(tmp_path, supabase_db_url="", supabase_url="", supabase_edge_url="")
 
     try:
         response = client.get("/api/config")
@@ -334,6 +334,44 @@ def test_config_get_uses_independent_local_supabase_defaults(tmp_path: Path, mon
     assert items["localSupabaseDbPort"]["value"] == 25433
     assert items["localSupabaseStudioPort"]["value"] == 55323
     assert items["supabaseUrl"]["value"] == ""
+    target_classes = response.json()["targetClasses"]
+    assert target_classes["status"] == "passed"
+    assert target_classes["reason"] == "target_class_preflight_passed"
+    assert target_classes["uploadRuntimeAligned"] is True
+    assert target_classes["uploadEdge"]["targetClass"] == "loopback_expected_api_port_upload_metrics"
+    assert target_classes["runtimeEdge"]["targetClass"] == "loopback_expected_api_port_upload_metrics"
+    assert target_classes["db"]["targetClass"] == "not_configured"
+
+
+def test_config_get_reports_stale_upload_target_class_without_raw_secret(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    db_url = "postgres" + "ql://postgres:postgres@127.0.0.1:25432/postgres"
+    client, _, _ = _client(
+        tmp_path,
+        local_supabase_api_port=55321,
+        local_supabase_db_port=25433,
+        supabase_url="http://127.0.0.1:54321",
+        supabase_edge_url="",
+        supabase_db_url=db_url,
+    )
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    body_text = response.text
+    target_classes = response.json()["targetClasses"]
+    assert target_classes["status"] == "blocked"
+    assert target_classes["reason"] == "edge_target_class_mismatch"
+    assert target_classes["uploadRuntimeAligned"] is False
+    assert target_classes["uploadEdge"]["targetClass"] == "loopback_unexpected_port_upload_metrics"
+    assert target_classes["runtimeEdge"]["targetClass"] == "loopback_expected_api_port_upload_metrics"
+    assert target_classes["db"]["targetClass"] == "loopback_unexpected_port"
+    assert ("postgres" + "ql://") not in body_text
+    assert "postgres:postgres" not in body_text
 
 
 def test_config_save_is_queryable_through_audit_api(tmp_path: Path, monkeypatch) -> None:

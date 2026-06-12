@@ -51,6 +51,43 @@ def test_upload_job_start_rejects_missing_upload_config(tmp_path: Path) -> None:
     assert latest_audit(repository)["error_code"] == "upload_config_missing"
 
 
+def test_upload_job_start_rejects_stale_upload_target_preflight(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    db_url = "postgres" + "ql://postgres:postgres@127.0.0.1:25432/postgres"
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        state_db_path=str(db_path),
+        local_supabase_api_port=55321,
+        local_supabase_db_port=25433,
+        supabase_url="http://127.0.0.1:54321",
+        supabase_edge_url="",
+        supabase_db_url=db_url,
+        **{"supabase_anon_key": "anon"},
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["reason"] == "upload_target_preflight_failed"
+    assert detail["targetClassPreflight"]["status"] == "blocked"
+    assert detail["targetClassPreflight"]["uploadEdge"]["targetClass"] == "loopback_unexpected_port_upload_metrics"
+    assert ("postgres" + "ql://") not in response.text
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.start"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "upload_target_preflight_failed"
+    with repository.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs").fetchone()["count"]
+    assert count == 0
+
+
 def test_upload_job_latest_returns_404_when_empty(tmp_path: Path) -> None:
     repository = UploadJobRepository(tmp_path / "state.db")
     app.dependency_overrides[get_upload_job_repository] = lambda: repository
@@ -72,7 +109,7 @@ def test_upload_job_start_active_job_writes_blocked_audit(tmp_path: Path) -> Non
     app.dependency_overrides[get_upload_job_repository] = lambda: repository
     app.dependency_overrides[get_settings] = lambda: Settings(
         state_db_path=str(db_path),
-        supabase_edge_url="http://localhost/upload",
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
         supabase_anon_key="anon",
     )
     client = TestClient(app)
@@ -99,7 +136,7 @@ def test_upload_job_start_preview_not_uploadable_writes_blocked_audit(tmp_path: 
     app.dependency_overrides[get_upload_job_repository] = lambda: repository
     app.dependency_overrides[get_settings] = lambda: Settings(
         state_db_path=str(db_path),
-        supabase_edge_url="http://localhost/upload",
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
         supabase_anon_key="anon",
     )
     client = TestClient(app)
@@ -128,7 +165,7 @@ def test_retry_no_retryable_files_writes_blocked_audit(tmp_path: Path) -> None:
     app.dependency_overrides[get_upload_job_repository] = lambda: repository
     app.dependency_overrides[get_settings] = lambda: Settings(
         state_db_path=str(db_path),
-        supabase_edge_url="http://localhost/upload",
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
         supabase_anon_key="anon",
     )
     client = TestClient(app)

@@ -5,7 +5,8 @@ param(
 
   [switch]$NoBrowser,
   [switch]$BuildFrontend,
-  [switch]$CheckOnly
+  [switch]$CheckOnly,
+  [switch]$RequireFreshBackend
 )
 
 $ErrorActionPreference = "Stop"
@@ -266,6 +267,10 @@ if ($CheckOnly) {
 }
 
 if (Test-PortOpen -Port $BackendPort) {
+  if ($RequireFreshBackend) {
+    Write-LauncherLog "Backend port $BackendPort is already in use, and -RequireFreshBackend was set. Stop the existing backend before this QA run." "ERROR"
+    exit 1
+  }
   $health = Get-Health -Port $BackendPort
   if ($health -and $health.status -eq "ok" -and $health.service -eq "extrusion-web-console-api") {
     if (-not (Test-FrontendBootstrap -Port $BackendPort)) {

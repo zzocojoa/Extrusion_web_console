@@ -12,9 +12,28 @@ export interface ConfigItem {
   overridden: boolean;
 }
 
+export interface TargetClassItem {
+  configured: boolean;
+  source: string;
+  targetClass: string;
+  hostClass: string;
+  portClass: string;
+  pathClass: string;
+}
+
+export interface TargetClassPreflight {
+  db: TargetClassItem;
+  uploadEdge: TargetClassItem;
+  runtimeEdge: TargetClassItem;
+  uploadRuntimeAligned: boolean;
+  status: "passed" | "blocked" | string;
+  reason: string;
+}
+
 export interface ConfigResponse {
   configFilePath: string;
   items: ConfigItem[];
+  targetClasses?: TargetClassPreflight;
 }
 
 export interface ConfigSaveResponse {
