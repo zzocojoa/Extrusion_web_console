@@ -50,6 +50,8 @@ Required source rules:
 - record only a sanitized source label;
 - do not record raw source path, source filename, source content, row content, or
   full local path;
+- preserve source filename date metadata through any temp copy or staging step;
+- run the source eligibility precheck below before requesting Preview;
 - use one approved source scope per PR;
 - do not mix independent evidence with legacy fallback evidence;
 - do not auto-select the next day or next batch;
@@ -67,6 +69,40 @@ Allowed Stage 3 evidence:
 - exact-key count class;
 - audit/log redaction result;
 - caveat class.
+
+## Source Eligibility Precheck
+
+Run this precheck before any Stage 3 Preview-only run. The precheck is
+read-only and must not call Upload Preview, Start Upload, duplicate rerun, Edge
+authenticated upload, DB mutation commands, Supabase start/stop/reset, or Docker
+cleanup.
+
+File-date eligibility is based on the source filename only:
+
+- PLC integrated files must preserve the configured integrated PLC stem followed
+  by `_YYYYMMDD`.
+- PLC legacy files must start with `YYMMDD`.
+- Temperature files must contain `YYYY-MM-DD`.
+
+The Preview scanner does not infer file date from directory names, filesystem
+mtime, CSV headers, CSV row timestamps, config records, or source labels. If a
+temp copy renames a file so the supported date metadata is no longer present in
+the basename, Preview will classify it as `excluded/file_date_missing` before
+CSV key extraction begins.
+
+The precheck output must record only:
+
+- sanitized source label;
+- source class;
+- file count;
+- row count if counted safely;
+- eligible file count;
+- ineligible file count;
+- reason class counts such as `file_date_missing`;
+- whether all files satisfy the selected Profile A/B bounds.
+
+If any file is ineligible and the exclusion was not explicitly approved before
+Preview, stop and replace the bounded source. Do not blind rerun Preview.
 
 ## Numeric Gates
 
