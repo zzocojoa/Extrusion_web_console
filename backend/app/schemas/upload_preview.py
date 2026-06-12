@@ -22,7 +22,18 @@ class PreviewSource(str, Enum):
     temperature = "temperature"
 
 
+class PreviewProfile(str, Enum):
+    default = "default"
+    stage3_profile_a_bounded_full_scan = "stage3_profile_a_bounded_full_scan"
+
+
+STAGE3_PROFILE_A_BOUNDED_MAX_FILES = 3
+STAGE3_PROFILE_A_BOUNDED_MAX_RUN_SECONDS = 300
+STAGE3_PROFILE_A_BOUNDED_MAX_FILE_SECONDS = 120
+
+
 class PreviewOptions(ApiModel):
+    profile: PreviewProfile = PreviewProfile.default
     stable_lag_minutes: int = Field(default=3, ge=0, le=60)
     sample_rows: int = Field(default=200, ge=20, le=2000)
     chunk_rows: int = Field(default=20000, ge=1000, le=100000)
@@ -30,6 +41,30 @@ class PreviewOptions(ApiModel):
     max_run_seconds: int = Field(default=120, ge=10, le=900)
     max_file_seconds: int = Field(default=30, ge=5, le=300)
     force_full_scan: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_profile_defaults(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        profile = data.get("profile", PreviewProfile.default.value)
+        profile_value = profile.value if isinstance(profile, PreviewProfile) else str(profile)
+        if profile_value != PreviewProfile.stage3_profile_a_bounded_full_scan.value:
+            return data
+
+        values = dict(data)
+
+        def set_option(snake_name: str, camel_name: str, value: Any) -> None:
+            if snake_name in values and camel_name not in values:
+                values[snake_name] = value
+            else:
+                values[camel_name] = value
+
+        set_option("force_full_scan", "forceFullScan", True)
+        set_option("max_files", "maxFiles", STAGE3_PROFILE_A_BOUNDED_MAX_FILES)
+        set_option("max_run_seconds", "maxRunSeconds", STAGE3_PROFILE_A_BOUNDED_MAX_RUN_SECONDS)
+        set_option("max_file_seconds", "maxFileSeconds", STAGE3_PROFILE_A_BOUNDED_MAX_FILE_SECONDS)
+        return values
 
 
 class PreviewCreateRequest(ApiModel):
