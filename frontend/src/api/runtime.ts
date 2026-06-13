@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { StateContext } from "./stateContext";
 
 export type RuntimeOverallStatus = "ready" | "running" | "attention" | "blocked" | "unknown";
 export type RuntimeServiceStatus = "ready" | "starting" | "stopping" | "stopped" | "unreachable" | "missing" | "unhealthy" | "unknown";
@@ -65,6 +66,7 @@ export interface RuntimeStatusResponse {
   grafana: RuntimeProbeStatus;
   containers: RuntimeContainerStatus[];
   config: RuntimeConfigItem[];
+  stateContext: StateContext;
   activeOperation: RuntimeOperation | null;
 }
 

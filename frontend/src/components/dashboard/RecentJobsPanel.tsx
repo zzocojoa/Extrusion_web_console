@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import type { StateContext } from "../../api/stateContext";
 import type { CurrentJobSummary, RecentJobRow } from "../../pages/dashboard/dashboardTypes";
 import { StatusBadge } from "../status/StatusBadge";
 import { Panel } from "../ui/Panel";
@@ -8,10 +9,12 @@ import { formatCount, formatKstTime, statusToneForJob } from "./formatters";
 interface RecentJobsPanelProps {
   jobs: RecentJobRow[];
   currentJob: CurrentJobSummary | null;
+  stateContext: StateContext;
 }
 
-export function RecentJobsPanel({ jobs, currentJob }: RecentJobsPanelProps) {
+export function RecentJobsPanel({ jobs, currentJob, stateContext }: RecentJobsPanelProps) {
   const { t, i18n } = useTranslation();
+  const currentStateContext = currentJob?.stateContext ?? stateContext;
 
   return (
     <Panel className="recent-jobs-panel" title={t("dashboard.jobs.title")} titleId="recent-jobs-title">
@@ -29,6 +32,10 @@ export function RecentJobsPanel({ jobs, currentJob }: RecentJobsPanelProps) {
             <div className="progress__track" aria-hidden="true">
               <span style={{ width: `${currentJob.progressPct}%` }} />
             </div>
+          </div>
+          <div className="current-job__context">
+            <span className="panel-eyebrow">{t("dashboard.jobs.stateContext", { defaultValue: "State context" })}</span>
+            <strong>{currentStateContext.label}</strong>
           </div>
           <span className="current-job__message truncate">{currentJob.latestMessage}</span>
         </div>

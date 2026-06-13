@@ -1,7 +1,9 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+
+from backend.app.schemas.state_context import StateContextDto, unknown_state_context
 
 
 OverallSystemState = Literal["ready", "attention", "blocked", "running"]
@@ -69,6 +71,7 @@ class CurrentJobSummary(ApiModel):
     rows_sent: int
     started_at: str
     latest_message: str
+    state_context: StateContextDto
 
 
 class RecentJobRow(ApiModel):
@@ -82,10 +85,11 @@ class RecentJobRow(ApiModel):
     failure_count: int
     warning_count: int
     latest_message: str
+    state_context: StateContextDto
 
 
 class RuntimeCheckRow(ApiModel):
-    id: Literal["supabase", "database", "edge_function", "wsl_storage", "grafana", "state_store"]
+    id: Literal["supabase", "database", "edge_function", "wsl_storage", "grafana", "state_store", "state_context"]
     label: str
     tone: StatusTone
     detail: str
@@ -113,6 +117,7 @@ class AuditSummaryRow(ApiModel):
 
 class DashboardResponse(ApiModel):
     overall: DashboardOverall
+    state_context: StateContextDto = Field(default_factory=unknown_state_context)
     topbar_chips: list[TopbarStatusChip]
     status_matrix: list[StatusMatrixItem]
     current_job: CurrentJobSummary | None

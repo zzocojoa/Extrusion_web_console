@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from backend.app.core.settings import Settings
+from backend.app.core.state_context import build_state_context
 from backend.app.core.target_class import build_upload_target_preflight
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.schemas.audit import AuditResult
@@ -133,6 +134,7 @@ class ConfigService:
             config_file_path=str(self.config_path),
             items=items,
             target_classes=TargetClassPreflightDto.model_validate(build_upload_target_preflight(self.settings).to_api()),
+            state_context=build_state_context(self.settings).to_api(),
         )
 
     def save_config_payload(self, payload: Any) -> ConfigSaveResponse:

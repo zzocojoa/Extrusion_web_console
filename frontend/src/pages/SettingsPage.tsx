@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Lock, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ConfigApiError, fetchConfig, saveConfig, type ConfigItem, type ConfigResponse, type ConfigSaveValues } from "../api/config";
+import { unknownStateContext } from "../api/stateContext";
 
 const useApiConfig = import.meta.env.VITE_API_MODE === "api";
 const secretPlaceholder = "********";
@@ -41,6 +42,13 @@ const numericKeys = new Set([
 
 const mockConfig: ConfigResponse = {
   configFilePath: "mock://app-config",
+  stateContext: {
+    ...unknownStateContext,
+    contextClass: "development_default",
+    label: "Mock state",
+    storageStatus: "present",
+    source: "default",
+  },
   items: [
     { key: "plcDataDir", label: "PLC directory", value: "mock://plc-source", source: "config", secret: false, envKey: "EWC_PLC_DATA_DIR", overridden: false },
     {
@@ -181,6 +189,8 @@ export function SettingsPage() {
           <div className="settings-header__meta">
             <span>{t("settings.editor.configFile")}</span>
             <code>{useApiConfig ? t("settings.editor.configFileHidden") : t("settings.editor.mockMode")}</code>
+            <span>{t("settings.stateContext.label", { defaultValue: "State context" })}</span>
+            <code>{config?.stateContext?.label ?? unknownStateContext.label}</code>
           </div>
         </div>
 

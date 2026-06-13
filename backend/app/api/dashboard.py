@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from backend.app.core.settings import Settings, get_settings
+from backend.app.core.state_context import StateContext, build_state_context
 from backend.app.db.audit_repository import AuditLogFilters, AuditOrder, AuditRepository, AuditSort
 from backend.app.db.upload_job_repository import ACTIVE_JOB_STATUSES, UploadJobRepository
 from backend.app.schemas.dashboard import (
@@ -62,15 +63,17 @@ def build_dashboard(
     jobs, _ = upload_repository.list_jobs(limit=5) if upload_repository is not None else ([], 0)
     latest_job = jobs[0] if jobs else None
     runtime = _runtime_summary(runtime_status, settings)
-    state_store_ready = Path(settings.state_db_path).exists()
+    state_context = build_state_context(settings)
+    state_store_ready = state_context.storage_status == "present"
 
     return DashboardResponse(
         overall=_overall(latest_job, runtime["supabase_tone"]),
+        state_context=state_context.to_api(),
         topbar_chips=[
             TopbarStatusChip(id="supabase", label="Supabase", tone=runtime["supabase_tone"], value=runtime["supabase_value"]),
             TopbarStatusChip(id="upload", label="Upload", tone=_upload_tone(latest_job), value=_upload_value(latest_job)),
             TopbarStatusChip(id="grafana", label="Grafana", tone=runtime["grafana_tone"], value=runtime["grafana_value"]),
-            TopbarStatusChip(id="state_store", label="State Store", tone="ready" if state_store_ready else "muted", value="ready" if state_store_ready else "empty"),
+            TopbarStatusChip(id="state_store", label="State Store", tone="ready" if state_store_ready else "muted", value=state_context.label),
         ],
         status_matrix=[
             StatusMatrixItem(
@@ -106,13 +109,13 @@ def build_dashboard(
                 id="state_store",
                 label="State Store",
                 tone="ready" if state_store_ready else "muted",
-                value="SQLite ready" if state_store_ready else "No state yet",
-                detail="Persisted dashboard state available." if state_store_ready else "No persisted upload job has been recorded.",
+                value=state_context.label,
+                detail=_state_context_detail(state_context),
             ),
         ],
-        current_job=_current_job(latest_job),
-        recent_jobs=[_recent_job(row) for row in jobs],
-        runtime_checks=_runtime_checks(runtime_status, settings, now),
+        current_job=_current_job(latest_job, state_context),
+        recent_jobs=[_recent_job(row, state_context) for row in jobs],
+        runtime_checks=_runtime_checks(runtime_status, settings, now, state_context),
         warning_queue=_warning_queue(latest_job, runtime["supabase_tone"]),
         audit_summary=_audit_summary(audit_repository),
     )
@@ -187,6 +190,10 @@ def _upload_detail(row: Any | None) -> str:
     return f"{int(row['succeeded_files'] or 0)}/{int(row['total_files'] or 0)} files, {int(row['uploaded_rows'] or 0)} uploaded rows."
 
 
+def _state_context_detail(state_context: StateContext) -> str:
+    return f"Context class {state_context.context_class}; storage {state_context.storage_status}."
+
+
 def _progress_pct(row: Any) -> int:
     total_rows = int(row["total_rows"] or 0)
     processed_rows = int(row["processed_rows"] or 0)
@@ -213,7 +220,7 @@ def _started_at(row: Any) -> str:
     return str(row["started_at"] or row["requested_at"] or row["created_at"])
 
 
-def _current_job(row: Any | None) -> CurrentJobSummary | None:
+def _current_job(row: Any | None, state_context: StateContext) -> CurrentJobSummary | None:
     if row is None:
         return None
     return CurrentJobSummary(
@@ -225,10 +232,11 @@ def _current_job(row: Any | None) -> CurrentJobSummary | None:
         rows_sent=int(row["uploaded_rows"] or 0),
         started_at=_started_at(row),
         latest_message=_job_count_message(row),
+        state_context=state_context.to_api(),
     )
 
 
-def _recent_job(row: Any) -> RecentJobRow:
+def _recent_job(row: Any, state_context: StateContext) -> RecentJobRow:
     return RecentJobRow(
         job_id=str(row["job_id"]),
         status=str(row["status"]),
@@ -240,6 +248,7 @@ def _recent_job(row: Any) -> RecentJobRow:
         failure_count=int(row["failed_files"] or 0),
         warning_count=int(row["warning_count"] or 0),
         latest_message=_job_count_message(row),
+        state_context=state_context.to_api(),
     )
 
 
@@ -284,13 +293,13 @@ def _runtime_tone(status: RuntimeServiceStatus) -> str:
     return "attention"
 
 
-def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Settings, now: str) -> list[RuntimeCheckRow]:
+def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Settings, now: str, state_context: StateContext) -> list[RuntimeCheckRow]:
     if runtime_status is None:
         return [
             RuntimeCheckRow(id="supabase", label="Local Supabase", tone="muted", detail="Runtime status is not available.", last_checked_at=now),
             RuntimeCheckRow(id="edge_function", label="Edge Function", tone="muted", detail="Runtime status is not available.", last_checked_at=now),
             RuntimeCheckRow(id="grafana", label="Grafana", tone="muted", detail=settings.grafana_url, last_checked_at=now, href=settings.grafana_url),
-            RuntimeCheckRow(id="state_store", label="State Store", tone="ready" if Path(settings.state_db_path).exists() else "muted", detail="Dashboard state store checked.", last_checked_at=now),
+            RuntimeCheckRow(id="state_context", label="State Context", tone="ready" if state_context.storage_status == "present" else "muted", detail=_state_context_detail(state_context), last_checked_at=now),
         ]
     checked_at = runtime_status.checked_at.isoformat()
     return [
@@ -322,6 +331,13 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
             detail=runtime_status.grafana.detail,
             last_checked_at=checked_at,
             href=settings.grafana_url,
+        ),
+        RuntimeCheckRow(
+            id="state_context",
+            label="State Context",
+            tone="ready" if state_context.storage_status == "present" else "muted",
+            detail=_state_context_detail(state_context),
+            last_checked_at=checked_at,
         ),
     ]
 
