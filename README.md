@@ -6,9 +6,9 @@ This project replaces the legacy Tkinter GUI in `C:\Users\user\Documents\GitHub\
 
 ## Current Status
 
-The first runnable scaffold is in place:
+The current local console baseline is in place:
 
-- FastAPI backend with `/api/health`, mock `/api/dashboard`, and mock `/api/dashboard/summary`.
+- FastAPI backend with `/api/health`, real-state `/api/dashboard`, and real-state `/api/dashboard/summary`.
 - Upload Preview reconciliation API with persisted preview runs/items:
   - `POST /api/upload/preview`
   - `GET /api/upload/preview/latest`
@@ -16,7 +16,7 @@ The first runnable scaffold is in place:
   - `POST /api/upload/preview/{previewRunId}/cancel`
 - Upload Preview now writes `upload.preview` audit rows for success, DB unreachable, missing source, malformed request validation, and active preview conflict paths.
 - React + Vite + TypeScript frontend.
-- Dashboard Variant D mock UI using design tokens from `docs/04_design_system.md`.
+- Dashboard Variant D UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
 - Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, SSE event replay, and canonical `acceptedRows` counts for Edge/Supabase upsert-accepted rows.
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
@@ -26,17 +26,19 @@ The first runnable scaffold is in place:
 - Settings saves persist to `%APPDATA%\ExtrusionWebConsole\config.json`, are loaded by new `Settings` instances, and write `settings.save` success/failure/blocked audit rows.
 - Logs page with separate Job Logs and Audit Logs tabs.
 - Audit Logs API/UI with redacted, paginated, filtered, append-only audit rows.
-- TanStack Query mock-first Dashboard query.
+- TanStack Query Dashboard query with separate frontend mock/default mode and API mode.
 - Korean/English i18n baseline with language persistence in `localStorage`.
-- Mock Dashboard state switching with `?state=ready|attention|blocked|running`.
+- Frontend-only mock Dashboard state switching with `?state=ready|attention|blocked|running`.
 - Launcher phase 2 with FastAPI static frontend serving, Windows double-click launcher scripts, per-run local token protection for mutating APIs, and operator-mode API docs hardening.
-Legacy upload state import is not implemented in this scaffold.
+Legacy upload state import is not implemented in this baseline.
+
+In API mode, Dashboard endpoints read the active backend state instead of scaffold mock data. The response aggregates the active state DB latest upload job, runtime readiness summary, and safe audit summary. If the active state DB context is empty or different from a reviewed QA state DB, Dashboard shows that real empty/different state instead of fabricating a running upload.
 
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
 Preview requests are audit logged as `upload.preview`. Successful previews write `success` rows; DB unreachable, missing source, malformed JSON, and validation failures write `failure` rows; active preview conflicts write `blocked` rows. Audit params use safe summary fields such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`. Raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
 
-The Dashboard scaffold has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
+The Dashboard layout has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 
 ## Repository Layout
 
@@ -64,7 +66,7 @@ docs/
 - Node.js 20 or newer
 - npm
 
-Local Supabase, WSL, Docker, and Grafana are not required for the mock Dashboard and mock Upload Preview paths. Local Supabase is required when testing real reachable Upload Preview reconciliation, Upload Job execution, or Local Supabase runtime controls.
+Local Supabase, WSL, Docker, and Grafana are not required for frontend mock/default Dashboard and Upload Preview development paths. Those mock paths are for development and screenshot QA only, not operational evidence. Local Supabase is required when testing real reachable Upload Preview reconciliation, Upload Job execution, API-mode Dashboard runtime evidence, or Local Supabase runtime controls.
 
 ## Operator Launcher
 
@@ -75,6 +77,8 @@ First build the frontend once from `frontend/`:
 ```powershell
 npm run build
 ```
+
+The default `npm run build` uses the frontend mock/default mode and is useful for local UI development and screenshot QA. It is not the API-mode operator validation build.
 
 For an API-mode operator package that uses the real backend APIs instead of frontend mock data, build with:
 
@@ -337,7 +341,7 @@ Open:
 http://127.0.0.1:5173
 ```
 
-By default the frontend uses local mock data. To fetch the backend mock endpoint instead:
+By default the frontend uses local mock/demo data. To run against the backend API and active backend state instead:
 
 ```powershell
 $env:VITE_API_MODE="api"
@@ -346,11 +350,11 @@ npm run dev
 
 The Vite dev server proxies `/api` to `http://127.0.0.1:8000`.
 
-Important scaffold limitation: `?state=ready|attention|blocked|running` is implemented in the frontend mock data path. When `VITE_API_MODE="api"` is used, the backend mock currently returns the running Dashboard payload.
+Important mode split: `?state=ready|attention|blocked|running` is a frontend mock-mode feature only. When `VITE_API_MODE="api"` is used, Dashboard calls `/api/dashboard` and `/api/dashboard/summary`; those endpoints aggregate the active state DB latest upload job, runtime readiness, and safe audit summary. API mode should show neutral empty/unknown state when data is missing, not the old fake running job.
 
-The Upload Preview page also uses mock data by default so all five preview states can be inspected without local Supabase. To use the real backend preview API, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
+The Upload Preview and Upload Job pages also use mock data by default so preview/job states can be inspected without local Supabase. These mock paths are development and screenshot QA aids only. To use the real backend preview and job APIs, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
 
-For release-maintainer API-mode package builds, prefer:
+For release-maintainer API-mode package builds and operator validation, prefer:
 
 ```powershell
 npm run build:api
@@ -360,7 +364,7 @@ This compiles the frontend with API mode and writes build metadata consumed by p
 
 For API-mode release packages, follow the build with `.\packaging\assemble_operator_package.ps1 -FrontendMode api`. The default assembly mode is only for backward-compatible mock/default packaging and can record `frontendMode=unknown` when old build metadata is absent.
 
-The Logs page shows mock audit rows by default and uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, raw `error_message` search, raw params JSON search, or arbitrary SQL query controls. API responses return sanitized `errorMessage` values and decoded redacted params from `params_json_redacted`.
+The Logs page shows mock audit rows by default for development and screenshot QA. It uses `GET /api/audit` when `VITE_API_MODE="api"` is enabled. Audit Logs never expose raw params, secrets, tokens, DB URLs, raw `error_message` search, raw params JSON search, or arbitrary SQL query controls. API responses return sanitized `errorMessage` values and decoded redacted params from `params_json_redacted`.
 
 Local screenshot QA for Upload Job and Audit Logs can be run in mock mode without Docker or local Supabase:
 
@@ -518,7 +522,7 @@ Core Ops only:
 - Grafana status/link only
 - Audit logs
 
-Out of scope for this scaffold:
+Out of scope for this v1 baseline:
 
 - Full legacy core extraction
 - Data Mgmt
