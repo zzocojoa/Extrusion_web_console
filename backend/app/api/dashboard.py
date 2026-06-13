@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from backend.app.core.settings import Settings, get_settings
+from backend.app.db.audit_repository import AuditLogFilters, AuditOrder, AuditRepository, AuditSort
+from backend.app.db.upload_job_repository import ACTIVE_JOB_STATUSES, UploadJobRepository
 from backend.app.schemas.dashboard import (
     AuditSummaryRow,
     CurrentJobSummary,
@@ -13,198 +21,377 @@ from backend.app.schemas.dashboard import (
     TopbarStatusChip,
     WarningQueueRow,
 )
+from backend.app.schemas.runtime import RuntimeServiceStatus, RuntimeStatusResponse
+from backend.app.services.command_runner import AllowedCommandRunner
+from backend.app.services.runtime_readiness import RuntimeReadinessService
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
-def build_mock_dashboard(settings: Settings) -> DashboardResponse:
-    now = "2026-06-01T09:18:00+09:00"
-    current_job_id = "job_20260601_0912"
+def get_dashboard_upload_repository(settings: Settings = Depends(get_settings)) -> UploadJobRepository | None:
+    if not Path(settings.state_db_path).exists():
+        return None
+    return UploadJobRepository(settings.state_db_path)
+
+
+def get_dashboard_audit_repository(settings: Settings = Depends(get_settings)) -> AuditRepository | None:
+    if not Path(settings.state_db_path).exists():
+        return None
+    return AuditRepository(settings.state_db_path)
+
+
+def get_dashboard_runtime_status(settings: Settings = Depends(get_settings)) -> RuntimeStatusResponse | None:
+    try:
+        runner = AllowedCommandRunner(
+            settings.local_supabase_project_path,
+            settings.runtime_command_timeout_seconds,
+            project_id=settings.local_supabase_project_id,
+        )
+        return RuntimeReadinessService(settings, runner).check_status()
+    except Exception:  # noqa: BLE001 - dashboard must degrade to unknown, not fail the first screen.
+        return None
+
+
+def build_dashboard(
+    settings: Settings,
+    upload_repository: UploadJobRepository | None,
+    audit_repository: AuditRepository | None,
+    runtime_status: RuntimeStatusResponse | None,
+) -> DashboardResponse:
+    now = _now()
+    jobs, _ = upload_repository.list_jobs(limit=5) if upload_repository is not None else ([], 0)
+    latest_job = jobs[0] if jobs else None
+    runtime = _runtime_summary(runtime_status, settings)
+    state_store_ready = Path(settings.state_db_path).exists()
 
     return DashboardResponse(
-        overall=DashboardOverall(
-            state="running",
-            title="업로드 실행 중",
-            message="현재 12/18 파일 처리, 실패 0, 평균 처리 속도 24,000 rows/min.",
-            action="open_job",
-        ),
+        overall=_overall(latest_job, runtime["supabase_tone"]),
         topbar_chips=[
-            TopbarStatusChip(id="supabase", label="Supabase", tone="ready", value="정상"),
-            TopbarStatusChip(id="upload", label="업로드", tone="running", value="실행 중"),
-            TopbarStatusChip(id="grafana", label="Grafana", tone="ready", value="연결됨"),
-            TopbarStatusChip(id="state_store", label="State Store", tone="ready", value="WAL"),
+            TopbarStatusChip(id="supabase", label="Supabase", tone=runtime["supabase_tone"], value=runtime["supabase_value"]),
+            TopbarStatusChip(id="upload", label="Upload", tone=_upload_tone(latest_job), value=_upload_value(latest_job)),
+            TopbarStatusChip(id="grafana", label="Grafana", tone=runtime["grafana_tone"], value=runtime["grafana_value"]),
+            TopbarStatusChip(id="state_store", label="State Store", tone="ready" if state_store_ready else "muted", value="ready" if state_store_ready else "empty"),
         ],
         status_matrix=[
             StatusMatrixItem(
                 id="upload",
-                label="업로드",
-                tone="running",
-                value="12/18 files",
-                detail="실패 0 · ETA 4분",
+                label="Latest Upload",
+                tone=_upload_tone(latest_job),
+                value=_upload_value(latest_job),
+                detail=_upload_detail(latest_job),
             ),
             StatusMatrixItem(
                 id="supabase",
                 label="Local Supabase",
-                tone="ready",
-                value="DB + Edge OK",
-                detail="127.0.0.1:55321",
+                tone=runtime["supabase_tone"],
+                value=runtime["supabase_value"],
+                detail=runtime["supabase_detail"],
             ),
             StatusMatrixItem(
                 id="storage",
-                label="WSL 저장소",
-                tone="ready",
-                value="126GB free",
-                detail="Docker / VHDX 정상",
+                label="WSL / Docker",
+                tone=runtime["storage_tone"],
+                value=runtime["storage_value"],
+                detail=runtime["storage_detail"],
             ),
             StatusMatrixItem(
                 id="grafana",
                 label="Grafana",
-                tone="ready",
-                value="연결됨",
-                detail="Open link only",
-                action=DashboardLinkAction(
-                    label="Grafana 열기",
-                    href=settings.grafana_url,
-                    target="_blank",
-                ),
+                tone=runtime["grafana_tone"],
+                value=runtime["grafana_value"],
+                detail=runtime["grafana_detail"],
+                action=DashboardLinkAction(label="Open Grafana", href=settings.grafana_url, target="_blank"),
             ),
             StatusMatrixItem(
                 id="state_store",
                 label="State Store",
-                tone="ready",
-                value="WAL ready",
-                detail="%APPDATA% state DB",
+                tone="ready" if state_store_ready else "muted",
+                value="SQLite ready" if state_store_ready else "No state yet",
+                detail="Persisted dashboard state available." if state_store_ready else "No persisted upload job has been recorded.",
             ),
         ],
-        current_job=CurrentJobSummary(
-            job_id=current_job_id,
-            status="running",
-            progress_pct=67,
-            files_done=12,
-            files_total=18,
-            rows_sent=182440,
-            started_at="2026-06-01T09:12:00+09:00",
-            latest_message="PLC 2026-06-01 데이터 업로드 중",
-        ),
-        recent_jobs=[
-            RecentJobRow(
-                job_id=current_job_id,
-                status="running",
-                started_at="2026-06-01T09:12:00+09:00",
-                mode="upload",
-                files_done=12,
-                files_total=18,
-                rows_sent=182440,
-                failure_count=0,
-                warning_count=0,
-                latest_message="PLC 2026-06-01 데이터 업로드 중",
-            ),
-            RecentJobRow(
-                job_id="job_20260531_1745",
-                status="partial_failed",
-                started_at="2026-05-31T17:45:00+09:00",
-                mode="retry_failed",
-                files_done=21,
-                files_total=23,
-                rows_sent=204118,
-                failure_count=2,
-                warning_count=3,
-                latest_message="TEMP 파일 2개 재시도 필요",
-            ),
-            RecentJobRow(
-                job_id="job_20260531_1010",
-                status="succeeded",
-                started_at="2026-05-31T10:10:00+09:00",
-                mode="upload",
-                files_done=16,
-                files_total=16,
-                rows_sent=166982,
-                failure_count=0,
-                warning_count=1,
-                latest_message="부분 중복 1건 제외 후 완료",
-            ),
-        ],
-        runtime_checks=[
-            RuntimeCheckRow(
-                id="supabase",
-                label="Local Supabase",
-                tone="ready",
-                detail="127.0.0.1:55321",
-                last_checked_at=now,
-            ),
-            RuntimeCheckRow(
-                id="edge_function",
-                label="Edge Function",
-                tone="ready",
-                detail="upload-metrics reachable",
-                last_checked_at=now,
-            ),
-            RuntimeCheckRow(
-                id="grafana",
-                label="Grafana",
-                tone="ready",
-                detail=settings.grafana_url,
-                last_checked_at=now,
-                href=settings.grafana_url,
-            ),
-            RuntimeCheckRow(
-                id="state_store",
-                label="State Store",
-                tone="ready",
-                detail="web_console_state.db WAL mode",
-                last_checked_at=now,
-            ),
-        ],
-        warning_queue=[
-            WarningQueueRow(
-                id="partial_overlap",
-                label="일부 중복",
-                tone="attention",
-                count=3,
-                impact="Upload Preview에서 확인 필요",
-            ),
-            WarningQueueRow(
-                id="failed_retry",
-                label="실패 재시도",
-                tone="attention",
-                count=2,
-                impact="TEMP 파일 2개 재시도 가능",
-            ),
-            WarningQueueRow(
-                id="risky",
-                label="위험 후보",
-                tone="ready",
-                count=0,
-                impact="위험 후보 없음",
-            ),
-        ],
-        audit_summary=[
-            AuditSummaryRow(
-                audit_id="audit_001",
-                time="2026-06-01T09:15:00+09:00",
-                result="success",
-                action="upload.start",
-                actor="local\\operator",
-                summary="대상 18개, partial=false",
-                job_id=current_job_id,
-            ),
-            AuditSummaryRow(
-                audit_id="audit_002",
-                time="2026-06-01T09:10:00+09:00",
-                result="success",
-                action="runtime.supabase.status",
-                actor="system",
-                summary="Local Supabase reachable",
-            ),
-        ],
+        current_job=_current_job(latest_job),
+        recent_jobs=[_recent_job(row) for row in jobs],
+        runtime_checks=_runtime_checks(runtime_status, settings, now),
+        warning_queue=_warning_queue(latest_job, runtime["supabase_tone"]),
+        audit_summary=_audit_summary(audit_repository),
     )
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _overall(row: Any | None, supabase_tone: str) -> DashboardOverall:
+    if row is None:
+        return DashboardOverall(
+            state="ready",
+            title="No upload job recorded",
+            message="Dashboard is connected to API mode, but no persisted upload job exists in the active state store.",
+            action="preview",
+        )
+    status = str(row["status"])
+    if status in ACTIVE_JOB_STATUSES:
+        return DashboardOverall(
+            state="running",
+            title="Upload job is running",
+            message=_job_count_message(row),
+            action="open_job",
+        )
+    if status == "succeeded":
+        return DashboardOverall(
+            state="ready" if supabase_tone != "blocked" else "attention",
+            title="Latest upload succeeded",
+            message=_job_count_message(row),
+            action="open_job",
+        )
+    return DashboardOverall(
+        state="attention",
+        title="Latest upload needs review",
+        message=_job_count_message(row),
+        action="open_logs",
+    )
+
+
+def _job_count_message(row: Any) -> str:
+    return (
+        f"Status {row['status']}: processed {int(row['processed_rows'] or 0)}, "
+        f"uploaded {int(row['uploaded_rows'] or 0)}, accepted {int(row['inserted_rows'] or 0)} rows."
+    )
+
+
+def _upload_tone(row: Any | None) -> str:
+    if row is None:
+        return "muted"
+    status = str(row["status"])
+    if status in ACTIVE_JOB_STATUSES:
+        return "running"
+    if status == "succeeded":
+        return "ready"
+    if status in {"failed", "interrupted"}:
+        return "failed"
+    if status in {"partial_failed", "cancelled"}:
+        return "attention"
+    return "muted"
+
+
+def _upload_value(row: Any | None) -> str:
+    if row is None:
+        return "No jobs"
+    return str(row["status"])
+
+
+def _upload_detail(row: Any | None) -> str:
+    if row is None:
+        return "No persisted upload job found in the active state store."
+    return f"{int(row['succeeded_files'] or 0)}/{int(row['total_files'] or 0)} files, {int(row['uploaded_rows'] or 0)} uploaded rows."
+
+
+def _progress_pct(row: Any) -> int:
+    total_rows = int(row["total_rows"] or 0)
+    processed_rows = int(row["processed_rows"] or 0)
+    if str(row["status"]) == "succeeded":
+        return 100
+    if total_rows > 0:
+        return max(0, min(100, round(processed_rows * 100 / total_rows)))
+    total_files = int(row["total_files"] or 0)
+    done_files = _done_files(row)
+    if total_files > 0:
+        return max(0, min(100, round(done_files * 100 / total_files)))
+    return 0
+
+
+def _done_files(row: Any) -> int:
+    return int(row["succeeded_files"] or 0) + int(row["failed_files"] or 0) + int(row["cancelled_files"] or 0)
+
+
+def _mode(row: Any) -> str:
+    return "retry_failed" if str(row["mode"]) == "retry_failed" else "upload"
+
+
+def _started_at(row: Any) -> str:
+    return str(row["started_at"] or row["requested_at"] or row["created_at"])
+
+
+def _current_job(row: Any | None) -> CurrentJobSummary | None:
+    if row is None:
+        return None
+    return CurrentJobSummary(
+        job_id=str(row["job_id"]),
+        status=str(row["status"]),
+        progress_pct=_progress_pct(row),
+        files_done=_done_files(row),
+        files_total=int(row["total_files"] or 0),
+        rows_sent=int(row["uploaded_rows"] or 0),
+        started_at=_started_at(row),
+        latest_message=_job_count_message(row),
+    )
+
+
+def _recent_job(row: Any) -> RecentJobRow:
+    return RecentJobRow(
+        job_id=str(row["job_id"]),
+        status=str(row["status"]),
+        started_at=_started_at(row),
+        mode=_mode(row),
+        files_done=_done_files(row),
+        files_total=int(row["total_files"] or 0),
+        rows_sent=int(row["uploaded_rows"] or 0),
+        failure_count=int(row["failed_files"] or 0),
+        warning_count=int(row["warning_count"] or 0),
+        latest_message=_job_count_message(row),
+    )
+
+
+def _runtime_summary(runtime_status: RuntimeStatusResponse | None, settings: Settings) -> dict[str, str]:
+    if runtime_status is None:
+        return {
+            "supabase_tone": "muted",
+            "supabase_value": "unknown",
+            "supabase_detail": "Runtime status is not available.",
+            "storage_tone": "muted",
+            "storage_value": "unknown",
+            "storage_detail": "Docker/WSL status is not available.",
+            "grafana_tone": "muted",
+            "grafana_value": "unknown",
+            "grafana_detail": settings.grafana_url,
+        }
+    core_ready = runtime_status.api.status == RuntimeServiceStatus.ready and runtime_status.db.status == RuntimeServiceStatus.ready
+    edge_ready = runtime_status.edge_runtime.status == RuntimeServiceStatus.ready
+    supabase_tone = "ready" if core_ready and edge_ready else "attention" if core_ready else "blocked"
+    storage_ready = runtime_status.docker.status == RuntimeServiceStatus.ready and runtime_status.wsl.status == RuntimeServiceStatus.ready
+    grafana_tone = _runtime_tone(runtime_status.grafana.status)
+    return {
+        "supabase_tone": supabase_tone,
+        "supabase_value": "DB + Edge OK" if core_ready and edge_ready else runtime_status.overall_status.value,
+        "supabase_detail": f"API {runtime_status.api.status.value}, DB {runtime_status.db.status.value}, Edge {runtime_status.edge_runtime.status.value}.",
+        "storage_tone": "ready" if storage_ready else "attention",
+        "storage_value": f"Docker {runtime_status.docker.status.value}",
+        "storage_detail": f"WSL {runtime_status.wsl.status.value}, CLI {runtime_status.supabase_cli.status.value}.",
+        "grafana_tone": grafana_tone,
+        "grafana_value": runtime_status.grafana.status.value,
+        "grafana_detail": runtime_status.grafana.detail,
+    }
+
+
+def _runtime_tone(status: RuntimeServiceStatus) -> str:
+    if status == RuntimeServiceStatus.ready:
+        return "ready"
+    if status in {RuntimeServiceStatus.unknown, RuntimeServiceStatus.stopped, RuntimeServiceStatus.missing}:
+        return "muted"
+    if status == RuntimeServiceStatus.unreachable:
+        return "blocked"
+    return "attention"
+
+
+def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Settings, now: str) -> list[RuntimeCheckRow]:
+    if runtime_status is None:
+        return [
+            RuntimeCheckRow(id="supabase", label="Local Supabase", tone="muted", detail="Runtime status is not available.", last_checked_at=now),
+            RuntimeCheckRow(id="edge_function", label="Edge Function", tone="muted", detail="Runtime status is not available.", last_checked_at=now),
+            RuntimeCheckRow(id="grafana", label="Grafana", tone="muted", detail=settings.grafana_url, last_checked_at=now, href=settings.grafana_url),
+            RuntimeCheckRow(id="state_store", label="State Store", tone="ready" if Path(settings.state_db_path).exists() else "muted", detail="Dashboard state store checked.", last_checked_at=now),
+        ]
+    checked_at = runtime_status.checked_at.isoformat()
+    return [
+        RuntimeCheckRow(
+            id="supabase",
+            label="Local Supabase",
+            tone=_runtime_tone(runtime_status.api.status),
+            detail=f"API {runtime_status.api.status.value}.",
+            last_checked_at=checked_at,
+        ),
+        RuntimeCheckRow(
+            id="database",
+            label="Database",
+            tone=_runtime_tone(runtime_status.db.status),
+            detail=f"DB {runtime_status.db.status.value}.",
+            last_checked_at=checked_at,
+        ),
+        RuntimeCheckRow(
+            id="edge_function",
+            label="Edge Function",
+            tone=_runtime_tone(runtime_status.edge_runtime.status),
+            detail=f"Edge {runtime_status.edge_runtime.status.value}.",
+            last_checked_at=checked_at,
+        ),
+        RuntimeCheckRow(
+            id="grafana",
+            label="Grafana",
+            tone=_runtime_tone(runtime_status.grafana.status),
+            detail=runtime_status.grafana.detail,
+            last_checked_at=checked_at,
+            href=settings.grafana_url,
+        ),
+    ]
+
+
+def _warning_queue(row: Any | None, supabase_tone: str) -> list[WarningQueueRow]:
+    failed_count = 0 if row is None else int(row["failed_files"] or 0)
+    warning_count = 0 if row is None else int(row["warning_count"] or 0)
+    return [
+        WarningQueueRow(
+            id="failed_retry",
+            label="Failed files",
+            tone="attention" if failed_count else "ready",
+            count=failed_count,
+            impact="Retry review is needed." if failed_count else "No failed files in the latest job.",
+        ),
+        WarningQueueRow(
+            id="risky",
+            label="Job warnings",
+            tone="attention" if warning_count else "ready",
+            count=warning_count,
+            impact="Review latest job warnings." if warning_count else "No warnings recorded for the latest job.",
+        ),
+        WarningQueueRow(
+            id="supabase_unreachable",
+            label="Runtime gate",
+            tone="blocked" if supabase_tone == "blocked" else "ready",
+            count=1 if supabase_tone == "blocked" else 0,
+            impact="Local Supabase core runtime is not reachable." if supabase_tone == "blocked" else "Runtime gate is not blocking Dashboard review.",
+        ),
+    ]
+
+
+def _audit_summary(repository: AuditRepository | None) -> list[AuditSummaryRow]:
+    if repository is None:
+        return []
+    page = repository.list_audit_logs(AuditLogFilters(limit=5, sort=AuditSort.ts, order=AuditOrder.desc))
+    rows: list[AuditSummaryRow] = []
+    for row in page.rows:
+        summary = str(row["result"])
+        if row["error_code"]:
+            summary = f"{summary}: {row['error_code']}"
+        rows.append(
+            AuditSummaryRow(
+                audit_id=str(row["audit_id"]),
+                time=str(row["ts"]),
+                result=str(row["result"]),
+                action=str(row["action"]),
+                actor=str(row["actor"]),
+                summary=summary,
+                job_id=row["job_id"],
+            )
+        )
+    return rows
+
+
 @router.get("", response_model=DashboardResponse)
-def get_dashboard(settings: Settings = Depends(get_settings)) -> DashboardResponse:
-    return build_mock_dashboard(settings)
+def get_dashboard(
+    settings: Settings = Depends(get_settings),
+    upload_repository: UploadJobRepository | None = Depends(get_dashboard_upload_repository),
+    audit_repository: AuditRepository | None = Depends(get_dashboard_audit_repository),
+    runtime_status: RuntimeStatusResponse | None = Depends(get_dashboard_runtime_status),
+) -> DashboardResponse:
+    return build_dashboard(settings, upload_repository, audit_repository, runtime_status)
 
 
 @router.get("/summary", response_model=DashboardResponse)
-def get_dashboard_summary(settings: Settings = Depends(get_settings)) -> DashboardResponse:
-    return build_mock_dashboard(settings)
+def get_dashboard_summary(
+    settings: Settings = Depends(get_settings),
+    upload_repository: UploadJobRepository | None = Depends(get_dashboard_upload_repository),
+    audit_repository: AuditRepository | None = Depends(get_dashboard_audit_repository),
+    runtime_status: RuntimeStatusResponse | None = Depends(get_dashboard_runtime_status),
+) -> DashboardResponse:
+    return build_dashboard(settings, upload_repository, audit_repository, runtime_status)
