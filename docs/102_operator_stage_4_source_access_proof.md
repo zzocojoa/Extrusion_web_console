@@ -10,10 +10,10 @@ Verdict: `passed_with_caveats`
 
 ## Summary
 
-The Stage 4 source candidate is accessible to Python/backend when the source
-path is passed through the backend-style environment/config path. The earlier
-Python `exists=false` result was reproduced only when the path was embedded
-directly into an ad-hoc Python script.
+The Stage 4 source candidate is accessible to a Python/backend-style process
+when the source path is passed through the backend-style environment/config
+path. The earlier Python `exists=false` result was reproduced only when the
+path was embedded directly into an ad-hoc Python script.
 
 No Upload Preview, Start Upload, Retry Failed, duplicate rerun, Edge
 authenticated upload call, or full rollout was executed.
@@ -142,7 +142,10 @@ Upload.
 | Source scope unclear | partially, full-dataset approval still separate |
 | User has not approved Preview-only rerun | yes |
 
-The only remaining stop condition is approval/scope, not source accessibility.
+For this source-access proof only, source accessibility is no longer the active
+blocker for the recommended sanitized path class. Stage 4 Preview-only remains
+blocked until separate explicit approval and all Stage 4 runtime gates pass
+immediately before execution.
 
 ## Redaction Result
 
@@ -171,7 +174,8 @@ After this PR is reviewed, the safe next branch is:
 codex/operator-stage-4-preview-only-rerun
 ```
 
-That branch may run Stage 4 Preview-only only after the user gives separate
-explicit approval for the sanitized source scope and recommended path class.
+That branch must not run Stage 4 Preview-only unless the user separately
+approves the sanitized source scope and recommended path class, and the
+required runtime gates pass.
 Start Upload remains forbidden until Preview-only succeeds and receives a
 separate explicit approval.
