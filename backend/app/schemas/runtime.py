@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import Field
 
+from backend.app.schemas.state_context import StateContextDto, unknown_state_context
 from backend.app.schemas.upload_preview import ApiModel
 
 
@@ -120,6 +121,7 @@ class RuntimeStatusResponse(ApiModel):
     grafana: RuntimeProbeStatus
     containers: list[RuntimeContainerStatus]
     config: list[RuntimeConfigItem]
+    state_context: StateContextDto = Field(default_factory=unknown_state_context)
     active_operation: RuntimeOperationDto | None = None
 
 

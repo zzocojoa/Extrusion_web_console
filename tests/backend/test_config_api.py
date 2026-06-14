@@ -341,6 +341,10 @@ def test_config_get_uses_independent_local_supabase_defaults(tmp_path: Path, mon
     assert target_classes["uploadEdge"]["targetClass"] == "loopback_expected_api_port_upload_metrics"
     assert target_classes["runtimeEdge"]["targetClass"] == "loopback_expected_api_port_upload_metrics"
     assert target_classes["db"]["targetClass"] == "not_configured"
+    state_context = response.json()["stateContext"]
+    assert state_context["contextClass"] == "qa_temporary"
+    assert state_context["storageStatus"] == "present"
+    assert str(tmp_path / "state.db") not in response.text
 
 
 def test_config_get_reports_stale_upload_target_class_without_raw_secret(tmp_path: Path, monkeypatch) -> None:

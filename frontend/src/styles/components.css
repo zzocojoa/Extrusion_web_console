@@ -275,7 +275,7 @@
   min-height: 54px;
   padding: var(--space-3) var(--space-4);
   display: grid;
-  grid-template-columns: 180px minmax(180px, 320px) minmax(0, 1fr);
+  grid-template-columns: 180px minmax(180px, 300px) minmax(140px, 220px) minmax(0, 1fr);
   align-items: center;
   gap: var(--space-4);
   border-bottom: 1px solid var(--color-border);
@@ -287,9 +287,25 @@
     grid-template-columns: 180px minmax(180px, 1fr);
   }
 
+  .current-job__context,
   .current-job__message {
     grid-column: 1 / -1;
   }
+}
+
+.current-job__context {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.current-job__context strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-eyebrow {

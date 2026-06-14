@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from backend.app.core.settings import Settings
+from backend.app.core.state_context import build_state_context
 from backend.app.schemas.runtime import (
     RuntimeConfigItem,
     RuntimeContainerStatus,
@@ -131,6 +132,7 @@ class RuntimeReadinessService:
             grafana=grafana,
             containers=containers,
             config=self._config_items(),
+            state_context=build_state_context(self.settings).to_api(),
             active_operation=active_operation,
         )
 

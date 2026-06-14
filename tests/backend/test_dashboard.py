@@ -8,7 +8,8 @@ from backend.app.api.dashboard import (
     get_dashboard_runtime_status,
     get_dashboard_upload_repository,
 )
-from backend.app.core.settings import Settings, get_settings
+from backend.app.core.settings import DEFAULT_REPO_ROOT, Settings, get_settings
+from backend.app.core.state_context import build_state_context
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.main import app
@@ -63,9 +64,14 @@ def test_dashboard_endpoint_returns_neutral_state_when_no_job_exists(tmp_path: P
     assert data["overall"]["title"] == "No upload job recorded"
     assert data["currentJob"] is None
     assert data["recentJobs"] == []
+    assert data["stateContext"]["contextClass"] == "qa_temporary"
+    assert data["stateContext"]["storageStatus"] == "missing"
+    assert data["topbarChips"][3]["value"] == data["stateContext"]["label"]
     assert next(item for item in data["statusMatrix"] if item["id"] == "upload")["tone"] == "muted"
+    assert next(item for item in data["statusMatrix"] if item["id"] == "state_store")["value"] == data["stateContext"]["label"]
     assert "job_20260601_0912" not in response.text
     assert "running" not in data["topbarChips"][1]["tone"]
+    assert str(state_path) not in response.text
 
 
 def test_dashboard_endpoint_uses_latest_succeeded_upload_job(tmp_path: Path) -> None:
@@ -114,11 +120,14 @@ def test_dashboard_endpoint_uses_latest_succeeded_upload_job(tmp_path: Path) -> 
     assert data["currentJob"]["status"] == "succeeded"
     assert data["currentJob"]["progressPct"] == 100
     assert data["currentJob"]["rowsSent"] == 17179
+    assert data["currentJob"]["stateContext"]["label"] == data["stateContext"]["label"]
     assert data["recentJobs"][0]["status"] == "succeeded"
     assert data["recentJobs"][0]["rowsSent"] == 17179
+    assert data["recentJobs"][0]["stateContext"]["contextClass"] == data["stateContext"]["contextClass"]
     assert data["topbarChips"][1]["tone"] == "ready"
     assert data["auditSummary"][0]["action"] == "upload.start"
     assert "hidden-value" not in response.text
+    assert str(db_path) not in response.text
 
 
 def test_dashboard_summary_endpoint_uses_same_real_state_contract(tmp_path: Path) -> None:
@@ -136,3 +145,38 @@ def test_dashboard_summary_endpoint_uses_same_real_state_contract(tmp_path: Path
     data = response.json()
     assert data["currentJob"] is None
     assert data["recentJobs"] == []
+    assert data["stateContext"]["label"]
+
+
+def test_state_context_classifies_operator_package_path(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("backend.app.core.state_context.tempfile.gettempdir", lambda: str(tmp_path / "other-temp-root"))
+    state_path = tmp_path / "ExtrusionWebConsole" / "web_console_state.db"
+    state_path.parent.mkdir()
+    state_path.write_text("", encoding="utf-8")
+
+    state_context = build_state_context(Settings(state_db_path=str(state_path)))
+
+    assert state_context.context_class == "operator_package"
+    assert state_context.storage_status == "present"
+    assert str(state_path) not in state_context.to_api().values()
+
+
+def test_state_context_classifies_development_default_path() -> None:
+    state_context = build_state_context(Settings(state_db_path=str(DEFAULT_REPO_ROOT / "README.md")))
+
+    assert state_context.context_class == "development_default"
+    assert state_context.storage_status == "present"
+    assert str(DEFAULT_REPO_ROOT) not in state_context.to_api().values()
+
+
+def test_state_context_classifies_unknown_and_inaccessible(tmp_path: Path) -> None:
+    parent_file = tmp_path / "state-parent-file"
+    parent_file.write_text("", encoding="utf-8")
+
+    unknown_context = build_state_context(Settings(state_db_path=""))
+    inaccessible_context = build_state_context(Settings(state_db_path=str(parent_file / "state.db")))
+
+    assert unknown_context.context_class == "unknown"
+    assert unknown_context.storage_status == "unknown"
+    assert inaccessible_context.context_class == "inaccessible"
+    assert inaccessible_context.storage_status == "inaccessible"

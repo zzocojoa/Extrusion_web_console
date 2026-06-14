@@ -1,4 +1,5 @@
 import { apiFetch, isLocalTokenApiError } from "./client";
+import type { StateContext } from "./stateContext";
 
 export type ConfigSource = "default" | "config" | "env" | string;
 
@@ -34,6 +35,7 @@ export interface ConfigResponse {
   configFilePath: string;
   items: ConfigItem[];
   targetClasses?: TargetClassPreflight;
+  stateContext: StateContext;
 }
 
 export interface ConfigSaveResponse {

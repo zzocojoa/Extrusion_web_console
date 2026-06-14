@@ -51,7 +51,7 @@ export function DashboardPage() {
     <main className="dashboard-page" aria-labelledby="dashboard-title">
       <SafetySummaryBanner overall={data.overall} />
       <DashboardStatusMatrix items={data.statusMatrix} />
-      <RecentJobsPanel jobs={data.recentJobs} currentJob={data.currentJob} />
+      <RecentJobsPanel jobs={data.recentJobs} currentJob={data.currentJob} stateContext={data.stateContext} />
       <section className="dashboard-lower-grid" aria-label={t("a11y.dashboardDetailSummaries")}>
         <RuntimeCheckPanel
           rows={data.runtimeChecks}

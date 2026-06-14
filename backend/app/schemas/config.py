@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import Field
 
+from backend.app.schemas.state_context import StateContextDto
 from backend.app.schemas.upload_preview import ApiModel
 
 
@@ -37,6 +38,7 @@ class ConfigResponse(ApiModel):
     config_file_path: str
     items: list[ConfigItemDto]
     target_classes: TargetClassPreflightDto
+    state_context: StateContextDto
 
 
 class ConfigSaveRequest(ApiModel):

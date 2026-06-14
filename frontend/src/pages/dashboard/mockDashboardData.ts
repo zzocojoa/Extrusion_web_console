@@ -1,5 +1,12 @@
 import type { DashboardResponse } from "./dashboardTypes";
 
+const mockStateContext = {
+  contextClass: "development_default",
+  label: "Demo state",
+  storageStatus: "present",
+  source: "default",
+} as const;
+
 export const mockDashboardData: DashboardResponse = {
   overall: {
     state: "running",
@@ -7,6 +14,7 @@ export const mockDashboardData: DashboardResponse = {
     message: "현재 12/18 파일 처리, 실패 0, 평균 처리 속도 24,000 rows/min.",
     action: "open_job",
   },
+  stateContext: mockStateContext,
   topbarChips: [
     { id: "supabase", label: "Supabase", tone: "ready", value: "정상" },
     { id: "upload", label: "업로드", tone: "running", value: "실행 중" },
@@ -59,6 +67,7 @@ export const mockDashboardData: DashboardResponse = {
     filesTotal: 18,
     rowsSent: 182440,
     startedAt: "2026-06-01T09:12:00+09:00",
+    stateContext: mockStateContext,
     latestMessage: "PLC 2026-06-01 데이터 업로드 중",
   },
   recentJobs: [
@@ -66,6 +75,7 @@ export const mockDashboardData: DashboardResponse = {
       jobId: "job_20260601_0912",
       status: "running",
       startedAt: "2026-06-01T09:12:00+09:00",
+      stateContext: mockStateContext,
       mode: "upload",
       filesDone: 12,
       filesTotal: 18,
@@ -78,6 +88,7 @@ export const mockDashboardData: DashboardResponse = {
       jobId: "job_20260531_1745",
       status: "partial_failed",
       startedAt: "2026-05-31T17:45:00+09:00",
+      stateContext: mockStateContext,
       mode: "retry_failed",
       filesDone: 21,
       filesTotal: 23,
@@ -90,6 +101,7 @@ export const mockDashboardData: DashboardResponse = {
       jobId: "job_20260531_1010",
       status: "succeeded",
       startedAt: "2026-05-31T10:10:00+09:00",
+      stateContext: mockStateContext,
       mode: "upload",
       filesDone: 16,
       filesTotal: 16,

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import type { RuntimeStatusResponse, RuntimeServiceStatus } from "../../api/runtime";
+import { unknownStateContext } from "../../api/stateContext";
 import type { RuntimeCheckRow } from "../../pages/dashboard/dashboardTypes";
 import type { StatusTone } from "../../pages/dashboard/dashboardTypes";
 import { StatusBadge } from "../status/StatusBadge";
@@ -104,6 +105,7 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): RuntimeCheckRow[] {
   const checkedAt = runtimeStatus.checkedAt;
+  const stateContext = runtimeStatus.stateContext ?? unknownStateContext;
   return [
     {
       id: "supabase",
@@ -142,10 +144,17 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
       lastCheckedAt: checkedAt,
     },
     {
-      id: "state_store",
+      id: "containers",
       label: t("runtime.services.containers"),
       tone: toneForContainers(runtimeStatus.containers),
       detail: containerDetail(runtimeStatus.containers, t),
+      lastCheckedAt: checkedAt,
+    },
+    {
+      id: "state_context",
+      label: t("runtime.services.stateContext", { defaultValue: "State context" }),
+      tone: toneForStateContext(stateContext.storageStatus),
+      detail: `${stateContext.label} / ${stateContext.contextClass} / ${stateContext.storageStatus}`,
       lastCheckedAt: checkedAt,
     },
   ];
@@ -172,6 +181,12 @@ function toneForContainers(containers: RuntimeStatusResponse["containers"]): Sta
   if (containers.some((row) => row.status === "stopped" || row.status === "unreachable" || row.status === "unhealthy")) return "attention";
   if (containers.length > 0 && containers.every((row) => row.status === "ready")) return "ready";
   return "muted";
+}
+
+function toneForStateContext(storageStatus: RuntimeStatusResponse["stateContext"]["storageStatus"]): StatusTone {
+  if (storageStatus === "present") return "ready";
+  if (storageStatus === "missing" || storageStatus === "unknown") return "muted";
+  return "attention";
 }
 
 function containerDetail(containers: RuntimeStatusResponse["containers"], t: Translate): string {

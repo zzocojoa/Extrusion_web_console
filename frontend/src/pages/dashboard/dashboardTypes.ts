@@ -1,3 +1,5 @@
+import type { StateContext } from "../../api/stateContext";
+
 export type OverallSystemState = "ready" | "attention" | "blocked" | "running";
 
 export type StatusTone =
@@ -23,6 +25,7 @@ export type UploadJobStatus =
 
 export interface DashboardResponse {
   overall: DashboardOverall;
+  stateContext: StateContext;
   topbarChips: TopbarStatusChip[];
   statusMatrix: StatusMatrixItem[];
   currentJob: CurrentJobSummary | null;
@@ -77,6 +80,7 @@ export interface CurrentJobSummary {
   rowsSent: number;
   startedAt: string;
   latestMessage: string;
+  stateContext: StateContext;
 }
 
 export interface RecentJobRow {
@@ -90,10 +94,11 @@ export interface RecentJobRow {
   failureCount: number;
   warningCount: number;
   latestMessage: string;
+  stateContext: StateContext;
 }
 
 export interface RuntimeCheckRow {
-  id: "supabase" | "database" | "edge_function" | "wsl_storage" | "grafana" | "state_store";
+  id: "supabase" | "database" | "edge_function" | "wsl_storage" | "grafana" | "state_store" | "state_context" | "containers";
   label: string;
   tone: StatusTone;
   detail: string;
