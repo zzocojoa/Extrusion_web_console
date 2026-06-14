@@ -31,6 +31,7 @@ import {
   type PreviewRangeMode,
   type PreviewResponse,
   type PreviewRunStatus,
+  type PreviewSummary,
   type PreviewSortKey,
 } from "../api/uploadPreview";
 import { StatusBadge } from "../components/status/StatusBadge";
@@ -67,6 +68,9 @@ const terminalRunStatuses: PreviewRunStatus[] = [
   "timed_out",
 ];
 
+const activePreviewRunStatuses: PreviewRunStatus[] = ["queued", "running", "cancelling"];
+const dbDerivedItemStatuses: PreviewItemStatus[] = ["target", "already_in_db", "partial_overlap"];
+
 const activeJobStatuses: UploadJobStatus[] = ["queued", "running", "pausing", "paused", "cancelling"];
 
 const jobTone: Record<UploadJobStatus, StatusTone> = {
@@ -100,6 +104,56 @@ function formatNumber(value: number | null | undefined) {
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
   return value.replace("T", " ").replace(/\.\d+/, "").replace("+09:00", "");
+}
+
+function sumNullable(values: Array<number | null | undefined>): number {
+  return values.reduce<number>((total, value) => total + (value ?? 0), 0);
+}
+
+function isActivePreviewRun(status: PreviewRunStatus) {
+  return activePreviewRunStatuses.includes(status);
+}
+
+function hasDbReconciliationEvidence(item: PreviewItem) {
+  return (
+    dbDerivedItemStatuses.includes(item.status) ||
+    item.dbMatchCount !== null ||
+    Boolean(item.timing && Object.keys(item.timing).length > 0)
+  );
+}
+
+function buildInterimSummary(response: PreviewResponse): PreviewSummary {
+  const items = response.items;
+  return {
+    total: Math.max(response.page.totalItems ?? 0, items.length),
+    target: items.filter((item) => item.status === "target").length,
+    alreadyInDb: items.filter((item) => item.status === "already_in_db").length,
+    partialOverlap: items.filter((item) => item.status === "partial_overlap").length,
+    risky: items.filter((item) => item.status === "risky").length,
+    excluded: items.filter((item) => item.status === "excluded").length,
+    uploadRows: sumNullable(items.filter((item) => item.status === "target").map((item) => item.uploadRowEstimate)),
+    dbMatchedRows: sumNullable(items.map((item) => item.dbMatchCount)),
+  };
+}
+
+function buildPreviewDisplayState(response: PreviewResponse) {
+  const active = isActivePreviewRun(response.run.status);
+  const hasItems = response.items.length > 0;
+  const hasDbEvidence = response.items.some(hasDbReconciliationEvidence);
+  const isInterim = active && hasItems;
+  const dbStatusLabelKey =
+    active && response.run.dbStatus === "not_checked" && hasDbEvidence
+      ? "upload.dbStatus.reconciling"
+      : `upload.dbStatus.${response.run.dbStatus}`;
+
+  return {
+    summary: isInterim ? buildInterimSummary(response) : response.run.summary,
+    isInterim,
+    dbStatusLabelKey,
+    startUploadDisabledReasonKey: active
+      ? "upload.actions.startUploadDisabledRunning"
+      : "upload.actions.startUploadDisabledReason",
+  };
 }
 
 function mockRunId() {
@@ -143,6 +197,10 @@ export function UploadPage() {
     enabled: activeTab === "preview" && !previewRunId && API_MODE,
     queryFn: () => fetchLatestUploadPreview(queryParams),
     retry: false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.run.status;
+      return status && terminalRunStatuses.includes(status) ? false : 900;
+    },
   });
 
   const previewQuery = useQuery({
@@ -470,12 +528,14 @@ interface PreviewTabProps {
 function PreviewTab(props: PreviewTabProps) {
   const { t } = useTranslation();
   const run = props.currentPreview?.run;
-  const summary = run?.summary;
+  const displayState = props.currentPreview ? buildPreviewDisplayState(props.currentPreview) : null;
+  const summary = displayState?.summary;
   const runAlert = Boolean(
     run &&
       (["partial_failed", "failed", "timed_out"].includes(run.status) ||
         ["unreachable", "query_failed"].includes(run.dbStatus)),
   );
+  const startUploadDisabledReason = displayState?.startUploadDisabledReasonKey ?? "upload.actions.startUploadDisabledReason";
 
   return (
     <section className="upload-preview">
@@ -503,7 +563,7 @@ function PreviewTab(props: PreviewTabProps) {
               type="button"
               disabled={!props.canStartUpload || props.startUploadPending}
               onClick={props.onStartUpload}
-              title={!props.canStartUpload ? t("upload.actions.startUploadDisabledReason") : undefined}
+              title={!props.canStartUpload ? t(startUploadDisabledReason) : undefined}
             >
               <Play size={16} aria-hidden="true" />
               {props.startUploadPending ? t("upload.actions.startingUpload") : t("upload.actions.startUpload")}
@@ -546,13 +606,13 @@ function PreviewTab(props: PreviewTabProps) {
         <div className={`preview-status-strip ${runAlert ? "preview-status-strip--warning" : ""}`} role={runAlert ? "alert" : "status"}>
           <StatusBadge tone={runTone[run.status]} label={t(`upload.runStatus.${run.status}`)} />
           <span>{t("upload.preview.runId")}: <code>{run.previewRunId}</code></span>
-          <span>{t("upload.preview.db")}: {t(`upload.dbStatus.${run.dbStatus}`)}</span>
+          <span>{t("upload.preview.db")}: {t(displayState?.dbStatusLabelKey ?? `upload.dbStatus.${run.dbStatus}`)}</span>
           <span>{t("upload.preview.updated")}: {formatDateTime(run.finishedAt ?? run.startedAt ?? run.requestedAt)}</span>
           {run.errorMessage ? <strong>{run.errorMessage}</strong> : null}
         </div>
       ) : null}
 
-      {summary ? <PreviewSummaryStrip summary={summary} /> : null}
+      {summary ? <PreviewSummaryStrip summary={summary} interim={Boolean(displayState?.isInterim)} /> : null}
 
       {props.error ? (
         <div className="error-banner" role="alert">
@@ -607,7 +667,13 @@ function PreviewTab(props: PreviewTabProps) {
   );
 }
 
-function PreviewSummaryStrip({ summary }: { summary: PreviewResponse["run"]["summary"] }) {
+function PreviewSummaryStrip({
+  summary,
+  interim,
+}: {
+  summary: PreviewResponse["run"]["summary"];
+  interim: boolean;
+}) {
   const { t } = useTranslation();
   const items: Array<[PreviewItemStatus, number]> = [
     ["target", summary.target],
@@ -617,7 +683,12 @@ function PreviewSummaryStrip({ summary }: { summary: PreviewResponse["run"]["sum
     ["excluded", summary.excluded],
   ];
   return (
-    <div className="preview-summary-strip">
+    <div className={`preview-summary-strip ${interim ? "preview-summary-strip--interim" : ""}`}>
+      {interim ? (
+        <div className="preview-summary-note" role="status">
+          {t("upload.preview.interimSummary")}
+        </div>
+      ) : null}
       {items.map(([status, value]) => (
         <div className="preview-summary-cell" key={status}>
           <StatusBadge tone={statusTone[status]} label={t(`upload.status.${status}`)} />

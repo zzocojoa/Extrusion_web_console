@@ -220,6 +220,7 @@
       "db": "DB",
       "updated": "Updated",
       "uploadRows": "Upload rows",
+      "interimSummary": "Interim counts from rows already processed. Final upload eligibility is available only after Preview succeeds.",
       "loading": "Checking local CSV files and DB reconciliation...",
       "error": "Upload preview status could not be loaded."
     },
@@ -229,6 +230,7 @@
       "startingUpload": "Starting",
       "startUploadUnavailable": "Not implemented",
       "startUploadDisabledReason": "Start Upload requires a succeeded preview with reachable DB and target rows.",
+      "startUploadDisabledRunning": "Preview is still calculating. Start Upload stays disabled until the final result succeeds.",
       "cancelPreview": "Cancel",
       "cancelling": "Cancelling"
     },
@@ -291,6 +293,7 @@
     },
     "dbStatus": {
       "not_checked": "Not checked",
+      "reconciling": "Checking, partial results",
       "reachable": "Reachable",
       "unreachable": "Unreachable",
       "query_failed": "Query failed"
