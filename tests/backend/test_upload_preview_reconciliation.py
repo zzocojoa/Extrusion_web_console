@@ -55,6 +55,16 @@ class TimeoutReconciler:
         raise TimeoutError("Preview run exceeded the configured time limit")
 
 
+class SchemaMismatchExtractor:
+    def extract(self, *_args, **_kwargs):
+        raise PreviewSchemaMismatchError("missing required columns")
+
+
+class TransformErrorExtractor:
+    def extract(self, *_args, **_kwargs):
+        raise ValueError("bad transform")
+
+
 def write_csv(path: Path, rows: list[str]) -> None:
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
     old_mtime = datetime.now().timestamp() - 600
@@ -725,3 +735,54 @@ def test_preview_service_db_timeout_preserves_extracted_counts_and_stage(tmp_pat
     assert item_timing["timeoutStage"] == "db_match"
     assert item_timing["dbProgress"]["strategy"] == "temp_table"
     assert item_timing["dbProgress"]["stage"] == "join_all_metrics"
+
+
+def test_preview_service_non_timeout_extract_errors_do_not_persist_timeout_stage(tmp_path: Path) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        ["Date,Time,Mold1", "2026-06-01,09:00:00,1"],
+    )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0, "maxRunSeconds": 30},
+        }
+    )
+
+    cases = [
+        ("prv_schema_mismatch", SchemaMismatchExtractor(), "schema_mismatch"),
+        ("prv_transform_error", TransformErrorExtractor(), "transform_error"),
+    ]
+    for preview_run_id, extractor, expected_reason in cases:
+        repository = PreviewRepository(str(tmp_path / f"{preview_run_id}.db"))
+        repository.create_run(
+            preview_run_id=preview_run_id,
+            range_mode=request.range_mode.value,
+            start_date="2026-06-01",
+            end_date="2026-06-01",
+            sources=["plc"],
+            options=request.options.model_dump(by_alias=True),
+            config_snapshot={},
+            retry_of_run_id=None,
+        )
+        service = PreviewService(
+            Settings(plc_data_dir=str(plc_dir)),
+            repository,
+            reconciler=FakeReconciler(),
+        )
+        service.extractor = extractor
+
+        service.run_preview(preview_run_id, request)
+
+        items, total = repository.list_items(preview_run_id)
+        assert total == 1
+        assert items[0]["reason_code"] == expected_reason
+        assert items[0]["timeout_stage"] is None
+        item_timing = json.loads(items[0]["timing_json"])
+        assert "extractMs" in item_timing
+        assert "timeoutStage" not in item_timing

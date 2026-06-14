@@ -639,19 +639,20 @@ class PreviewService:
                     return
                 extraction: KeyExtractionResult | None = None
                 item_timing: dict[str, object] = {}
+                pending_timeout_stage = "extract"
                 try:
-                    item_timing["timeoutStage"] = "extract"
                     extract_started = time.monotonic()
-                    extraction = self.extractor.extract(
-                        candidate,
-                        request.options.max_file_seconds,
-                        sample_rows=request.options.sample_rows,
-                        force_full_scan=request.options.force_full_scan,
-                        should_cancel=lambda: self.repository.is_cancel_requested(preview_run_id),
-                        run_deadline=run_deadline,
-                    )
-                    item_timing["extractMs"] = elapsed_ms(extract_started)
-                    item_timing.pop("timeoutStage", None)
+                    try:
+                        extraction = self.extractor.extract(
+                            candidate,
+                            request.options.max_file_seconds,
+                            sample_rows=request.options.sample_rows,
+                            force_full_scan=request.options.force_full_scan,
+                            should_cancel=lambda: self.repository.is_cancel_requested(preview_run_id),
+                            run_deadline=run_deadline,
+                        )
+                    finally:
+                        item_timing["extractMs"] = elapsed_ms(extract_started)
                     if self.repository.is_cancel_requested(preview_run_id):
                         self.repository.insert_item(
                             preview_run_id,
@@ -684,9 +685,9 @@ class PreviewService:
                         continue
                     try:
                         if time.monotonic() > run_deadline:
-                            item_timing["timeoutStage"] = "before_db_match"
+                            pending_timeout_stage = "before_db_match"
                             raise TimeoutError("Preview run exceeded the configured time limit")
-                        item_timing["timeoutStage"] = "db_match"
+                        pending_timeout_stage = "db_match"
                         db_started = time.monotonic()
                         existing = self.reconciler.find_existing_keys(
                             extraction.local_keys,
@@ -696,7 +697,6 @@ class PreviewService:
                         )
                         item_timing["dbMatchMs"] = elapsed_ms(db_started)
                         item_timing |= reconciliation_progress_timing(self.reconciler)
-                        item_timing.pop("timeoutStage", None)
                         if self.repository.is_cancel_requested(preview_run_id):
                             self.repository.insert_item(
                                 preview_run_id,
@@ -715,7 +715,7 @@ class PreviewService:
                             )
                             return
                         if time.monotonic() > run_deadline:
-                            item_timing["timeoutStage"] = "after_db_match"
+                            pending_timeout_stage = "after_db_match"
                             raise TimeoutError("Preview run exceeded the configured time limit")
                         status, reason_code, reason_text = classify_keys(
                             len(extraction.local_keys),
@@ -751,7 +751,7 @@ class PreviewService:
                         )
                 except TimeoutError as error:
                     timed_out = True
-                    timeout_stage = str(item_timing.get("timeoutStage") or ("db_match" if extraction else "extract"))
+                    timeout_stage = pending_timeout_stage
                     item_timing |= reconciliation_progress_timing(self.reconciler)
                     item_timing["timeoutStage"] = timeout_stage
                     item = (
