@@ -23,11 +23,55 @@ from backend.app.schemas.upload_preview import (
     PreviewRunDto,
     PreviewRunStatus,
     PreviewRunSummary,
+    PreviewOptions,
+    PreviewProfile,
+    PreviewRangeMode,
+    PreviewSource,
 )
 from backend.app.services.upload_preview import PreviewService
 
 router = APIRouter(prefix="/api/upload/preview", tags=["upload-preview"])
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-preview")
+
+
+OPERATIONAL_PLC_SOURCE_CLASSES = {"network", "drive_letter", "mounted"}
+
+
+def source_path_class(path: str) -> str:
+    normalized = path.strip()
+    if not normalized:
+        return "missing"
+    if normalized.startswith("\\\\") or normalized.startswith("//"):
+        return "network"
+    if len(normalized) >= 3 and normalized[1] == ":" and normalized[2] in {"\\", "/"}:
+        return "drive_letter"
+    if normalized.startswith("/mnt/"):
+        return "mounted"
+    return "local"
+
+
+def is_large_preview_range(request: PreviewCreateRequest) -> bool:
+    if request.range_mode == PreviewRangeMode.last_2_days:
+        return True
+    if request.range_mode == PreviewRangeMode.custom and request.start_date and request.end_date:
+        return (request.end_date - request.start_date).days >= 1
+    return False
+
+
+def resolve_preview_auto_safe_mode(request: PreviewCreateRequest, settings: Settings) -> PreviewCreateRequest:
+    if request.options.profile != PreviewProfile.default:
+        return request
+    if PreviewSource.plc not in request.sources:
+        return request
+    if (
+        source_path_class(settings.plc_data_dir) not in OPERATIONAL_PLC_SOURCE_CLASSES
+        and not is_large_preview_range(request)
+    ):
+        return request
+
+    options = request.options.model_dump(mode="json", by_alias=True)
+    options["profile"] = PreviewProfile.large_source_operational.value
+    return request.model_copy(update={"options": PreviewOptions.model_validate(options)})
 
 
 def get_preview_repository(settings: Settings = Depends(get_settings)) -> PreviewRepository:
@@ -143,6 +187,7 @@ async def create_preview(
             detail={"reason": "preview_request_validation_failed", "keys": rejected_fields},
         ) from exc
 
+    request = resolve_preview_auto_safe_mode(request, settings)
     preview_run_id = f"prv_{uuid4().hex[:12]}"
     active_run_id = repository.create_run_if_no_active(
         preview_run_id=preview_run_id,

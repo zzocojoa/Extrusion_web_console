@@ -243,7 +243,7 @@
     "previewMode": {
       "standard": "기본",
       "largeSource": "대용량",
-      "largeSourceNote": "미리보기 시간만 늘립니다. 업로드는 검토와 별도 승인 후 가능합니다."
+      "largeSourceNote": "자동 안전 미리보기 예산을 사용합니다. 업로드는 검토와 별도 승인 후 가능합니다."
     },
     "range": {
       "today": "오늘",

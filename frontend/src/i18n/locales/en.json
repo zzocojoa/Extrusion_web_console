@@ -243,7 +243,7 @@
     "previewMode": {
       "standard": "Standard",
       "largeSource": "Large source",
-      "largeSourceNote": "Longer Preview budget only. Upload still requires review and separate approval."
+      "largeSourceNote": "Automatic safe Preview budget. Upload still requires review and separate approval."
     },
     "range": {
       "today": "Today",
