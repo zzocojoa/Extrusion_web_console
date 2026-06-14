@@ -50,7 +50,7 @@ const mockConfig: ConfigResponse = {
     source: "default",
   },
   items: [
-    { key: "plcDataDir", label: "PLC directory", value: "mock://plc-source", source: "config", secret: false, envKey: "EWC_PLC_DATA_DIR", overridden: false },
+    { key: "plcDataDir", label: "PLC directory", value: "demo://plc-source", source: "config", secret: false, envKey: "EWC_PLC_DATA_DIR", overridden: false },
     {
       key: "temperatureDataDir",
       label: "Temperature directory",

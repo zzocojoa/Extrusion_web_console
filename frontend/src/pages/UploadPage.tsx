@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square } from "lucide-react";
+import { AlertTriangle, Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { isLocalTokenApiError } from "../api/client";
@@ -527,6 +527,7 @@ interface PreviewTabProps {
 
 function PreviewTab(props: PreviewTabProps) {
   const { t } = useTranslation();
+  const [startReviewOpen, setStartReviewOpen] = useState(false);
   const run = props.currentPreview?.run;
   const displayState = props.currentPreview ? buildPreviewDisplayState(props.currentPreview) : null;
   const summary = displayState?.summary;
@@ -536,6 +537,21 @@ function PreviewTab(props: PreviewTabProps) {
         ["unreachable", "query_failed"].includes(run.dbStatus)),
   );
   const startUploadDisabledReason = displayState?.startUploadDisabledReasonKey ?? "upload.actions.startUploadDisabledReason";
+  const reviewablePreview = props.currentPreview && run && summary ? props.currentPreview : null;
+
+  function openStartUploadReview() {
+    if (!props.canStartUpload || !reviewablePreview) return;
+    setStartReviewOpen(true);
+  }
+
+  function closeStartUploadReview() {
+    setStartReviewOpen(false);
+  }
+
+  function confirmStartUpload() {
+    props.onStartUpload();
+    setStartReviewOpen(false);
+  }
 
   return (
     <section className="upload-preview">
@@ -562,7 +578,7 @@ function PreviewTab(props: PreviewTabProps) {
               className="button button--primary"
               type="button"
               disabled={!props.canStartUpload || props.startUploadPending}
-              onClick={props.onStartUpload}
+              onClick={openStartUploadReview}
               title={!props.canStartUpload ? t(startUploadDisabledReason) : undefined}
             >
               <Play size={16} aria-hidden="true" />
@@ -663,7 +679,126 @@ function PreviewTab(props: PreviewTabProps) {
           </div>
         )}
       </div>
+
+      {startReviewOpen && reviewablePreview ? (
+        <StartUploadConfirmationModal
+          preview={reviewablePreview}
+          onCancel={closeStartUploadReview}
+          onConfirm={confirmStartUpload}
+          pending={props.startUploadPending}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function StartUploadConfirmationModal({
+  preview,
+  onCancel,
+  onConfirm,
+  pending,
+}: {
+  preview: PreviewResponse;
+  onCancel: () => void;
+  onConfirm: () => void;
+  pending: boolean;
+}) {
+  const { t } = useTranslation();
+  const [typedRows, setTypedRows] = useState("");
+  const { run } = preview;
+  const { summary } = run;
+  const expectedRows = String(summary.uploadRows);
+  const confirmAllowed =
+    run.status === "succeeded" &&
+    run.dbStatus === "reachable" &&
+    summary.target > 0 &&
+    summary.uploadRows > 0 &&
+    summary.risky === 0 &&
+    typedRows.trim() === expectedRows;
+  const blockedReasons = [
+    run.status !== "succeeded" ? t("upload.startReview.blocked.previewStatus") : null,
+    run.dbStatus !== "reachable" ? t("upload.startReview.blocked.dbStatus") : null,
+    summary.target <= 0 || summary.uploadRows <= 0 ? t("upload.startReview.blocked.noTarget") : null,
+    summary.risky > 0 ? t("upload.startReview.blocked.risky") : null,
+  ].filter((reason): reason is string => Boolean(reason));
+  const countItems: Array<{ id: string; label: string; value: string | number }> = [
+    { id: "previewRunId", label: t("upload.startReview.previewRunId"), value: run.previewRunId },
+    { id: "targetFiles", label: t("upload.startReview.targetFiles"), value: summary.target },
+    { id: "uploadRows", label: t("upload.startReview.uploadRows"), value: formatNumber(summary.uploadRows) },
+    { id: "alreadyInDb", label: t("upload.startReview.alreadyInDb"), value: summary.alreadyInDb },
+    { id: "risky", label: t("upload.startReview.risky"), value: summary.risky },
+    { id: "excluded", label: t("upload.startReview.excluded"), value: summary.excluded },
+    { id: "dbStatus", label: t("upload.startReview.dbStatus"), value: t(`upload.dbStatus.${run.dbStatus}`) },
+  ];
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        aria-labelledby="start-upload-review-title"
+        aria-modal="true"
+        className="start-upload-modal"
+        role="dialog"
+      >
+        <div className="start-upload-modal__header">
+          <div>
+            <span className="panel-eyebrow">{t("upload.startReview.eyebrow")}</span>
+            <h2 id="start-upload-review-title">{t("upload.startReview.title")}</h2>
+          </div>
+          <StatusBadge tone={confirmAllowed ? "attention" : "blocked"} label={t("upload.startReview.badge")} />
+        </div>
+
+        <div className="start-upload-modal__warning" role="status">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span>{t("upload.startReview.warning")}</span>
+        </div>
+
+        <dl className="start-upload-modal__counts">
+          {countItems.map(({ id, label, value }) => (
+            <div className="start-upload-modal__count" key={id}>
+              <dt>{label}</dt>
+              <dd className="num">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {blockedReasons.length > 0 ? (
+          <div className="start-upload-modal__blocked" role="alert">
+            <strong>{t("upload.startReview.blocked.title")}</strong>
+            <ul>
+              {blockedReasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <label className="start-upload-modal__input">
+          <span>{t("upload.startReview.inputLabel", { rows: expectedRows })}</span>
+          <input
+            autoComplete="off"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={typedRows}
+            onChange={(event) => setTypedRows(event.target.value.replace(/[^\d]/g, ""))}
+            placeholder={expectedRows}
+          />
+        </label>
+
+        <div className="start-upload-modal__actions">
+          <button className="button button--secondary" type="button" onClick={onCancel}>
+            {t("upload.startReview.cancel")}
+          </button>
+          <button
+            className="button button--danger"
+            type="button"
+            disabled={!confirmAllowed || pending}
+            onClick={onConfirm}
+          >
+            {pending ? t("upload.actions.startingUpload") : t("upload.startReview.confirm")}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
