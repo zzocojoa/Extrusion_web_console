@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import itertools
+import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,6 +14,7 @@ from backend.app.services.upload_preview import (
     CandidateScanner,
     CsvKeyExtractor,
     PreviewDbUnavailableError,
+    ReconciliationProgress,
     PreviewSchemaMismatchError,
     PreviewService,
     classify_reconciliation,
@@ -33,6 +36,23 @@ class FakeReconciler:
         if self.fail:
             raise PreviewDbUnavailableError("database down")
         return set(keys) & self.matched_keys
+
+
+class TimeoutReconciler:
+    def __init__(self) -> None:
+        self.last_progress = ReconciliationProgress(
+            strategy="temp_table",
+            total_keys=2,
+            batch_size=2,
+            total_batches=1,
+            batches_completed=1,
+            keys_staged=2,
+            stage="join_all_metrics",
+        )
+
+    def find_existing_keys(self, keys: set[tuple[str, str]], **_kwargs) -> set[tuple[str, str]]:
+        self.last_progress.total_keys = len(keys)
+        raise TimeoutError("Preview run exceeded the configured time limit")
 
 
 def write_csv(path: Path, rows: list[str]) -> None:
@@ -631,7 +651,7 @@ def test_preview_service_times_out_remaining_candidates(tmp_path: Path, monkeypa
         repository,
         reconciler=FakeReconciler(),
     )
-    monotonic_values = iter([0.0, 11.0])
+    monotonic_values = itertools.chain([0.0, 0.0, 0.0, 11.0], itertools.repeat(11.0))
     monkeypatch.setattr("backend.app.services.upload_preview.time.monotonic", lambda: next(monotonic_values))
     service.run_preview("prv_timeout", request)
 
@@ -645,3 +665,63 @@ def test_preview_service_times_out_remaining_candidates(tmp_path: Path, monkeypa
     assert items[0]["status"] == "risky"
     assert items[0]["reason_code"] == "timeout"
     assert items[0]["upload_row_estimate"] == 0
+
+
+def test_preview_service_db_timeout_preserves_extracted_counts_and_stage(tmp_path: Path) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        [
+            "Date,Time,Mold1",
+            "2026-06-01,09:00:00,1",
+            "2026-06-01,09:01:00,2",
+        ],
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0, "maxRunSeconds": 30},
+        }
+    )
+    repository.create_run(
+        preview_run_id="prv_db_timeout",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=TimeoutReconciler(),
+    )
+
+    service.run_preview("prv_db_timeout", request)
+
+    row = repository.get_run("prv_db_timeout")
+    items, total = repository.list_items("prv_db_timeout")
+
+    assert row is not None
+    assert row["status"] == "timed_out"
+    assert row["db_status"] == "not_checked"
+    assert row["timeout_stage"] == "db_match"
+    assert total == 1
+    assert items[0]["status"] == "risky"
+    assert items[0]["reason_code"] == "timeout"
+    assert items[0]["scan_mode"] == "full"
+    assert items[0]["row_count"] == 2
+    assert items[0]["local_key_count"] == 2
+    assert items[0]["upload_row_estimate"] == 0
+    item_timing = json.loads(items[0]["timing_json"])
+    assert item_timing["timeoutStage"] == "db_match"
+    assert item_timing["dbProgress"]["strategy"] == "temp_table"
+    assert item_timing["dbProgress"]["stage"] == "join_all_metrics"

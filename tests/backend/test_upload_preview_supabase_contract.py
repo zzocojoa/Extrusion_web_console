@@ -23,11 +23,10 @@ def test_supabase_reconciliation_repository_uses_exact_composite_key_join() -> N
     source_lower = source.lower()
 
     assert "public.all_metrics" in source
+    assert "CREATE TEMP TABLE preview_key_stage" in source
+    assert "executemany" in source
     assert "device_id" in source
     assert "timestamp" in source_lower
-    assert re.search(r"\bvalues\b", source, re.IGNORECASE), (
-        "Preview DB matching should batch exact candidate keys with VALUES"
-    )
     assert re.search(r"\bjoin\b", source, re.IGNORECASE), (
         "Preview DB matching should join candidate keys to public.all_metrics"
     )
@@ -85,8 +84,16 @@ def test_edge_function_upsert_still_conflicts_on_timestamp_device_id() -> None:
 
 def test_supabase_reconciler_uses_chunk_rows_connect_timeout_and_statement_timeout(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
+    matched_keys = {
+        ("2026-06-01T09:00:00+09:00", "a"),
+        ("2026-06-01T09:03:00+09:00", "a"),
+    }
 
     class FakeCursor:
+        def __init__(self, connection):
+            self.connection = connection
+            self.last_sql = ""
+
         def __enter__(self):
             return self
 
@@ -94,12 +101,24 @@ def test_supabase_reconciler_uses_chunk_rows_connect_timeout_and_statement_timeo
             return False
 
         def execute(self, sql: str, params=None) -> None:
+            self.last_sql = sql
             calls.append((sql, params))
 
+        def executemany(self, sql: str, params) -> None:
+            self.last_sql = sql
+            batch = list(params)
+            self.connection.staged.update(batch)
+            calls.append((sql, batch))
+
         def fetchall(self):
+            if "JOIN public.all_metrics" in self.last_sql:
+                return sorted(self.connection.staged & matched_keys)
             return []
 
     class FakeConnection:
+        def __init__(self):
+            self.staged: set[tuple[str, str]] = set()
+
         def __enter__(self):
             return self
 
@@ -107,7 +126,7 @@ def test_supabase_reconciler_uses_chunk_rows_connect_timeout_and_statement_timeo
             return False
 
         def cursor(self):
-            return FakeCursor()
+            return FakeCursor(self)
 
     def fake_connect(db_url: str, **kwargs):
         calls.append(("connect", kwargs))
@@ -116,7 +135,8 @@ def test_supabase_reconciler_uses_chunk_rows_connect_timeout_and_statement_timeo
 
     monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=fake_connect))
 
-    SupabaseExactReconciler("postgresql://local").find_existing_keys(
+    reconciler = SupabaseExactReconciler("postgresql://local")
+    result = reconciler.find_existing_keys(
         {
             ("2026-06-01T09:00:00+09:00", "a"),
             ("2026-06-01T09:01:00+09:00", "a"),
@@ -127,12 +147,21 @@ def test_supabase_reconciler_uses_chunk_rows_connect_timeout_and_statement_timeo
         chunk_rows=2,
     )
 
+    assert result == matched_keys
     connect_call = next(call for call in calls if call[0] == "connect")
     assert connect_call[1]["connect_timeout"] == 10
+    assert connect_call[1]["autocommit"] is False
     query_calls = [sql for sql, _params in calls if "JOIN public.all_metrics" in sql]
+    insert_calls = [sql for sql, _params in calls if "INSERT INTO preview_key_stage" in sql]
     timeout_calls = [sql for sql, _params in calls if "set_config('statement_timeout'" in sql]
-    assert len(query_calls) == 3
-    assert len(timeout_calls) == 3
+    assert len(query_calls) == 1
+    assert len(insert_calls) == 3
+    assert len(timeout_calls) == 5
+    assert reconciler.last_progress is not None
+    assert reconciler.last_progress.strategy == "temp_table"
+    assert reconciler.last_progress.batches_completed == 3
+    assert reconciler.last_progress.keys_staged == 5
+    assert reconciler.last_progress.matches_found == 2
 
 
 def test_supabase_reconciler_checks_cancel_before_db_query(monkeypatch) -> None:
@@ -146,3 +175,65 @@ def test_supabase_reconciler_checks_cancel_before_db_query(monkeypatch) -> None:
             {("2026-06-01T09:00:00+09:00", "a")},
             should_cancel=lambda: True,
         )
+
+
+@pytest.mark.parametrize(
+    ("existing_keys", "expected_keys"),
+    [
+        (set(), set()),
+        (
+            {("2026-06-01T09:00:00+09:00", "a"), ("2026-06-01T09:01:00+09:00", "a")},
+            {("2026-06-01T09:00:00+09:00", "a"), ("2026-06-01T09:01:00+09:00", "a")},
+        ),
+        (
+            {("2026-06-01T09:01:00+09:00", "a")},
+            {("2026-06-01T09:01:00+09:00", "a")},
+        ),
+    ],
+)
+def test_supabase_reconciler_temp_table_match_shapes(monkeypatch, existing_keys, expected_keys) -> None:
+    candidate_keys = {
+        ("2026-06-01T09:00:00+09:00", "a"),
+        ("2026-06-01T09:01:00+09:00", "a"),
+    }
+
+    class FakeCursor:
+        def __init__(self, connection):
+            self.connection = connection
+            self.last_sql = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql: str, params=None) -> None:
+            self.last_sql = sql
+
+        def executemany(self, _sql: str, params) -> None:
+            self.connection.staged.update(params)
+
+        def fetchall(self):
+            if "JOIN public.all_metrics" in self.last_sql:
+                return sorted(self.connection.staged & existing_keys)
+            return []
+
+    class FakeConnection:
+        def __init__(self):
+            self.staged: set[tuple[str, str]] = set()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def cursor(self):
+            return FakeCursor(self)
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection()))
+
+    result = SupabaseExactReconciler("postgresql://local").find_existing_keys(candidate_keys, chunk_rows=1)
+
+    assert result == expected_keys

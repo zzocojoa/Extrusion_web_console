@@ -142,6 +142,8 @@ class PreviewRunDto(ApiModel):
     db_status: PreviewDbStatus
     summary: PreviewRunSummary
     warnings: list[str] = Field(default_factory=list)
+    timeout_stage: str | None = None
+    timing: dict[str, Any] = Field(default_factory=dict)
     error_code: str | None = None
     error_message: str | None = None
     retry_of_run_id: str | None = None
@@ -169,6 +171,8 @@ class PreviewItemDto(ApiModel):
     last_timestamp: str | None = None
     device_ids: list[str] = Field(default_factory=list)
     issues: list[Any] = Field(default_factory=list)
+    timeout_stage: str | None = None
+    timing: dict[str, Any] = Field(default_factory=dict)
     error_code: str | None = None
     error_message: str | None = None
 

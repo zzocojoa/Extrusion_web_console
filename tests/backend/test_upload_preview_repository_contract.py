@@ -89,6 +89,8 @@ def test_preview_repository_initializes_required_tables_and_columns(tmp_path: Pa
             "partial_overlap_count",
             "risky_count",
             "excluded_count",
+            "timeout_stage",
+            "timing_json",
             "error_code",
             "error_message",
         }.issubset(run_columns)
@@ -113,6 +115,8 @@ def test_preview_repository_initializes_required_tables_and_columns(tmp_path: Pa
             "last_timestamp",
             "device_ids_json",
             "issues_json",
+            "timeout_stage",
+            "timing_json",
             "error_code",
             "error_message",
         }.issubset(item_columns)

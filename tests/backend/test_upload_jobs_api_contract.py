@@ -154,6 +154,47 @@ def test_upload_job_start_preview_not_uploadable_writes_blocked_audit(tmp_path: 
     assert audit["error_code"] == "preview_not_uploadable"
 
 
+def test_upload_job_start_rejects_timed_out_preview_without_creating_job(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    with repository.connect() as connection:
+        connection.execute(
+            """
+            UPDATE preview_runs
+            SET status = 'timed_out', db_status = 'not_checked',
+                timeout_stage = 'db_match', error_code = 'timeout'
+            WHERE preview_run_id = 'prv_done'
+            """
+        )
+        connection.execute(
+            "UPDATE preview_items SET status = 'risky', reason_code = 'timeout' WHERE preview_run_id = 'prv_done'"
+        )
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        state_db_path=str(db_path),
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
+        supabase_anon_key="anon",
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "preview_not_uploadable"
+    assert response.json()["detail"]["status"] == "timed_out"
+    with repository.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs").fetchone()["count"]
+    assert count == 0
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.start"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "preview_not_uploadable"
+
+
 def test_retry_no_retryable_files_writes_blocked_audit(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
