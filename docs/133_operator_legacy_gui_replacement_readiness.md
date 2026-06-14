@@ -24,8 +24,8 @@ The accepted production-like evidence is bounded:
 - Dashboard now shows real active backend state and a sanitized state context
   label so operators can distinguish operator/package, development, QA
   temporary, configured, unknown, or inaccessible state contexts.
-- Edge runtime mount recovery evidence exists, but the later `15096` new-file
-  upload target has not yet completed successfully after recovery.
+- Edge runtime mount recovery evidence exists, and the later approved
+  `15096` new-file retry target also completed successfully after recovery.
 
 Operational transition can continue only with the existing gated process:
 fresh Preview-only, target count review, and separate explicit approval before
@@ -64,13 +64,14 @@ a read-only investigation.
 | Stage 4 accepted upload | Accepted for one approved target | `docs/110_operator_stage_4_final_acceptance_summary.md` |
 | Stage 4 accepted row evidence | `17179 / 17179 / 17179` processed/uploaded/accepted, DB delta `17179` | `docs/110_operator_stage_4_final_acceptance_summary.md` |
 | Edge runtime rebind | Runtime rebound to current repo function source, entrypoint present, no-auth `401_auth_class` | `docs/125_operator_edge_runtime_rebind_execution.md` |
+| Stage 4 new-file retry upload | Accepted for the approved `15096` retry target after Edge rebind | `docs/126_operator_new_file_upload_retry_success.md` |
+| Stage 4 new-file row evidence | `15096 / 15096 / 15096` processed/uploaded/accepted, DB delta `15096` | `docs/126_operator_new_file_upload_retry_success.md` |
 
 ## Needs Work Before Full Cutover
 
 | Area | Required before hard retirement of legacy GUI | Reason |
 | --- | --- | --- |
 | Operator PC E2E expansion | Run a final controlled E2E on the actual operator PC/package context | Current evidence is strong but still split across QA/runtime contexts |
-| New-file upload after Edge rebind | Reconfirm gates and run only after separate approval if business requires the `15096` target | Edge rebind recovered mount, but upload retry was not executed after rebind |
 | Default runtime context hardening | Verify package/operator state context stays stable across launcher restarts | Prior evidence showed state/reference drift can confuse operators |
 | Final package handoff smoke | Use handoff runbook from package folder, not source dev server | Replacement depends on the exact operator launch path |
 | Legacy behavior comparison | Keep representative file detection, duplicate handling, failure reporting checks in the final E2E | Product scope requires parity before hard replacement |
@@ -214,7 +215,7 @@ local Supabase data, Docker containers, Docker volumes, or database rows.
 | --- | --- | --- |
 | Core Ops parity | mostly passed | Web Console covers V1 operating surface |
 | Accepted bounded upload evidence | passed for `17179` target | Proves one controlled Stage 4 upload path |
-| New-file post-Edge-rebind upload | pending if needed | Required only for that new file scope |
+| New-file post-Edge-rebind retry upload | passed for `15096` target | Proves the approved retry path after Edge rebind |
 | Dashboard state context visibility | passed | Reduces state-context confusion |
 | Package/handoff path | ready for final smoke | Must be verified from operator package |
 | Production deploy | not needed | Local-only app |
