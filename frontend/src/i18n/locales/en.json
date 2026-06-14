@@ -235,10 +235,10 @@
       "cancelling": "Cancelling"
     },
     "startReview": {
-      "eyebrow": "Final upload gate",
-      "title": "Review target counts before Start Upload",
-      "badge": "Requires count confirmation",
-      "warning": "This action creates an upload job and can write rows to the local database. Confirm the reviewed target count before continuing.",
+      "eyebrow": "Final upload confirmation",
+      "title": "Confirm target count before upload",
+      "badge": "Count confirmation required",
+      "warning": "Continuing will create an upload job for {{files}} target files and {{rowsFormatted}} rows. If it succeeds, the local DB row count will increase.",
       "previewRunId": "Preview run",
       "targetFiles": "Target files",
       "uploadRows": "Upload target rows",
@@ -246,15 +246,15 @@
       "risky": "Risky",
       "excluded": "Excluded",
       "dbStatus": "DB status",
-      "inputLabel": "Type {{rows}} to enable Start Upload",
+      "inputLabel": "Type the target row count {{rows}} to confirm. Commas are allowed.",
       "cancel": "Cancel",
-      "confirm": "Confirm Start Upload",
+      "confirm": "Start upload for {{rowsFormatted}} rows",
       "blocked": {
-        "title": "Confirm is blocked",
-        "previewStatus": "Preview is not in succeeded state.",
-        "dbStatus": "DB status is not reachable.",
-        "noTarget": "There are no upload target files or rows.",
-        "risky": "Risky preview rows must be resolved before upload."
+        "title": "Upload start is blocked",
+        "previewStatus": "The Preview is not succeeded yet.",
+        "dbStatus": "The DB status must be reachable.",
+        "noTarget": "There are no target files or target rows to upload.",
+        "risky": "Resolve risky Preview rows before starting upload."
       }
     },
     "controls": {

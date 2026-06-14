@@ -708,6 +708,7 @@ function StartUploadConfirmationModal({
   const { run } = preview;
   const { summary } = run;
   const expectedRows = String(summary.uploadRows);
+  const formattedUploadRows = formatNumber(summary.uploadRows);
   const confirmAllowed =
     run.status === "succeeded" &&
     run.dbStatus === "reachable" &&
@@ -749,7 +750,7 @@ function StartUploadConfirmationModal({
 
         <div className="start-upload-modal__warning" role="status">
           <AlertTriangle size={18} aria-hidden="true" />
-          <span>{t("upload.startReview.warning")}</span>
+          <span>{t("upload.startReview.warning", { files: summary.target, rowsFormatted: formattedUploadRows })}</span>
         </div>
 
         <dl className="start-upload-modal__counts">
@@ -794,7 +795,7 @@ function StartUploadConfirmationModal({
             disabled={!confirmAllowed || pending}
             onClick={onConfirm}
           >
-            {pending ? t("upload.actions.startingUpload") : t("upload.startReview.confirm")}
+            {pending ? t("upload.actions.startingUpload") : t("upload.startReview.confirm", { rowsFormatted: formattedUploadRows })}
           </button>
         </div>
       </section>
