@@ -234,10 +234,16 @@
     },
     "controls": {
       "range": "Range",
+      "previewMode": "Preview mode",
       "startDate": "Start",
       "endDate": "End",
       "source": "Source: configured PLC folder",
       "search": "Search filename, path, or reason"
+    },
+    "previewMode": {
+      "standard": "Standard",
+      "largeSource": "Large source",
+      "largeSourceNote": "Longer Preview budget only. Upload still requires review and separate approval."
     },
     "range": {
       "today": "Today",

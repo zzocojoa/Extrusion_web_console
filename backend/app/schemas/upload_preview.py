@@ -25,11 +25,16 @@ class PreviewSource(str, Enum):
 class PreviewProfile(str, Enum):
     default = "default"
     stage3_profile_a_bounded_full_scan = "stage3_profile_a_bounded_full_scan"
+    large_source_operational = "large_source_operational"
 
 
 STAGE3_PROFILE_A_BOUNDED_MAX_FILES = 3
 STAGE3_PROFILE_A_BOUNDED_MAX_RUN_SECONDS = 300
 STAGE3_PROFILE_A_BOUNDED_MAX_FILE_SECONDS = 120
+LARGE_SOURCE_OPERATIONAL_MAX_FILES = 500
+LARGE_SOURCE_OPERATIONAL_CHUNK_ROWS = 1000
+LARGE_SOURCE_OPERATIONAL_MAX_RUN_SECONDS = 900
+LARGE_SOURCE_OPERATIONAL_MAX_FILE_SECONDS = 300
 
 
 class PreviewOptions(ApiModel):
@@ -49,7 +54,10 @@ class PreviewOptions(ApiModel):
             return data
         profile = data.get("profile", PreviewProfile.default.value)
         profile_value = profile.value if isinstance(profile, PreviewProfile) else str(profile)
-        if profile_value != PreviewProfile.stage3_profile_a_bounded_full_scan.value:
+        if profile_value not in {
+            PreviewProfile.stage3_profile_a_bounded_full_scan.value,
+            PreviewProfile.large_source_operational.value,
+        }:
             return data
 
         values = dict(data)
@@ -60,10 +68,17 @@ class PreviewOptions(ApiModel):
             else:
                 values[camel_name] = value
 
-        set_option("force_full_scan", "forceFullScan", True)
-        set_option("max_files", "maxFiles", STAGE3_PROFILE_A_BOUNDED_MAX_FILES)
-        set_option("max_run_seconds", "maxRunSeconds", STAGE3_PROFILE_A_BOUNDED_MAX_RUN_SECONDS)
-        set_option("max_file_seconds", "maxFileSeconds", STAGE3_PROFILE_A_BOUNDED_MAX_FILE_SECONDS)
+        if profile_value == PreviewProfile.stage3_profile_a_bounded_full_scan.value:
+            set_option("force_full_scan", "forceFullScan", True)
+            set_option("max_files", "maxFiles", STAGE3_PROFILE_A_BOUNDED_MAX_FILES)
+            set_option("max_run_seconds", "maxRunSeconds", STAGE3_PROFILE_A_BOUNDED_MAX_RUN_SECONDS)
+            set_option("max_file_seconds", "maxFileSeconds", STAGE3_PROFILE_A_BOUNDED_MAX_FILE_SECONDS)
+        elif profile_value == PreviewProfile.large_source_operational.value:
+            set_option("force_full_scan", "forceFullScan", False)
+            set_option("max_files", "maxFiles", LARGE_SOURCE_OPERATIONAL_MAX_FILES)
+            set_option("chunk_rows", "chunkRows", LARGE_SOURCE_OPERATIONAL_CHUNK_ROWS)
+            set_option("max_run_seconds", "maxRunSeconds", LARGE_SOURCE_OPERATIONAL_MAX_RUN_SECONDS)
+            set_option("max_file_seconds", "maxFileSeconds", LARGE_SOURCE_OPERATIONAL_MAX_FILE_SECONDS)
         return values
 
 
