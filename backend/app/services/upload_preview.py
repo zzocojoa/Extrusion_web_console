@@ -52,6 +52,32 @@ class ExactReconciler(Protocol):
         ...
 
 
+@dataclass
+class ReconciliationProgress:
+    strategy: str
+    total_keys: int
+    batch_size: int
+    total_batches: int
+    batches_completed: int = 0
+    keys_staged: int = 0
+    matches_found: int = 0
+    elapsed_ms: int = 0
+    stage: str = "not_started"
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "strategy": self.strategy,
+            "totalKeys": self.total_keys,
+            "batchSize": self.batch_size,
+            "totalBatches": self.total_batches,
+            "batchesCompleted": self.batches_completed,
+            "keysStaged": self.keys_staged,
+            "matchesFound": self.matches_found,
+            "elapsedMs": self.elapsed_ms,
+            "stage": self.stage,
+        }
+
+
 @dataclass(frozen=True)
 class SourceFolder:
     label: str
@@ -405,6 +431,7 @@ class CsvKeyExtractor:
 class SupabaseExactReconciler:
     def __init__(self, db_url: str) -> None:
         self.db_url = db_url
+        self.last_progress: ReconciliationProgress | None = None
 
     def find_existing_keys(
         self,
@@ -421,49 +448,90 @@ class SupabaseExactReconciler:
         except Exception as error:
             raise PreviewDbUnavailableError("psycopg is not installed") from error
 
-        existing: set[tuple[str, str]] = set()
         sorted_keys = sorted(keys)
         batch_size = max(1, min(chunk_rows, 5000))
+        total_batches = (len(sorted_keys) + batch_size - 1) // batch_size if sorted_keys else 0
+        progress = ReconciliationProgress(
+            strategy="temp_table",
+            total_keys=len(sorted_keys),
+            batch_size=batch_size,
+            total_batches=total_batches,
+        )
+        self.last_progress = progress
+        started_at = time.monotonic()
+        existing: set[tuple[str, str]] = set()
         try:
             raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
             connect_timeout = compute_connect_timeout(run_deadline)
+            progress.stage = "connect"
             with psycopg.connect(
                 self.db_url,
-                autocommit=True,
+                autocommit=False,
                 connect_timeout=connect_timeout,
             ) as connection:
                 with connection.cursor() as cursor:
+                    progress.stage = "create_temp_table"
+                    statement_timeout_ms = compute_statement_timeout_ms(run_deadline)
+                    cursor.execute(
+                        "SELECT set_config('statement_timeout', %s, true)",
+                        (str(statement_timeout_ms),),
+                    )
+                    cursor.execute(
+                        """
+                        CREATE TEMP TABLE preview_key_stage (
+                          timestamp timestamptz NOT NULL,
+                          device_id text NOT NULL,
+                          PRIMARY KEY(timestamp, device_id)
+                        ) ON COMMIT DROP
+                        """
+                    )
                     for index in range(0, len(sorted_keys), batch_size):
                         raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
+                        progress.stage = "stage_keys"
                         statement_timeout_ms = compute_statement_timeout_ms(run_deadline)
                         cursor.execute(
-                            "SELECT set_config('statement_timeout', %s, false)",
+                            "SELECT set_config('statement_timeout', %s, true)",
                             (str(statement_timeout_ms),),
                         )
                         batch = sorted_keys[index : index + batch_size]
-                        values_sql = ",".join(["(%s::timestamptz,%s::text)"] * len(batch))
-                        params: list[str] = []
-                        for timestamp, device_id in batch:
-                            params.extend([timestamp, device_id])
-                        cursor.execute(
-                            f"""
-                            WITH candidate_keys(timestamp, device_id) AS (
-                              VALUES {values_sql}
-                            )
-                            SELECT c.timestamp::text, c.device_id
-                            FROM candidate_keys c
-                            JOIN public.all_metrics m
-                              ON m."timestamp" = c.timestamp
-                             AND m.device_id = c.device_id
+                        cursor.executemany(
+                            """
+                            INSERT INTO preview_key_stage(timestamp, device_id)
+                            VALUES (%s::timestamptz, %s::text)
+                            ON CONFLICT DO NOTHING
                             """,
-                            params,
+                            batch,
                         )
-                        for timestamp, device_id in cursor.fetchall():
-                            existing.add((str(timestamp), str(device_id)))
+                        progress.batches_completed += 1
+                        progress.keys_staged += len(batch)
+                        progress.elapsed_ms = elapsed_ms(started_at)
                         raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
+                    progress.stage = "join_all_metrics"
+                    statement_timeout_ms = compute_statement_timeout_ms(run_deadline)
+                    cursor.execute(
+                        "SELECT set_config('statement_timeout', %s, true)",
+                        (str(statement_timeout_ms),),
+                    )
+                    cursor.execute(
+                        """
+                        SELECT s.timestamp::text, s.device_id
+                        FROM preview_key_stage s
+                        JOIN public.all_metrics m
+                          ON m."timestamp" = s.timestamp
+                         AND m.device_id = s.device_id
+                        """
+                    )
+                    for timestamp, device_id in cursor.fetchall():
+                        existing.add((str(timestamp), str(device_id)))
+                    progress.matches_found = len(existing)
+                    progress.stage = "complete"
+                    progress.elapsed_ms = elapsed_ms(started_at)
+                    raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
         except (PreviewCancelledError, TimeoutError):
+            progress.elapsed_ms = elapsed_ms(started_at)
             raise
         except Exception as error:
+            progress.elapsed_ms = elapsed_ms(started_at)
             if run_deadline is not None and time.monotonic() > run_deadline:
                 raise TimeoutError("Preview run exceeded the configured time limit") from error
             raise PreviewDbUnavailableError(str(error)) from error
@@ -488,6 +556,7 @@ class PreviewService:
     def run_preview(self, preview_run_id: str, request: PreviewCreateRequest) -> None:
         run_started = time.monotonic()
         run_deadline = run_started + request.options.max_run_seconds
+        run_timing: dict[str, object] = {}
         if self.repository.is_cancel_requested(preview_run_id):
             self._finish_preview(
                 preview_run_id,
@@ -502,7 +571,9 @@ class PreviewService:
             started_at=iso_now(),
         )
         try:
+            scan_started = time.monotonic()
             candidates, local_items = self.scanner.scan(request)
+            run_timing["scanMs"] = elapsed_ms(scan_started)
             for item in local_items:
                 self.repository.insert_item(preview_run_id, item)
             if self.repository.is_cancel_requested(preview_run_id):
@@ -517,6 +588,7 @@ class PreviewService:
             db_error: str | None = None
             any_db_unreachable = False
             timed_out = False
+            timeout_stage: str | None = None
             source_error = next(
                 (
                     item
@@ -535,6 +607,7 @@ class PreviewService:
                     )
                     return
                 if time.monotonic() > run_deadline:
+                    timeout_stage = "before_extract"
                     for remaining_candidate in candidates[index:]:
                         self.repository.insert_item(
                             preview_run_id,
@@ -542,6 +615,8 @@ class PreviewService:
                                 remaining_candidate,
                                 "timeout",
                                 "Preview run exceeded the configured time limit.",
+                                timing={"timeoutStage": timeout_stage},
+                                timeout_stage=timeout_stage,
                             ),
                         )
                     self._finish_preview(
@@ -555,21 +630,38 @@ class PreviewService:
                         ),
                         error_code="timeout",
                         error_message="Preview run exceeded the configured time limit.",
+                        timeout_stage=timeout_stage,
+                        timing=run_timing | {
+                            "runMs": elapsed_ms(run_started),
+                            "timeoutStage": timeout_stage,
+                        },
                     )
                     return
+                extraction: KeyExtractionResult | None = None
+                item_timing: dict[str, object] = {}
+                pending_timeout_stage = "extract"
                 try:
-                    extraction = self.extractor.extract(
-                        candidate,
-                        request.options.max_file_seconds,
-                        sample_rows=request.options.sample_rows,
-                        force_full_scan=request.options.force_full_scan,
-                        should_cancel=lambda: self.repository.is_cancel_requested(preview_run_id),
-                        run_deadline=run_deadline,
-                    )
+                    extract_started = time.monotonic()
+                    try:
+                        extraction = self.extractor.extract(
+                            candidate,
+                            request.options.max_file_seconds,
+                            sample_rows=request.options.sample_rows,
+                            force_full_scan=request.options.force_full_scan,
+                            should_cancel=lambda: self.repository.is_cancel_requested(preview_run_id),
+                            run_deadline=run_deadline,
+                        )
+                    finally:
+                        item_timing["extractMs"] = elapsed_ms(extract_started)
                     if self.repository.is_cancel_requested(preview_run_id):
                         self.repository.insert_item(
                             preview_run_id,
-                            build_error_item(candidate, "cancelled", "Preview run was cancelled."),
+                            build_error_item(
+                                candidate,
+                                "cancelled",
+                                "Preview run was cancelled.",
+                                timing=item_timing,
+                            ),
                         )
                         self._finish_preview(
                             preview_run_id,
@@ -587,22 +679,33 @@ class PreviewService:
                                 "no_valid_keys",
                                 "No valid timestamp/device_id keys were found.",
                                 extraction,
+                                timing=item_timing,
                             ),
                         )
                         continue
                     try:
                         if time.monotonic() > run_deadline:
+                            pending_timeout_stage = "before_db_match"
                             raise TimeoutError("Preview run exceeded the configured time limit")
+                        pending_timeout_stage = "db_match"
+                        db_started = time.monotonic()
                         existing = self.reconciler.find_existing_keys(
                             extraction.local_keys,
                             should_cancel=lambda: self.repository.is_cancel_requested(preview_run_id),
                             run_deadline=run_deadline,
                             chunk_rows=request.options.chunk_rows,
                         )
+                        item_timing["dbMatchMs"] = elapsed_ms(db_started)
+                        item_timing |= reconciliation_progress_timing(self.reconciler)
                         if self.repository.is_cancel_requested(preview_run_id):
                             self.repository.insert_item(
                                 preview_run_id,
-                                build_error_item(candidate, "cancelled", "Preview run was cancelled."),
+                                build_error_item(
+                                    candidate,
+                                    "cancelled",
+                                    "Preview run was cancelled.",
+                                    timing=item_timing,
+                                ),
                             )
                             self._finish_preview(
                                 preview_run_id,
@@ -612,6 +715,7 @@ class PreviewService:
                             )
                             return
                         if time.monotonic() > run_deadline:
+                            pending_timeout_stage = "after_db_match"
                             raise TimeoutError("Preview run exceeded the configured time limit")
                         status, reason_code, reason_text = classify_keys(
                             len(extraction.local_keys),
@@ -626,11 +730,13 @@ class PreviewService:
                                 reason_text,
                                 extraction,
                                 db_match_count=len(existing),
+                                timing=item_timing,
                             ),
                         )
                     except PreviewDbUnavailableError as error:
                         any_db_unreachable = True
                         db_error = str(error)
+                        item_timing |= reconciliation_progress_timing(self.reconciler)
                         self.repository.insert_item(
                             preview_run_id,
                             build_result_item(
@@ -640,18 +746,47 @@ class PreviewService:
                                 "Local Supabase DB could not be reached.",
                                 extraction,
                                 error_message=db_error,
+                                timing=item_timing,
                             ),
                         )
                 except TimeoutError as error:
                     timed_out = True
+                    timeout_stage = pending_timeout_stage
+                    item_timing |= reconciliation_progress_timing(self.reconciler)
+                    item_timing["timeoutStage"] = timeout_stage
+                    item = (
+                        build_result_item(
+                            candidate,
+                            PreviewItemStatus.risky,
+                            "timeout",
+                            str(error),
+                            extraction,
+                            error_message=str(error),
+                            timing=item_timing,
+                            timeout_stage=timeout_stage,
+                        )
+                        if extraction is not None
+                        else build_error_item(
+                            candidate,
+                            "timeout",
+                            str(error),
+                            timing=item_timing,
+                            timeout_stage=timeout_stage,
+                        )
+                    )
                     self.repository.insert_item(
                         preview_run_id,
-                        build_error_item(candidate, "timeout", str(error)),
+                        item,
                     )
                 except PreviewCancelledError:
                     self.repository.insert_item(
                         preview_run_id,
-                        build_error_item(candidate, "cancelled", "Preview run was cancelled."),
+                        build_error_item(
+                            candidate,
+                            "cancelled",
+                            "Preview run was cancelled.",
+                            timing=item_timing,
+                        ),
                     )
                     self._finish_preview(
                         preview_run_id,
@@ -663,12 +798,12 @@ class PreviewService:
                 except PreviewSchemaMismatchError as error:
                     self.repository.insert_item(
                         preview_run_id,
-                        build_error_item(candidate, "schema_mismatch", str(error)),
+                        build_error_item(candidate, "schema_mismatch", str(error), timing=item_timing),
                     )
                 except Exception as error:
                     self.repository.insert_item(
                         preview_run_id,
-                        build_error_item(candidate, "transform_error", str(error)),
+                        build_error_item(candidate, "transform_error", str(error), timing=item_timing),
                     )
 
             if any_db_unreachable:
@@ -679,6 +814,7 @@ class PreviewService:
                     db_status=PreviewDbStatus.unreachable,
                     error_code="db_unreachable",
                     error_message=db_error,
+                    timing=run_timing | {"runMs": elapsed_ms(run_started)},
                 )
             elif timed_out:
                 self._finish_preview(
@@ -688,6 +824,11 @@ class PreviewService:
                     db_status=PreviewDbStatus.not_checked,
                     error_code="timeout",
                     error_message="Preview run exceeded the configured time limit.",
+                    timeout_stage=timeout_stage,
+                    timing=run_timing | {
+                        "runMs": elapsed_ms(run_started),
+                        "timeoutStage": timeout_stage,
+                    },
                 )
             elif source_error is not None and not candidates:
                 self._finish_preview(
@@ -697,6 +838,7 @@ class PreviewService:
                     db_status=PreviewDbStatus.not_checked,
                     error_code=str(source_error.get("reason_code")),
                     error_message=str(source_error.get("reason_text")),
+                    timing=run_timing | {"runMs": elapsed_ms(run_started)},
                 )
             else:
                 self._finish_preview(
@@ -704,6 +846,7 @@ class PreviewService:
                     request,
                     status=PreviewRunStatus.succeeded,
                     db_status=PreviewDbStatus.reachable if candidates else PreviewDbStatus.not_checked,
+                    timing=run_timing | {"runMs": elapsed_ms(run_started)},
                 )
         except Exception as error:
             self._finish_preview(
@@ -713,6 +856,7 @@ class PreviewService:
                 db_status=PreviewDbStatus.not_checked,
                 error_code="preview_failed",
                 error_message=str(error),
+                timing=run_timing | {"runMs": elapsed_ms(run_started)},
             )
 
     def _finish_preview(
@@ -724,6 +868,8 @@ class PreviewService:
         db_status: PreviewDbStatus,
         error_code: str | None = None,
         error_message: str | None = None,
+        timeout_stage: str | None = None,
+        timing: dict[str, object] | None = None,
     ) -> None:
         self.repository.recompute_summary(
             preview_run_id,
@@ -731,6 +877,8 @@ class PreviewService:
             db_status=db_status,
             error_code=error_code,
             error_message=error_message,
+            timeout_stage=timeout_stage,
+            timing=timing,
         )
         self._audit_preview(
             preview_run_id,
@@ -768,6 +916,8 @@ class PreviewService:
             "reasonCode": reason_code,
             "requestedFilters": safe_requested_filters(request),
         }
+        if row["timeout_stage"]:
+            params["timeoutStage"] = str(row["timeout_stage"])
         self.audit_repository.insert_audit(
             action="upload.preview",
             target_type="preview_run",
@@ -841,6 +991,8 @@ def build_result_item(
     *,
     db_match_count: int = 0,
     error_message: str | None = None,
+    timing: dict[str, object] | None = None,
+    timeout_stage: str | None = None,
 ) -> dict[str, object]:
     local_count = len(extraction.local_keys)
     upload_estimate = (
@@ -873,12 +1025,21 @@ def build_result_item(
         "last_timestamp": extraction.last_timestamp,
         "device_ids": extraction.device_ids,
         "issues": [] if error_message is None else [{"code": reason_code, "message": error_message}],
+        "timeout_stage": timeout_stage,
+        "timing": timing or {},
         "error_code": reason_code if status == PreviewItemStatus.risky else None,
         "error_message": error_message,
     }
 
 
-def build_error_item(candidate: CandidateFile, reason_code: str, reason_text: str) -> dict[str, object]:
+def build_error_item(
+    candidate: CandidateFile,
+    reason_code: str,
+    reason_text: str,
+    *,
+    timing: dict[str, object] | None = None,
+    timeout_stage: str | None = None,
+) -> dict[str, object]:
     extraction = KeyExtractionResult(0, 0, set(), None, None, [])
     return build_result_item(
         candidate,
@@ -887,6 +1048,8 @@ def build_error_item(candidate: CandidateFile, reason_code: str, reason_text: st
         reason_text,
         extraction,
         error_message=reason_text,
+        timing=timing,
+        timeout_stage=timeout_stage,
     ) | {"scan_mode": "incomplete"}
 
 
@@ -916,6 +1079,17 @@ def raise_if_cancelled_or_timed_out(
         raise PreviewCancelledError("Preview run was cancelled")
     if run_deadline is not None and time.monotonic() > run_deadline:
         raise TimeoutError("Preview run exceeded the configured time limit")
+
+
+def elapsed_ms(started_at: float) -> int:
+    return max(0, int((time.monotonic() - started_at) * 1000))
+
+
+def reconciliation_progress_timing(reconciler: ExactReconciler) -> dict[str, object]:
+    progress = getattr(reconciler, "last_progress", None)
+    if progress is None or not hasattr(progress, "as_dict"):
+        return {}
+    return {"dbProgress": progress.as_dict()}
 
 
 def compute_connect_timeout(run_deadline: float | None) -> int:

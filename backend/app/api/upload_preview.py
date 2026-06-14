@@ -47,6 +47,13 @@ def parse_json_list(value: str | None) -> list[Any]:
     return parsed if isinstance(parsed, list) else []
 
 
+def parse_json_dict(value: str | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    parsed = json.loads(value)
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def run_dto(row: Any) -> PreviewRunDto:
     return PreviewRunDto(
         preview_run_id=row["preview_run_id"],
@@ -66,6 +73,8 @@ def run_dto(row: Any) -> PreviewRunDto:
             db_matched_rows=row["db_match_count"],
         ),
         warnings=[],
+        timeout_stage=row["timeout_stage"],
+        timing=parse_json_dict(row["timing_json"]),
         error_code=row["error_code"],
         error_message=row["error_message"],
     )
@@ -94,6 +103,8 @@ def item_dto(row: Any) -> PreviewItemDto:
         last_timestamp=row["last_timestamp"],
         device_ids=parse_json_list(row["device_ids_json"]),
         issues=parse_json_list(row["issues_json"]),
+        timeout_stage=row["timeout_stage"],
+        timing=parse_json_dict(row["timing_json"]),
         error_code=row["error_code"],
         error_message=row["error_message"],
     )

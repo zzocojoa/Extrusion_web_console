@@ -75,6 +75,8 @@ class PreviewRepository:
                   upload_row_estimate INTEGER NOT NULL DEFAULT 0,
                   db_match_count INTEGER NOT NULL DEFAULT 0,
                   warning_count INTEGER NOT NULL DEFAULT 0,
+                  timeout_stage TEXT,
+                  timing_json TEXT NOT NULL DEFAULT '{}',
                   error_code TEXT,
                   error_message TEXT,
                   created_at TEXT NOT NULL,
@@ -110,6 +112,8 @@ class PreviewRepository:
                   last_timestamp TEXT,
                   device_ids_json TEXT NOT NULL DEFAULT '[]',
                   issues_json TEXT NOT NULL DEFAULT '[]',
+                  timeout_stage TEXT,
+                  timing_json TEXT NOT NULL DEFAULT '{}',
                   error_code TEXT,
                   error_message TEXT,
                   created_at TEXT NOT NULL,
@@ -127,6 +131,31 @@ class PreviewRepository:
                   ON preview_items(preview_run_id, filename);
                 """
             )
+            self._ensure_column(connection, "preview_runs", "timeout_stage", "timeout_stage TEXT")
+            self._ensure_column(
+                connection,
+                "preview_runs",
+                "timing_json",
+                "timing_json TEXT NOT NULL DEFAULT '{}'",
+            )
+            self._ensure_column(connection, "preview_items", "timeout_stage", "timeout_stage TEXT")
+            self._ensure_column(
+                connection,
+                "preview_items",
+                "timing_json",
+                "timing_json TEXT NOT NULL DEFAULT '{}'",
+            )
+
+    def _ensure_column(
+        self,
+        connection: sqlite3.Connection,
+        table_name: str,
+        column_name: str,
+        column_ddl: str,
+    ) -> None:
+        columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()}
+        if column_name not in columns:
+            connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_ddl}")
 
     def initialize(self) -> None:
         self.bootstrap()
@@ -302,12 +331,14 @@ class PreviewRepository:
             "preview_run_id": preview_run_id,
             "device_ids_json": _json(item.get("device_ids", [])),
             "issues_json": _json(item.get("issues", [])),
+            "timing_json": _json(item.get("timing", {})),
             "created_at": now,
             "updated_at": now,
             **item,
         }
         payload.pop("device_ids", None)
         payload.pop("issues", None)
+        payload.pop("timing", None)
         columns = ", ".join(payload.keys())
         placeholders = ", ".join("?" for _ in payload)
         with self.connect() as connection:
@@ -325,6 +356,8 @@ class PreviewRepository:
         db_status: PreviewDbStatus,
         error_code: str | None = None,
         error_message: str | None = None,
+        timeout_stage: str | None = None,
+        timing: dict[str, Any] | None = None,
     ) -> None:
         with self.connect() as connection:
             rows = connection.execute(
@@ -349,6 +382,7 @@ class PreviewRepository:
                     total_files = ?, target_count = ?, already_in_db_count = ?,
                     partial_overlap_count = ?, risky_count = ?, excluded_count = ?,
                     upload_row_estimate = ?, db_match_count = ?,
+                    timeout_stage = ?, timing_json = ?,
                     error_code = ?, error_message = ?, updated_at = ?
                 WHERE preview_run_id = ?
                 """,
@@ -364,6 +398,8 @@ class PreviewRepository:
                     counts.get(PreviewItemStatus.excluded.value, 0),
                     upload_rows,
                     db_matches,
+                    timeout_stage,
+                    _json(timing or {}),
                     error_code,
                     error_message,
                     iso_now(),

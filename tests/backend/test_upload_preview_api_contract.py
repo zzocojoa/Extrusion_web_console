@@ -129,6 +129,8 @@ def test_upload_preview_latest_returns_persisted_run_details(tmp_path) -> None:
             "last_timestamp": "2026-06-01T09:01:00+09:00",
             "device_ids": ["extruder_integrated"],
             "issues": ["db_unreachable"],
+            "timeout_stage": "db_match",
+            "timing": {"extractMs": 7, "dbProgress": {"strategy": "temp_table"}},
             "error_code": "db_unreachable",
             "error_message": "Local Supabase DB could not be reached.",
         },
@@ -139,6 +141,8 @@ def test_upload_preview_latest_returns_persisted_run_details(tmp_path) -> None:
         db_status=PreviewDbStatus.unreachable,
         error_code="db_unreachable",
         error_message="Local Supabase DB could not be reached.",
+        timeout_stage="db_match",
+        timing={"scanMs": 3, "timeoutStage": "db_match"},
     )
     app.dependency_overrides[get_preview_repository] = lambda: repository
     client = TestClient(app)
@@ -156,6 +160,10 @@ def test_upload_preview_latest_returns_persisted_run_details(tmp_path) -> None:
     assert payload["run"]["dbStatus"] == "unreachable"
     assert payload["items"][0]["status"] == "risky"
     assert payload["items"][0]["reasonCode"] == "db_unreachable"
+    assert payload["run"]["timeoutStage"] == "db_match"
+    assert payload["run"]["timing"]["scanMs"] == 3
+    assert payload["items"][0]["timeoutStage"] == "db_match"
+    assert payload["items"][0]["timing"]["dbProgress"]["strategy"] == "temp_table"
 
     assert filtered_response.status_code == 200
     filtered_payload = filtered_response.json()
