@@ -26,6 +26,8 @@ PLC_DEVICE_ID = "extruder_plc"
 INTEGRATED_PLC_DEVICE_ID = "extruder_integrated"
 TEMPERATURE_DEVICE_ID = "spot_temperature_sensor"
 INTEGRATED_FILENAME_STEM = "_".join(("Factory", "Integrated", "Log"))
+CANCEL_CHECK_INTERVAL_ROWS = 1000
+CANCEL_CHECK_INTERVAL_SECONDS = 0.5
 
 
 class PreviewDbUnavailableError(RuntimeError):
@@ -350,10 +352,30 @@ class CsvKeyExtractor:
         first_timestamp: str | None = None
         last_timestamp: str | None = None
         device_ids: set[str] = set()
+        rows_since_cancel_check = 0
+        last_cancel_check = started
+
+        def raise_if_cancel_requested(*, force: bool = False) -> None:
+            nonlocal rows_since_cancel_check, last_cancel_check
+            if should_cancel is None:
+                return
+            now = time.monotonic()
+            if (
+                not force
+                and rows_since_cancel_check < CANCEL_CHECK_INTERVAL_ROWS
+                and now - last_cancel_check < CANCEL_CHECK_INTERVAL_SECONDS
+            ):
+                return
+            rows_since_cancel_check = 0
+            last_cancel_check = now
+            if should_cancel():
+                raise PreviewCancelledError("Preview run was cancelled")
 
         def process_row(row: dict[str, str]) -> None:
             nonlocal first_timestamp, last_timestamp, row_count, sample_row_count, sample_valid_key_count
+            nonlocal rows_since_cancel_check
             row_count += 1
+            rows_since_cancel_check += 1
             timestamp, device_id = self._extract_key(candidate, row)
             if row_count <= sample_rows:
                 sample_row_count += 1
@@ -372,9 +394,9 @@ class CsvKeyExtractor:
 
         try:
             rows = self._open_rows(candidate.path)
+            raise_if_cancel_requested(force=True)
             for row in rows:
-                if should_cancel and should_cancel():
-                    raise PreviewCancelledError("Preview run was cancelled")
+                raise_if_cancel_requested()
                 if time.monotonic() - started > max_file_seconds:
                     raise TimeoutError("CSV key extraction timed out")
                 if run_deadline is not None and time.monotonic() > run_deadline:
@@ -389,9 +411,11 @@ class CsvKeyExtractor:
             first_timestamp = None
             last_timestamp = None
             rows = self._open_rows(candidate.path, encoding="cp949")
+            rows_since_cancel_check = 0
+            last_cancel_check = time.monotonic()
+            raise_if_cancel_requested(force=True)
             for row in rows:
-                if should_cancel and should_cancel():
-                    raise PreviewCancelledError("Preview run was cancelled")
+                raise_if_cancel_requested()
                 if time.monotonic() - started > max_file_seconds:
                     raise TimeoutError("CSV key extraction timed out")
                 if run_deadline is not None and time.monotonic() > run_deadline:

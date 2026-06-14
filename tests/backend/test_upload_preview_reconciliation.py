@@ -13,6 +13,7 @@ from backend.app.schemas.upload_preview import PreviewCreateRequest, PreviewOpti
 from backend.app.services.upload_preview import (
     CandidateScanner,
     CsvKeyExtractor,
+    PreviewCancelledError,
     PreviewDbUnavailableError,
     ReconciliationProgress,
     PreviewSchemaMismatchError,
@@ -189,6 +190,141 @@ def test_csv_key_extractor_streams_integrated_plc_keys(tmp_path: Path) -> None:
         ("2026-06-01T09:00:00.000000+09:00", "extruder_integrated"),
         ("2026-06-01T09:01:00.000000+09:00", "extruder_integrated"),
     }
+
+
+def test_csv_key_extractor_throttles_cancel_checks(tmp_path: Path, monkeypatch) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    csv_path = plc_dir / "Factory_Integrated_Log_20260601_090000.csv"
+    rows = ["Date,Time,Mold1"]
+    rows.extend(f"2026-06-01,09:{index % 60:02d}:00,{index}" for index in range(2505))
+    write_csv(csv_path, rows)
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(plc_data_dir=str(plc_dir))).scan(request)[0][0]
+    cancel_checks = 0
+
+    def should_cancel() -> bool:
+        nonlocal cancel_checks
+        cancel_checks += 1
+        return False
+
+    monkeypatch.setattr("backend.app.services.upload_preview.time.monotonic", lambda: 0.0)
+
+    result = CsvKeyExtractor().extract(
+        candidate,
+        max_file_seconds=5,
+        sample_rows=200,
+        force_full_scan=False,
+        should_cancel=should_cancel,
+    )
+
+    assert result.row_count == 2505
+    assert cancel_checks == 3
+
+
+def test_csv_key_extractor_honors_throttled_cancel_check(tmp_path: Path, monkeypatch) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    csv_path = plc_dir / "Factory_Integrated_Log_20260601_090000.csv"
+    rows = ["Date,Time,Mold1"]
+    rows.extend(f"2026-06-01,09:{index % 60:02d}:00,{index}" for index in range(1500))
+    write_csv(csv_path, rows)
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(plc_data_dir=str(plc_dir))).scan(request)[0][0]
+    cancel_checks = 0
+
+    def should_cancel() -> bool:
+        nonlocal cancel_checks
+        cancel_checks += 1
+        return cancel_checks >= 2
+
+    monkeypatch.setattr("backend.app.services.upload_preview.time.monotonic", lambda: 0.0)
+
+    try:
+        CsvKeyExtractor().extract(
+            candidate,
+            max_file_seconds=5,
+            sample_rows=200,
+            force_full_scan=False,
+            should_cancel=should_cancel,
+        )
+    except PreviewCancelledError:
+        pass
+    else:
+        raise AssertionError("Expected throttled cancel check to cancel extraction")
+
+    assert cancel_checks == 2
+
+
+def test_csv_key_extractor_honors_time_based_cancel_check(tmp_path: Path, monkeypatch) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    csv_path = plc_dir / "Factory_Integrated_Log_20260601_090000.csv"
+    write_csv(
+        csv_path,
+        [
+            "Date,Time,Mold1",
+            "2026-06-01,09:00:00,1",
+            "2026-06-01,09:01:00,2",
+            "2026-06-01,09:02:00,3",
+        ],
+    )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(plc_data_dir=str(plc_dir))).scan(request)[0][0]
+    cancel_checks = 0
+    monotonic_values = iter([0.0, 0.0, 0.1, 0.2, 0.6])
+
+    def should_cancel() -> bool:
+        nonlocal cancel_checks
+        cancel_checks += 1
+        return cancel_checks >= 2
+
+    def monotonic() -> float:
+        try:
+            return next(monotonic_values)
+        except StopIteration:
+            return 0.6
+
+    monkeypatch.setattr("backend.app.services.upload_preview.time.monotonic", monotonic)
+
+    try:
+        CsvKeyExtractor().extract(
+            candidate,
+            max_file_seconds=5,
+            sample_rows=200,
+            force_full_scan=False,
+            should_cancel=should_cancel,
+        )
+    except PreviewCancelledError:
+        pass
+    else:
+        raise AssertionError("Expected time-based throttled cancel check to cancel extraction")
+
+    assert cancel_checks == 2
 
 
 def test_csv_key_extractor_streams_legacy_korean_plc_keys(tmp_path: Path) -> None:
