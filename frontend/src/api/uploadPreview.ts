@@ -96,6 +96,10 @@ export interface PreviewItem {
   lastTimestamp: string | null;
   deviceIds: string[];
   issues: string[];
+  timeoutStage?: string | null;
+  timing?: Record<string, unknown> | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface PreviewPage {
@@ -252,6 +256,10 @@ function toCamelPreviewResponse(raw: any): PreviewResponse {
       lastTimestamp: item.lastTimestamp ?? item.last_timestamp ?? null,
       deviceIds: item.deviceIds ?? item.device_ids ?? [],
       issues: item.issues ?? [],
+      timeoutStage: item.timeoutStage ?? item.timeout_stage ?? null,
+      timing: item.timing ?? null,
+      errorCode: item.errorCode ?? item.error_code ?? null,
+      errorMessage: item.errorMessage ?? item.error_message ?? null,
     })),
     page: raw.page ?? { limit: 100, offset: 0, totalItems: raw.items?.length ?? 0 },
   };

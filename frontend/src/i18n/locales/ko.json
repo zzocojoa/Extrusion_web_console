@@ -220,6 +220,7 @@
       "db": "DB",
       "updated": "갱신",
       "uploadRows": "업로드 행",
+      "interimSummary": "이미 처리된 행 기준의 잠정 집계입니다. 최종 업로드 가능 여부는 미리보기가 완료된 뒤에만 확정됩니다.",
       "loading": "로컬 CSV와 DB 중복 상태를 확인 중입니다...",
       "error": "업로드 미리보기 상태를 불러오지 못했습니다."
     },
@@ -229,6 +230,7 @@
       "startingUpload": "시작 중",
       "startUploadUnavailable": "준비 중",
       "startUploadDisabledReason": "완료된 미리보기, 연결 가능한 DB, 업로드 대상 행이 필요합니다.",
+      "startUploadDisabledRunning": "미리보기가 아직 계산 중입니다. 최종 결과가 성공할 때까지 업로드 시작은 비활성화됩니다.",
       "cancelPreview": "취소",
       "cancelling": "취소 중"
     },
@@ -291,6 +293,7 @@
     },
     "dbStatus": {
       "not_checked": "미확인",
+      "reconciling": "대조 중, 일부 결과",
       "reachable": "연결됨",
       "unreachable": "연결 불가",
       "query_failed": "조회 실패"
