@@ -2,7 +2,10 @@ import { apiFetch } from "./client";
 
 export type PreviewRangeMode = "today" | "yesterday" | "last_2_days" | "custom";
 export type PreviewSource = "plc" | "temperature";
-export type PreviewProfile = "default" | "stage3_profile_a_bounded_full_scan";
+export type PreviewProfile =
+  | "default"
+  | "stage3_profile_a_bounded_full_scan"
+  | "large_source_operational";
 export type PreviewItemStatus =
   | "target"
   | "already_in_db"
@@ -146,6 +149,16 @@ export const stage3ProfileABoundedFullScanOptions: PreviewOptions = {
   forceFullScan: true,
 };
 
+export const largeSourceOperationalOptions: PreviewOptions = {
+  ...defaultOptions,
+  profile: "large_source_operational",
+  chunkRows: 1_000,
+  maxFiles: 500,
+  maxRunSeconds: 900,
+  maxFileSeconds: 300,
+  forceFullScan: false,
+};
+
 export function createDefaultPreviewRequest(
   rangeMode: PreviewRangeMode,
   startDate: string | null,
@@ -157,6 +170,21 @@ export function createDefaultPreviewRequest(
     endDate,
     sources: ["plc"],
     options: { ...defaultOptions },
+    retryOfRunId: null,
+  };
+}
+
+export function createLargeSourceOperationalPreviewRequest(
+  rangeMode: PreviewRangeMode,
+  startDate: string | null,
+  endDate: string | null,
+): PreviewCreateRequest {
+  return {
+    rangeMode,
+    startDate,
+    endDate,
+    sources: ["plc"],
+    options: { ...largeSourceOperationalOptions },
     retryOfRunId: null,
   };
 }

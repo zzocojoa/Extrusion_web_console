@@ -22,6 +22,7 @@ import {
   ActivePreviewRunError,
   cancelUploadPreview,
   createDefaultPreviewRequest,
+  createLargeSourceOperationalPreviewRequest,
   createUploadPreview,
   fetchLatestUploadPreview,
   fetchUploadPreview,
@@ -68,6 +69,7 @@ const terminalRunStatuses: PreviewRunStatus[] = [
 ];
 
 const activeJobStatuses: UploadJobStatus[] = ["queued", "running", "pausing", "paused", "cancelling"];
+type PreviewMode = "standard" | "large_source";
 
 const jobTone: Record<UploadJobStatus, StatusTone> = {
   queued: "muted",
@@ -111,6 +113,7 @@ export function UploadPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"preview" | "job">("preview");
   const [rangeMode, setRangeMode] = useState<PreviewRangeMode>("today");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("standard");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [previewRunId, setPreviewRunId] = useState<string | null>(null);
@@ -278,7 +281,11 @@ export function UploadPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const request = createDefaultPreviewRequest(
+      const createPreviewRequest =
+        previewMode === "large_source"
+          ? createLargeSourceOperationalPreviewRequest
+          : createDefaultPreviewRequest;
+      const request = createPreviewRequest(
         rangeMode,
         rangeMode === "custom" ? startDate || null : null,
         rangeMode === "custom" ? endDate || null : null,
@@ -398,6 +405,7 @@ export function UploadPage() {
           loading={previewQuery.isLoading || latestQuery.isLoading || createMutation.isPending}
           error={previewQuery.error ?? latestQuery.error ?? createMutation.error ?? cancelMutation.error}
           rangeMode={rangeMode}
+          previewMode={previewMode}
           startDate={startDate}
           endDate={endDate}
           statusFilter={statusFilter}
@@ -413,6 +421,7 @@ export function UploadPage() {
           )}
           cancelling={cancelMutation.isPending}
           onRangeModeChange={setRangeMode}
+          onPreviewModeChange={setPreviewMode}
           onStartDateChange={setStartDate}
           onEndDateChange={setEndDate}
           onRunPreview={() => createMutation.mutate()}
@@ -445,6 +454,7 @@ interface PreviewTabProps {
   loading: boolean;
   error: Error | null;
   rangeMode: PreviewRangeMode;
+  previewMode: PreviewMode;
   startDate: string;
   endDate: string;
   statusFilter: PreviewItemStatus | "all";
@@ -457,6 +467,7 @@ interface PreviewTabProps {
   startUploadPending: boolean;
   startUploadError: Error | null;
   onRangeModeChange: (value: PreviewRangeMode) => void;
+  onPreviewModeChange: (value: PreviewMode) => void;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
   onRunPreview: () => void;
@@ -520,6 +531,16 @@ function PreviewTab(props: PreviewTabProps) {
               <option value="custom">{t("upload.range.custom")}</option>
             </select>
           </label>
+          <label>
+            <span>{t("upload.controls.previewMode")}</span>
+            <select
+              value={props.previewMode}
+              onChange={(event) => props.onPreviewModeChange(event.target.value as PreviewMode)}
+            >
+              <option value="standard">{t("upload.previewMode.standard")}</option>
+              <option value="large_source">{t("upload.previewMode.largeSource")}</option>
+            </select>
+          </label>
           {props.rangeMode === "custom" ? (
             <>
               <label>
@@ -536,6 +557,11 @@ function PreviewTab(props: PreviewTabProps) {
             <Database size={16} aria-hidden="true" />
             <span>{t("upload.controls.source")}</span>
           </div>
+          {props.previewMode === "large_source" ? (
+            <div className="upload-preview__mode-note" role="status">
+              {t("upload.previewMode.largeSourceNote")}
+            </div>
+          ) : null}
         </div>
       </div>
 

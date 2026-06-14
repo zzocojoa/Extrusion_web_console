@@ -101,6 +101,42 @@ def test_stage3_profile_a_bounded_full_scan_applies_bounded_timeout_budget() -> 
     assert api_payload["options"]["forceFullScan"] is True
 
 
+def test_large_source_operational_profile_applies_long_preview_budget() -> None:
+    schema = _schema_module()
+
+    request = schema.PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-01-01",
+            "endDate": "2026-01-31",
+            "sources": ["plc"],
+            "options": {
+                "profile": "large_source_operational",
+                "chunkRows": 20000,
+                "maxFiles": 3,
+                "maxRunSeconds": 120,
+                "maxFileSeconds": 30,
+                "forceFullScan": True,
+            },
+        }
+    )
+
+    assert _enum_value(request.options.profile) == "large_source_operational"
+    assert request.options.max_files == 500
+    assert request.options.chunk_rows == 1000
+    assert request.options.max_run_seconds == 900
+    assert request.options.max_file_seconds == 300
+    assert request.options.force_full_scan is False
+
+    api_payload = request.model_dump(by_alias=True)
+    assert api_payload["options"]["profile"] == "large_source_operational"
+    assert api_payload["options"]["maxFiles"] == 500
+    assert api_payload["options"]["chunkRows"] == 1000
+    assert api_payload["options"]["maxRunSeconds"] == 900
+    assert api_payload["options"]["maxFileSeconds"] == 300
+    assert api_payload["options"]["forceFullScan"] is False
+
+
 def test_preview_create_request_custom_range_requires_both_dates_and_valid_order() -> None:
     schema = _schema_module()
 

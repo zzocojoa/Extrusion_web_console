@@ -234,10 +234,16 @@
     },
     "controls": {
       "range": "범위",
+      "previewMode": "미리보기 모드",
       "startDate": "시작",
       "endDate": "종료",
       "source": "소스: 설정된 PLC 폴더",
       "search": "파일명, 경로, 사유 검색"
+    },
+    "previewMode": {
+      "standard": "기본",
+      "largeSource": "대용량",
+      "largeSourceNote": "미리보기 시간만 늘립니다. 업로드는 검토와 별도 승인 후 가능합니다."
     },
     "range": {
       "today": "오늘",
