@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
+import backend.app.api.upload_preview as upload_preview_api
 from backend.app.api.audit import get_audit_repository
 from backend.app.api.upload_preview import get_preview_audit_repository, get_preview_repository
+from backend.app.core.settings import Settings
+from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditLogFilters, AuditRepository, decode_params_json
 from backend.app.db.preview_repository import PreviewRepository
-from backend.app.core.settings import get_settings
 from backend.app.main import app, create_app
 from backend.app.schemas.upload_preview import PreviewDbStatus, PreviewRunStatus
 
@@ -80,6 +84,157 @@ def test_upload_preview_create_invalid_json_writes_failure_audit(tmp_path) -> No
     assert params["reasonCode"] == "preview_request_json_invalid"
     assert params["rejectedFields"] == []
     assert '{"rangeMode": ' not in row["params_json_redacted"]
+
+
+def test_upload_preview_create_auto_applies_large_source_budget_for_operational_plc_source(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="//operator-share/plc")
+    submitted: list[tuple[str, object]] = []
+    monkeypatch.setattr(
+        upload_preview_api.executor,
+        "submit",
+        lambda fn, preview_run_id, request: submitted.append((preview_run_id, request)),
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "last_2_days",
+                "sources": ["plc"],
+                "options": {
+                    "profile": "default",
+                    "chunkRows": 20000,
+                    "maxRunSeconds": 120,
+                    "maxFileSeconds": 30,
+                },
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    preview_run_id = response.json()["previewRunId"]
+    row = repository.get_run(preview_run_id)
+    assert row is not None
+    options = json.loads(row["options_json"])
+    assert options["profile"] == "large_source_operational"
+    assert options["chunkRows"] == 1000
+    assert options["maxRunSeconds"] == 900
+    assert options["maxFileSeconds"] == 300
+    assert submitted[0][1].options.profile.value == "large_source_operational"
+
+
+def test_upload_preview_create_preserves_explicit_bounded_profile_for_operational_plc_source(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="//operator-share/plc")
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "custom",
+                "startDate": "2026-05-23",
+                "endDate": "2026-05-23",
+                "sources": ["plc"],
+                "options": {"profile": "stage3_profile_a_bounded_full_scan"},
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    row = repository.get_run(response.json()["previewRunId"])
+    assert row is not None
+    options = json.loads(row["options_json"])
+    assert options["profile"] == "stage3_profile_a_bounded_full_scan"
+    assert options["maxFiles"] == 3
+    assert options["maxRunSeconds"] == 300
+    assert options["maxFileSeconds"] == 120
+
+
+def test_upload_preview_create_auto_applies_large_source_budget_for_large_date_range(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "custom",
+                "startDate": "2026-01-01",
+                "endDate": "2026-01-02",
+                "sources": ["plc"],
+                "options": {"profile": "default"},
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    row = repository.get_run(response.json()["previewRunId"])
+    assert row is not None
+    options = json.loads(row["options_json"])
+    assert options["profile"] == "large_source_operational"
+    assert options["chunkRows"] == 1000
+    assert options["maxRunSeconds"] == 900
+    assert options["maxFileSeconds"] == 300
+
+
+def test_upload_preview_create_keeps_default_budget_for_small_local_source(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={"rangeMode": "today", "sources": ["plc"], "options": {"profile": "default"}},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    row = repository.get_run(response.json()["previewRunId"])
+    assert row is not None
+    options = json.loads(row["options_json"])
+    assert options["profile"] == "default"
+    assert options["maxRunSeconds"] == 120
+    assert options["maxFileSeconds"] == 30
 
 
 def test_upload_preview_delete_is_not_a_v1_api() -> None:
