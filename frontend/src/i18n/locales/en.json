@@ -234,6 +234,29 @@
       "cancelPreview": "Cancel",
       "cancelling": "Cancelling"
     },
+    "startReview": {
+      "eyebrow": "Final upload gate",
+      "title": "Review target counts before Start Upload",
+      "badge": "Requires count confirmation",
+      "warning": "This action creates an upload job and can write rows to the local database. Confirm the reviewed target count before continuing.",
+      "previewRunId": "Preview run",
+      "targetFiles": "Target files",
+      "uploadRows": "Upload target rows",
+      "alreadyInDb": "Already in DB",
+      "risky": "Risky",
+      "excluded": "Excluded",
+      "dbStatus": "DB status",
+      "inputLabel": "Type {{rows}} to enable Start Upload",
+      "cancel": "Cancel",
+      "confirm": "Confirm Start Upload",
+      "blocked": {
+        "title": "Confirm is blocked",
+        "previewStatus": "Preview is not in succeeded state.",
+        "dbStatus": "DB status is not reachable.",
+        "noTarget": "There are no upload target files or rows.",
+        "risky": "Risky preview rows must be resolved before upload."
+      }
+    },
     "controls": {
       "range": "Range",
       "previewMode": "Preview mode",
