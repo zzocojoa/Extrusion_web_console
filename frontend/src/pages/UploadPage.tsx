@@ -104,6 +104,35 @@ function formatDateTime(value: string | null | undefined) {
   return value.replace("T", " ").replace(/\.\d+/, "").replace("+09:00", "");
 }
 
+const sensitiveDiagnosticPatterns = [
+  /[A-Za-z]:[\\/]/,
+  /\\\\[^\\\s]+\\/,
+  /\b(?:https?|postgres(?:ql)?):\/\/\S+/i,
+  /\b(?:authorization|bearer|jwt|token|secret|apikey|anon[_-]?key|service[_-]?role)\b/i,
+];
+
+function safeDiagnosticFallback(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (sensitiveDiagnosticPatterns.some((pattern) => pattern.test(trimmed))) {
+    return null;
+  }
+  return trimmed;
+}
+
+function formatPreviewReason(
+  reasonCode: string | null | undefined,
+  reasonText: string | null | undefined,
+  translate: (key: string) => string,
+  exists: (key: string) => boolean,
+): string {
+  if (reasonCode) {
+    const key = `upload.reason.${reasonCode}`;
+    if (exists(key)) return translate(key);
+  }
+  return safeDiagnosticFallback(reasonText) ?? translate("upload.reason.unknown");
+}
+
 function sumNullable(values: Array<number | null | undefined>): number {
   return values.reduce<number>((total, value) => total + (value ?? 0), 0);
 }
@@ -526,7 +555,7 @@ interface PreviewTabProps {
 }
 
 function PreviewTab(props: PreviewTabProps) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const [startReviewOpen, setStartReviewOpen] = useState(false);
   const run = props.currentPreview?.run;
   const displayState = props.currentPreview ? buildPreviewDisplayState(props.currentPreview) : null;
@@ -624,7 +653,9 @@ function PreviewTab(props: PreviewTabProps) {
           <span>{t("upload.preview.runId")}: <code>{run.previewRunId}</code></span>
           <span>{t("upload.preview.db")}: {t(displayState?.dbStatusLabelKey ?? `upload.dbStatus.${run.dbStatus}`)}</span>
           <span>{t("upload.preview.updated")}: {formatDateTime(run.finishedAt ?? run.startedAt ?? run.requestedAt)}</span>
-          {run.errorMessage ? <strong>{run.errorMessage}</strong> : null}
+          {run.errorMessage ? (
+            <strong>{formatPreviewReason(run.errorCode, run.errorMessage, t, (key) => i18n.exists(key))}</strong>
+          ) : null}
         </div>
       ) : null}
 
@@ -840,7 +871,7 @@ function PreviewSummaryStrip({
 }
 
 function PreviewTable({ items }: { items: PreviewItem[] }) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   if (items.length === 0) {
     return <div className="panel--loading">{t("upload.empty.noRows")}</div>;
   }
@@ -875,7 +906,7 @@ function PreviewTable({ items }: { items: PreviewItem[] }) {
               <td className="num">{formatNumber(item.dbMatchCount)}</td>
               <td className="num">{formatNumber(item.uploadRowEstimate)}</td>
               <td className="preview-reason">
-                {t(`upload.reason.${item.reasonCode}`, { defaultValue: item.reasonText })}
+                {formatPreviewReason(item.reasonCode, item.reasonText, t, (key) => i18n.exists(key))}
               </td>
               <td className="num">{formatDateTime(item.modifiedAt)}</td>
               <td className="preview-path" title={item.path}>{item.path}</td>

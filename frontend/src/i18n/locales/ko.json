@@ -274,12 +274,20 @@
       "db_no_match": "DB에서 일치하는 키가 없어 업로드 대상입니다.",
       "db_full_match": "모든 timestamp/device_id 키가 이미 DB에 있습니다.",
       "db_partial_match": "일부 키가 이미 DB에 있습니다. v1 기본 업로드에서는 제외됩니다.",
+      "source_not_configured": "미리보기 원본 폴더가 설정되지 않았습니다.",
+      "source_missing": "미리보기 원본 폴더에 접근할 수 없습니다.",
+      "file_missing": "파일 메타데이터를 읽을 수 없습니다.",
+      "file_date_missing": "파일명에서 파일 날짜를 해석할 수 없습니다.",
+      "outside_date_range": "파일 날짜가 선택한 미리보기 범위를 벗어났습니다.",
+      "file_locked": "다른 프로세스가 파일을 사용 중입니다.",
       "schema_mismatch": "CSV 스키마가 불완전해 timestamp 또는 device_id를 확인할 수 없습니다.",
       "file_unstable": "설정된 안정 대기 시간 안에 파일이 수정되었습니다.",
       "db_unreachable": "Local Supabase DB에 연결할 수 없습니다.",
       "timeout": "미리보기가 설정된 시간 제한을 초과했습니다.",
+      "cancelled": "미리보기가 취소되었습니다.",
       "transform_error": "CSV 변환에 실패했습니다.",
-      "no_valid_keys": "유효한 timestamp/device_id 키가 없습니다."
+      "no_valid_keys": "유효한 timestamp/device_id 키가 없습니다.",
+      "unknown": "진단 사유를 표시할 수 없습니다."
     },
     "runStatus": {
       "queued": "대기",

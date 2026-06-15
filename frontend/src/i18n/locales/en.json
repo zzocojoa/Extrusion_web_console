@@ -297,12 +297,20 @@
       "db_no_match": "No exact DB keys found. This file is an upload target.",
       "db_full_match": "All exact timestamp/device_id keys already exist in DB.",
       "db_partial_match": "Some exact keys already exist in DB. Excluded unless explicitly allowed later.",
+      "source_not_configured": "Preview source folder is not configured.",
+      "source_missing": "Preview source folder could not be reached.",
+      "file_missing": "File metadata could not be read.",
+      "file_date_missing": "File date could not be parsed from the filename.",
+      "outside_date_range": "File date is outside the selected Preview range.",
+      "file_locked": "File is locked by another process.",
       "schema_mismatch": "CSV schema is incomplete. Timestamp or device_id could not be confirmed.",
       "file_unstable": "File was modified inside the configured stability lag window.",
       "db_unreachable": "Local Supabase DB could not be reached.",
       "timeout": "Preview run exceeded the configured time limit.",
+      "cancelled": "Preview run was cancelled.",
       "transform_error": "CSV transform failed.",
-      "no_valid_keys": "No valid timestamp/device_id keys were found."
+      "no_valid_keys": "No valid timestamp/device_id keys were found.",
+      "unknown": "Diagnostic reason is unavailable."
     },
     "runStatus": {
       "queued": "Queued",
