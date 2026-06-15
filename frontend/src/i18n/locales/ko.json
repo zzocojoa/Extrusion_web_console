@@ -386,10 +386,10 @@
       }
     },
     "startReview": {
-      "eyebrow": "최종 업로드 게이트",
-      "title": "Start Upload 전 대상 수량 확인",
-      "badge": "수량 확인 필요",
-      "warning": "이 작업은 업로드 작업을 생성하고 로컬 DB에 행을 쓸 수 있습니다. 검토한 대상 수량을 확인한 뒤 진행하세요.",
+      "eyebrow": "최종 업로드 확인",
+      "title": "업로드 시작 전 대상 수량 확인",
+      "badge": "대상 수량 확인 필요",
+      "warning": "확인 후 진행하면 {{files}}개 대상 파일, {{rowsFormatted}}행 업로드 작업이 생성됩니다. 업로드가 성공하면 로컬 DB row count가 증가합니다.",
       "previewRunId": "Preview 실행",
       "targetFiles": "대상 파일",
       "uploadRows": "업로드 대상 행",
@@ -397,15 +397,15 @@
       "risky": "주의",
       "excluded": "제외",
       "dbStatus": "DB 상태",
-      "inputLabel": "{{rows}}를 입력해야 Start Upload가 활성화됩니다",
+      "inputLabel": "확인을 위해 업로드 대상 행 수 {{rows}}을 입력하세요. 쉼표를 포함해도 됩니다.",
       "cancel": "취소",
-      "confirm": "Start Upload 확인",
+      "confirm": "{{rowsFormatted}}행 업로드 시작",
       "blocked": {
-        "title": "확인이 차단됨",
-        "previewStatus": "Preview가 성공 상태가 아닙니다.",
-        "dbStatus": "DB 상태가 reachable이 아닙니다.",
-        "noTarget": "업로드 대상 파일 또는 행이 없습니다.",
-        "risky": "주의 Preview 행을 먼저 해소해야 합니다."
+        "title": "업로드 시작이 차단됨",
+        "previewStatus": "Preview가 아직 성공 상태가 아닙니다.",
+        "dbStatus": "DB 상태가 reachable이어야 합니다.",
+        "noTarget": "업로드할 대상 파일 또는 대상 행이 없습니다.",
+        "risky": "업로드 시작 전에 주의 Preview 행을 먼저 해소하세요."
       }
     }
   },
