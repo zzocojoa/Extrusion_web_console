@@ -5,6 +5,7 @@ import type { CurrentJobSummary, RecentJobRow } from "../../pages/dashboard/dash
 import { StatusBadge } from "../status/StatusBadge";
 import { Panel } from "../ui/Panel";
 import { formatCount, formatKstTime, statusToneForJob } from "./formatters";
+import { localizeDiagnosticMessage, stateContextLabel, type Translate } from "./localizedDashboardText";
 
 interface RecentJobsPanelProps {
   jobs: RecentJobRow[];
@@ -14,6 +15,7 @@ interface RecentJobsPanelProps {
 
 export function RecentJobsPanel({ jobs, currentJob, stateContext }: RecentJobsPanelProps) {
   const { t, i18n } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
   const currentStateContext = currentJob?.stateContext ?? stateContext;
 
   return (
@@ -34,10 +36,10 @@ export function RecentJobsPanel({ jobs, currentJob, stateContext }: RecentJobsPa
             </div>
           </div>
           <div className="current-job__context">
-            <span className="panel-eyebrow">{t("dashboard.jobs.stateContext", { defaultValue: "State context" })}</span>
-            <strong>{currentStateContext.label}</strong>
+            <span className="panel-eyebrow">{t("dashboard.jobs.stateContext")}</span>
+            <strong>{stateContextLabel(currentStateContext, translate)}</strong>
           </div>
-          <span className="current-job__message truncate">{currentJob.latestMessage}</span>
+          <span className="current-job__message truncate">{localizeDiagnosticMessage(currentJob.latestMessage, translate)}</span>
         </div>
       ) : null}
       <div className="table-scroll">
@@ -62,7 +64,7 @@ export function RecentJobsPanel({ jobs, currentJob, stateContext }: RecentJobsPa
                 <td className="num">{job.filesDone}/{job.filesTotal}</td>
                 <td className="num">{formatCount(job.rowsSent, i18n.language)}</td>
                 <td className={job.failureCount > 0 ? "num num--danger" : "num"}>{job.failureCount}</td>
-                <td className="truncate">{job.latestMessage}</td>
+                <td className="truncate">{localizeDiagnosticMessage(job.latestMessage, translate)}</td>
               </tr>
             ))}
           </tbody>

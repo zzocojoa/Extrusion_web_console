@@ -26,7 +26,8 @@
       "supabase": "Supabase",
       "storage": "WSL 저장소",
       "grafana": "Grafana",
-      "stateStore": "상태 저장소"
+      "stateStore": "상태 저장소",
+      "state_store": "?? ???"
     },
     "jobs": {
       "title": "최근 작업",
@@ -39,7 +40,8 @@
       "rows": "행",
       "failures": "실패",
       "warnings": "주의",
-      "message": "메시지"
+      "message": "메시지",
+      "stateContext": "?? ????"
     },
     "runtime": {
       "title": "런타임 상태",
@@ -51,7 +53,24 @@
       "title": "주의/실패",
       "type": "유형",
       "count": "건수",
-      "impact": "영향"
+      "impact": "영향",
+      "rows": {
+        "failed_retry": {
+          "label": "?? ??",
+          "impact": "??? ??? ?????.",
+          "empty": "?? ??? ?? ??? ????."
+        },
+        "risky": {
+          "label": "?? ??",
+          "impact": "?? ?? ??? ?????.",
+          "empty": "?? ??? ??? ??? ????."
+        },
+        "supabase_unreachable": {
+          "label": "??? ???",
+          "impact": "Local Supabase core runtime? ??? ? ????.",
+          "empty": "??? ???? Dashboard ??? ?? ????."
+        }
+      }
     },
     "audit": {
       "title": "최근 감사",
@@ -59,7 +78,8 @@
       "result": "결과",
       "action": "작업",
       "actor": "사용자",
-      "summary": "요약"
+      "summary": "요약",
+      "summaryWithCode": "{{result}}: {{errorCode}}"
     },
     "actions": {
       "preview": "미리보기",
@@ -74,7 +94,70 @@
       "noJobs": "아직 업로드 작업 없음",
       "noWarnings": "주의 항목 없음"
     },
-    "error": "Dashboard 상태를 불러오지 못했습니다."
+    "error": "Dashboard 상태를 불러오지 못했습니다.",
+    "matrix": {
+      "upload": {
+        "label": "?? ???"
+      },
+      "supabase": {
+        "label": "Local Supabase"
+      },
+      "storage": {
+        "label": "WSL / Docker"
+      },
+      "grafana": {
+        "label": "Grafana"
+      },
+      "state_store": {
+        "label": "?? ???"
+      }
+    },
+    "overall": {
+      "noJob": {
+        "title": "??? ??? ?? ??",
+        "message": "Dashboard? API ??? ????? ?? ?? ?? ???? ??? ??? ??? ????."
+      },
+      "running": {
+        "title": "??? ?? ?? ?"
+      },
+      "succeeded": {
+        "title": "?? ??? ??"
+      },
+      "review": {
+        "title": "?? ??? ?? ??"
+      },
+      "ready": {
+        "title": "??? ???",
+        "message": "Supabase, ?? ???, WSL ???? ???? ?? ??? ????."
+      },
+      "attention": {
+        "title": "?? ??",
+        "message": "?? ?? ?? ??? ??? ??? ????. Upload Preview? ?????."
+      },
+      "blocked": {
+        "title": "??? ???",
+        "message": "Local Supabase? ???? ?? ??? ??? ??????."
+      }
+    },
+    "messages": {
+      "jobCount": "?? {{status}}: ?? {{processed}}, ??? {{uploaded}}, ?? {{accepted}} rows.",
+      "uploadDetail": "{{done}}/{{total}}? ??, {{uploaded}} rows ???.",
+      "stateContextDetail": "???? {{contextClass}}; {{storageStatus}}.",
+      "apiDbEdge": "API {{api}}, DB {{db}}, Edge {{edge}}.",
+      "wslCli": "WSL {{wsl}}, CLI {{cli}}.",
+      "dockerStatus": "Docker {{status}}",
+      "noJobs": "?? ??",
+      "unknown": "???",
+      "dbEdgeOk": "DB + Edge ??",
+      "runtimeUnavailable": "??? ??? ??? ? ????.",
+      "dockerWslUnavailable": "Docker/WSL ??? ??? ? ????.",
+      "noPersistedUploadJob": "?? ?? ????? ??? ??? ??? ?? ?????.",
+      "walReady": "WAL ???",
+      "uploadMetricsReachable": "upload-metrics ???",
+      "storageFree": "{{amount}} ??",
+      "developmentUploadRunning": "??? ??? ???? ?? ?",
+      "developmentUploadRunningDetail": "??? ??? ???????. ?? ??? ????."
+    }
   },
   "pageSubtitle": {
     "dashboard": "업로드, DB, 런타임 상태 확인",
@@ -103,7 +186,8 @@
       "edge": "Edge Function",
       "wsl": "WSL",
       "grafana": "Grafana",
-      "containers": "컨테이너"
+      "containers": "컨테이너",
+      "stateContext": "?? ????"
     },
     "containers": {
       "detail": "{{running}}/{{total}} 실행 중",
@@ -119,6 +203,29 @@
       "alreadyStopped": "Local Supabase 컨테이너가 이미 중지되었습니다.",
       "requiredContainerMissing": "필수 컨테이너가 없습니다. v1은 새 스택을 생성하지 않습니다.",
       "dockerUnavailable": "Docker를 사용할 수 없습니다."
+    },
+    "stateContext": {
+      "detail": "{{contextClass}} / {{storageStatus}}"
+    },
+    "serviceStatus": {
+      "ready": "??",
+      "running": "?? ?",
+      "attention": "?? ??",
+      "blocked": "???",
+      "unknown": "???",
+      "unreachable": "?? ??",
+      "unhealthy": "???",
+      "stopped": "???",
+      "missing": "??",
+      "starting": "?? ?",
+      "stopping": "?? ?",
+      "timed_out": "?? ??"
+    },
+    "reason": {
+      "ready": "Local Supabase core runtime? ??????.",
+      "docker_unreachable": "??? ?????? Docker? ??? ? ????.",
+      "edge_probe_timeout": "Edge route probe? ?? ??????.",
+      "required_container_missing": "?? ??? ????? ????."
     }
   },
   "settings": {
@@ -130,8 +237,8 @@
       "apiModeRequired": "Development 모드에서는 저장하지 않습니다. 실제 저장은 API 모드에서 동작합니다.",
       "configFile": "설정 파일",
       "configFileHidden": "로컬 경로는 숨김",
-      "mockMode": "development mode",
-      "envOverride": "{{envKey}} override",
+      "mockMode": "?? ??",
+      "envOverride": "{{envKey}} ???",
       "secretHidden": "값 숨김",
       "secretPlaceholder": "새 값 입력 시에만 저장"
     },
@@ -181,7 +288,7 @@
       "validationSummary": "입력값을 확인해야 합니다.",
       "integerError": "1~65535 사이의 정수를 입력하세요.",
       "reason": {
-        "config_env_override": "환경 변수 override 값은 저장할 수 없습니다: {{keys}}",
+        "config_env_override": "?? ??? ???? ?? ??? ? ????: {{keys}}",
         "config_validation_failed": "입력값 검증에 실패했습니다: {{keys}}",
         "config_request_validation_failed": "저장 요청 형식이 올바르지 않습니다.",
         "config_empty_update": "저장할 변경값이 없습니다.",
@@ -206,6 +313,9 @@
       "config": "설정 파일",
       "env": "환경 변수",
       "process": "프로세스 환경"
+    },
+    "stateContext": {
+      "label": "?? ????"
     }
   },
   "upload": {
@@ -429,7 +539,13 @@
       "loading": "작업 로그를 불러오는 중...",
       "error": "작업 로그를 불러오지 못했습니다.",
       "empty": "아직 업로드 작업 이벤트가 없습니다.",
-      "mockMessage": "목 데이터 작업 로그입니다. 저장된 이벤트는 API 모드에서 확인할 수 있습니다."
+      "mockMessage": "목 데이터 작업 로그입니다. 저장된 이벤트는 API 모드에서 확인할 수 있습니다.",
+      "events": {
+        "jobFinished": "??? ??? {{status}} ??? ??????.",
+        "fileProgressWithName": "{{filename}} ??: {{processed}}/{{total}}.",
+        "fileProgress": "??: {{processed}}/{{total}}.",
+        "fileCompleted": "{{filename}} ??."
+      }
     },
     "audit": {
       "title": "감사 로그",
@@ -494,5 +610,17 @@
   "mode": {
     "upload": "업로드",
     "retry_failed": "실패 재시도"
+  },
+  "stateContext": {
+    "class": {
+      "operator_package": "?? ??? ??",
+      "development_default": "?? ??",
+      "unknown": "?? ?? ??"
+    },
+    "storage": {
+      "present": "?? ??? ??",
+      "missing": "?? ??? ??",
+      "unknown": "?? ??? ???"
+    }
   }
 }

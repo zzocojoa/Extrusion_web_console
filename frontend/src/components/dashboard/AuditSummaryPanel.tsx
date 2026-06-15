@@ -4,6 +4,7 @@ import type { AuditSummaryRow, StatusTone } from "../../pages/dashboard/dashboar
 import { StatusBadge } from "../status/StatusBadge";
 import { Panel } from "../ui/Panel";
 import { formatKstTime } from "./formatters";
+import { auditSummaryText, type Translate } from "./localizedDashboardText";
 
 const resultTone: Record<AuditSummaryRow["result"], StatusTone> = {
   success: "ready",
@@ -18,6 +19,7 @@ interface AuditSummaryPanelProps {
 
 export function AuditSummaryPanel({ rows }: AuditSummaryPanelProps) {
   const { t, i18n } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
 
   return (
     <Panel className="audit-summary-panel" title={t("dashboard.audit.title")} titleId="audit-summary-title">
@@ -41,7 +43,7 @@ export function AuditSummaryPanel({ rows }: AuditSummaryPanelProps) {
                   <td><StatusBadge tone={tone} /></td>
                   <td className="endpoint truncate">{row.action}</td>
                   <td className="truncate">{row.actor}</td>
-                  <td className="truncate">{row.summary}</td>
+                  <td className="truncate">{auditSummaryText(row, translate)}</td>
                 </tr>
               );
             })}

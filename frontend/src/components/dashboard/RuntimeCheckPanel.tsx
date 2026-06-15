@@ -7,6 +7,11 @@ import type { StatusTone } from "../../pages/dashboard/dashboardTypes";
 import { StatusBadge } from "../status/StatusBadge";
 import { Panel } from "../ui/Panel";
 import { formatKstTime } from "./formatters";
+import {
+  runtimeReasonText,
+  runtimeServiceDetail,
+  runtimeStateContextDetail,
+} from "./localizedDashboardText";
 
 interface RuntimeCheckPanelProps {
   rows: RuntimeCheckRow[];
@@ -41,7 +46,7 @@ export function RuntimeCheckPanel({
         <div className={`runtime-summary runtime-summary--${toneForOverall(runtimeStatus.overallStatus)}`}>
           <div>
             <StatusBadge tone={toneForOverall(runtimeStatus.overallStatus)} label={t(`runtime.overall.${runtimeStatus.overallStatus}`)} />
-            <p>{runtimeStatus.reasonText}</p>
+            <p>{runtimeReasonText(runtimeStatus, translate)}</p>
           </div>
           <div className="runtime-actions">
             <button
@@ -111,35 +116,35 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
       id: "supabase",
       label: t("runtime.services.api"),
       tone: toneForService(runtimeStatus.api.status),
-      detail: `${runtimeStatus.api.host}:${runtimeStatus.api.port} · ${runtimeStatus.api.detail}`,
+      detail: `${runtimeStatus.api.host}:${runtimeStatus.api.port} - ${runtimeServiceDetail(runtimeStatus.api, t)}`,
       lastCheckedAt: checkedAt,
     },
     {
       id: "database",
       label: t("runtime.services.db"),
       tone: toneForService(runtimeStatus.db.status),
-      detail: `${runtimeStatus.db.host}:${runtimeStatus.db.port} · ${runtimeStatus.db.detail}`,
+      detail: `${runtimeStatus.db.host}:${runtimeStatus.db.port} - ${runtimeServiceDetail(runtimeStatus.db, t)}`,
       lastCheckedAt: checkedAt,
     },
     {
       id: "edge_function",
       label: t("runtime.services.edge"),
       tone: toneForService(runtimeStatus.edgeRuntime.status),
-      detail: runtimeStatus.edgeRuntime.detail,
+      detail: runtimeServiceDetail(runtimeStatus.edgeRuntime, t),
       lastCheckedAt: checkedAt,
     },
     {
       id: "wsl_storage",
       label: t("runtime.services.wsl"),
       tone: toneForService(runtimeStatus.wsl.status),
-      detail: runtimeStatus.wsl.detail,
+      detail: runtimeServiceDetail(runtimeStatus.wsl, t),
       lastCheckedAt: checkedAt,
     },
     {
       id: "grafana",
       label: t("runtime.services.grafana"),
       tone: toneForService(runtimeStatus.grafana.status),
-      detail: runtimeStatus.grafana.url ?? runtimeStatus.grafana.detail,
+      detail: runtimeStatus.grafana.url ?? runtimeServiceDetail(runtimeStatus.grafana, t),
       href: runtimeStatus.grafana.url ?? undefined,
       lastCheckedAt: checkedAt,
     },
@@ -152,9 +157,9 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
     },
     {
       id: "state_context",
-      label: t("runtime.services.stateContext", { defaultValue: "State context" }),
+      label: t("runtime.services.stateContext"),
       tone: toneForStateContext(stateContext.storageStatus),
-      detail: `${stateContext.label} / ${stateContext.contextClass} / ${stateContext.storageStatus}`,
+      detail: runtimeStateContextDetail(stateContext, t),
       lastCheckedAt: checkedAt,
     },
   ];

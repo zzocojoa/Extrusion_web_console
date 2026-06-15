@@ -26,7 +26,8 @@
       "supabase": "Supabase",
       "storage": "WSL Storage",
       "grafana": "Grafana",
-      "stateStore": "State Store"
+      "stateStore": "State Store",
+      "state_store": "State Store"
     },
     "jobs": {
       "title": "Recent Jobs",
@@ -39,7 +40,8 @@
       "rows": "Rows",
       "failures": "Failures",
       "warnings": "Warnings",
-      "message": "Message"
+      "message": "Message",
+      "stateContext": "State context"
     },
     "runtime": {
       "title": "Runtime Status",
@@ -51,7 +53,24 @@
       "title": "Warnings / Failures",
       "type": "Type",
       "count": "Count",
-      "impact": "Impact"
+      "impact": "Impact",
+      "rows": {
+        "failed_retry": {
+          "label": "Failed files",
+          "impact": "Retry review is needed.",
+          "empty": "No failed files in the latest job."
+        },
+        "risky": {
+          "label": "Job warnings",
+          "impact": "Review latest job warnings.",
+          "empty": "No warnings recorded for the latest job."
+        },
+        "supabase_unreachable": {
+          "label": "Runtime gate",
+          "impact": "Local Supabase core runtime is not reachable.",
+          "empty": "Runtime gate is not blocking Dashboard review."
+        }
+      }
     },
     "audit": {
       "title": "Recent Audit",
@@ -59,7 +78,8 @@
       "result": "Result",
       "action": "Action",
       "actor": "Actor",
-      "summary": "Summary"
+      "summary": "Summary",
+      "summaryWithCode": "{{result}}: {{errorCode}}"
     },
     "actions": {
       "preview": "Preview",
@@ -74,7 +94,70 @@
       "noJobs": "No upload jobs yet",
       "noWarnings": "No warnings"
     },
-    "error": "Dashboard status could not be loaded."
+    "error": "Dashboard status could not be loaded.",
+    "matrix": {
+      "upload": {
+        "label": "Latest Upload"
+      },
+      "supabase": {
+        "label": "Local Supabase"
+      },
+      "storage": {
+        "label": "WSL / Docker"
+      },
+      "grafana": {
+        "label": "Grafana"
+      },
+      "state_store": {
+        "label": "State Store"
+      }
+    },
+    "overall": {
+      "noJob": {
+        "title": "No upload job recorded",
+        "message": "Dashboard is connected to API mode, but no persisted upload job exists in the active state store."
+      },
+      "running": {
+        "title": "Upload job is running"
+      },
+      "succeeded": {
+        "title": "Latest upload succeeded"
+      },
+      "review": {
+        "title": "Latest upload needs review"
+      },
+      "ready": {
+        "title": "Upload ready",
+        "message": "Supabase, State Store, and WSL storage are ready. No blocking items found."
+      },
+      "attention": {
+        "title": "Needs attention",
+        "message": "There are partial overlaps or retryable failures. Check Upload Preview."
+      },
+      "blocked": {
+        "title": "Upload blocked",
+        "message": "Upload start is blocked because Local Supabase is not responding."
+      }
+    },
+    "messages": {
+      "jobCount": "Status {{status}}: processed {{processed}}, uploaded {{uploaded}}, accepted {{accepted}} rows.",
+      "uploadDetail": "{{done}}/{{total}} files, {{uploaded}} uploaded rows.",
+      "stateContextDetail": "Context class {{contextClass}}; {{storageStatus}}.",
+      "apiDbEdge": "API {{api}}, DB {{db}}, Edge {{edge}}.",
+      "wslCli": "WSL {{wsl}}, CLI {{cli}}.",
+      "dockerStatus": "Docker {{status}}",
+      "noJobs": "No jobs",
+      "unknown": "unknown",
+      "dbEdgeOk": "DB + Edge OK",
+      "runtimeUnavailable": "Runtime status is not available.",
+      "dockerWslUnavailable": "Docker/WSL status is not available.",
+      "noPersistedUploadJob": "No persisted upload job found in the active state store.",
+      "walReady": "WAL ready",
+      "uploadMetricsReachable": "upload-metrics reachable",
+      "storageFree": "{{amount}} free",
+      "developmentUploadRunning": "Development upload scenario is running.",
+      "developmentUploadRunningDetail": "Development upload scenario is running. This is not an operator job."
+    }
   },
   "pageSubtitle": {
     "dashboard": "Upload, DB, and runtime status",
@@ -103,7 +186,8 @@
       "edge": "Edge Function",
       "wsl": "WSL",
       "grafana": "Grafana",
-      "containers": "Containers"
+      "containers": "Containers",
+      "stateContext": "State context"
     },
     "containers": {
       "detail": "{{running}}/{{total}} running",
@@ -119,6 +203,29 @@
       "alreadyStopped": "Local Supabase containers are already stopped.",
       "requiredContainerMissing": "Required containers are missing. v1 does not create a new stack.",
       "dockerUnavailable": "Docker is unavailable."
+    },
+    "stateContext": {
+      "detail": "{{contextClass}} / {{storageStatus}}"
+    },
+    "serviceStatus": {
+      "ready": "ready",
+      "running": "running",
+      "attention": "attention",
+      "blocked": "blocked",
+      "unknown": "unknown",
+      "unreachable": "unreachable",
+      "unhealthy": "unhealthy",
+      "stopped": "stopped",
+      "missing": "missing",
+      "starting": "starting",
+      "stopping": "stopping",
+      "timed_out": "timed out"
+    },
+    "reason": {
+      "ready": "Local Supabase core runtime is ready.",
+      "docker_unreachable": "Docker is not reachable from the backend process.",
+      "edge_probe_timeout": "Edge route probe timed out.",
+      "required_container_missing": "Required runtime containers are missing."
     }
   },
   "settings": {
@@ -206,6 +313,9 @@
       "config": "Config file",
       "env": "Environment",
       "process": "Process environment"
+    },
+    "stateContext": {
+      "label": "State context"
     }
   },
   "upload": {
@@ -429,7 +539,13 @@
       "loading": "Loading job logs...",
       "error": "Job logs could not be loaded.",
       "empty": "No upload job events yet.",
-      "mockMessage": "Development job log row. Switch to API mode to read persisted job events."
+      "mockMessage": "Development job log row. Switch to API mode to read persisted job events.",
+      "events": {
+        "jobFinished": "Upload job finished with status {{status}}.",
+        "fileProgressWithName": "Progress {{filename}}: {{processed}}/{{total}}.",
+        "fileProgress": "Progress {{processed}}/{{total}}.",
+        "fileCompleted": "Completed {{filename}}."
+      }
     },
     "audit": {
       "title": "Audit Logs",
@@ -494,5 +610,17 @@
   "mode": {
     "upload": "Upload",
     "retry_failed": "Retry Failed"
+  },
+  "stateContext": {
+    "class": {
+      "operator_package": "Operator/package state",
+      "development_default": "Development state",
+      "unknown": "Unknown state"
+    },
+    "storage": {
+      "present": "storage present",
+      "missing": "storage missing",
+      "unknown": "storage unknown"
+    }
   }
 }

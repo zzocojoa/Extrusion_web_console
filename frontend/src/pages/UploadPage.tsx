@@ -34,6 +34,7 @@ import {
   type PreviewSummary,
   type PreviewSortKey,
 } from "../api/uploadPreview";
+import { localizeJobEvent, type Translate } from "../components/dashboard/localizedDashboardText";
 import { StatusBadge } from "../components/status/StatusBadge";
 import type { StatusTone } from "./dashboard/dashboardTypes";
 
@@ -1073,6 +1074,7 @@ function JobFileTable({ files }: { files: UploadJobDetail["files"] }) {
 
 function JobEvents({ events }: { events: JobEvent[] }) {
   const { t } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
   return (
     <section className="panel">
       <div className="panel__header">
@@ -1086,7 +1088,7 @@ function JobEvents({ events }: { events: JobEvent[] }) {
             <span className="job-log-line__time">{formatDateTime(event.ts)}</span>
             <span className="job-log-line__level">{event.level}</span>
             <span className="job-log-line__type">{event.eventType}</span>
-            <span className="job-log-line__message">{event.message}</span>
+            <span className="job-log-line__message">{localizeJobEvent(event, translate)}</span>
           </div>
         ))}
       </div>

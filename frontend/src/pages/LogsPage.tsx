@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { fetchAuditLogs, type AuditLog, type AuditLogListResponse, type AuditQuery, type AuditResult } from "../api/audit";
 import { fetchLatestUploadJob, type JobEvent } from "../api/uploadJobs";
+import { localizeJobEvent, type Translate } from "../components/dashboard/localizedDashboardText";
 import { StatusBadge } from "../components/status/StatusBadge";
 import type { StatusTone } from "./dashboard/dashboardTypes";
 
@@ -236,6 +237,7 @@ interface JobLogsPanelProps {
 
 function JobLogsPanel({ events, isError, isLoading, showMock }: JobLogsPanelProps) {
   const { t } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
   const visibleEvents = showMock
     ? [
         {
@@ -268,7 +270,7 @@ function JobLogsPanel({ events, isError, isLoading, showMock }: JobLogsPanelProp
                 <span className="job-log-line__time">{formatDateTime(event.ts)}</span>
                 <span className="job-log-line__level">{event.level}</span>
                 <span className="job-log-line__type">{event.eventType}</span>
-                <span className="job-log-line__message">{event.message}</span>
+                <span className="job-log-line__message">{localizeJobEvent(event, translate)}</span>
               </div>
             ))
           )}

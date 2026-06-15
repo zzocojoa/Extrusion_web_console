@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { ConfigApiError, fetchConfig, saveConfig, type ConfigItem, type ConfigResponse, type ConfigSaveValues } from "../api/config";
 import { unknownStateContext } from "../api/stateContext";
+import { stateContextLabel, type Translate } from "../components/dashboard/localizedDashboardText";
 
 const useApiConfig = import.meta.env.VITE_API_MODE === "api";
 const secretPlaceholder = "********";
@@ -118,6 +119,7 @@ const mockConfig: ConfigResponse = {
 
 export function SettingsPage() {
   const { t } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
   const queryClient = useQueryClient();
   const [formValues, setFormValues] = useState<FormState>({});
   const [saveStatus, setSaveStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -189,8 +191,8 @@ export function SettingsPage() {
           <div className="settings-header__meta">
             <span>{t("settings.editor.configFile")}</span>
             <code>{useApiConfig ? t("settings.editor.configFileHidden") : t("settings.editor.mockMode")}</code>
-            <span>{t("settings.stateContext.label", { defaultValue: "State context" })}</span>
-            <code>{config?.stateContext?.label ?? unknownStateContext.label}</code>
+            <span>{t("settings.stateContext.label")}</span>
+            <code>{stateContextLabel(config?.stateContext ?? unknownStateContext, translate)}</code>
           </div>
         </div>
 
