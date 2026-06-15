@@ -127,10 +127,10 @@
       "subtitle": "config JSON에 저장 가능한 값만 수정합니다. 환경 변수로 덮어쓴 값은 읽기 전용입니다.",
       "loading": "설정을 불러오는 중...",
       "error": "설정을 불러오지 못했습니다.",
-      "apiModeRequired": "Mock 모드에서는 저장하지 않습니다. 실제 저장은 API 모드에서 동작합니다.",
+      "apiModeRequired": "Development 모드에서는 저장하지 않습니다. 실제 저장은 API 모드에서 동작합니다.",
       "configFile": "설정 파일",
       "configFileHidden": "로컬 경로는 숨김",
-      "mockMode": "mock mode",
+      "mockMode": "development mode",
       "envOverride": "{{envKey}} override",
       "secretHidden": "값 숨김",
       "secretPlaceholder": "새 값 입력 시에만 저장"

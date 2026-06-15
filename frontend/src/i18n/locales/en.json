@@ -127,10 +127,10 @@
       "subtitle": "Edit only values that can be written to config JSON. Environment-overridden values are read-only.",
       "loading": "Loading settings...",
       "error": "Settings could not be loaded.",
-      "apiModeRequired": "Mock mode does not save settings. Real saves run in API mode.",
+      "apiModeRequired": "Development mode does not save settings. Real saves run in API mode.",
       "configFile": "Config file",
       "configFileHidden": "Local path hidden",
-      "mockMode": "mock mode",
+      "mockMode": "development mode",
       "envOverride": "{{envKey}} override",
       "secretHidden": "value hidden",
       "secretPlaceholder": "Saved only when replaced"
@@ -421,7 +421,7 @@
       "loading": "Loading job logs...",
       "error": "Job logs could not be loaded.",
       "empty": "No upload job events yet.",
-      "mockMessage": "Mock job log row. Switch to API mode to read persisted job events."
+      "mockMessage": "Development job log row. Switch to API mode to read persisted job events."
     },
     "audit": {
       "title": "Audit Logs",
