@@ -36,8 +36,6 @@ import {
 } from "../api/uploadPreview";
 import { StatusBadge } from "../components/status/StatusBadge";
 import type { StatusTone } from "./dashboard/dashboardTypes";
-import { getMockUploadJob } from "./upload/mockUploadJob";
-import { getMockUploadPreview } from "./upload/mockUploadPreview";
 
 const API_MODE = import.meta.env.VITE_API_MODE === "api";
 
@@ -209,6 +207,7 @@ export function UploadPage() {
     queryFn: async () => {
       if (!previewRunId) return null;
       if (!API_MODE) {
+        const { getMockUploadPreview } = await import("./upload/mockUploadPreview");
         return getMockUploadPreview(
           previewRunId,
           mockStartedAt ?? Date.now(),
@@ -246,6 +245,7 @@ export function UploadPage() {
     queryFn: async () => {
       if (!jobId) return null;
       if (!API_MODE) {
+        const { getMockUploadJob } = await import("./upload/mockUploadJob");
         return getMockUploadJob(
           jobId,
           mockJobStartedAt ?? Date.now(),

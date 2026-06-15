@@ -2,7 +2,7 @@ import type { DashboardResponse } from "./dashboardTypes";
 
 const mockStateContext = {
   contextClass: "development_default",
-  label: "Demo state",
+  label: "Development state",
   storageStatus: "present",
   source: "default",
 } as const;
@@ -11,7 +11,7 @@ export const mockDashboardData: DashboardResponse = {
   overall: {
     state: "running",
     title: "업로드 실행 중",
-    message: "현재 12/18 파일 처리, 실패 0, 평균 처리 속도 24,000 rows/min.",
+    message: "Development upload scenario is running. This is not an operator job.",
     action: "open_job",
   },
   stateContext: mockStateContext,
@@ -26,7 +26,7 @@ export const mockDashboardData: DashboardResponse = {
       id: "upload",
       label: "업로드",
       tone: "running",
-      value: "12/18 files",
+      value: "2/3 training files",
       detail: "실패 0 · ETA 4분",
     },
     {
@@ -60,7 +60,7 @@ export const mockDashboardData: DashboardResponse = {
     },
   ],
   currentJob: {
-    jobId: "job_20260601_0912",
+    jobId: "dev_job_running",
     status: "running",
     progressPct: 67,
     filesDone: 12,
@@ -68,11 +68,11 @@ export const mockDashboardData: DashboardResponse = {
     rowsSent: 182440,
     startedAt: "2026-06-01T09:12:00+09:00",
     stateContext: mockStateContext,
-    latestMessage: "PLC 2026-06-01 데이터 업로드 중",
+    latestMessage: "Development upload scenario is running.",
   },
   recentJobs: [
     {
-      jobId: "job_20260601_0912",
+      jobId: "dev_job_running",
       status: "running",
       startedAt: "2026-06-01T09:12:00+09:00",
       stateContext: mockStateContext,
@@ -82,10 +82,10 @@ export const mockDashboardData: DashboardResponse = {
       rowsSent: 182440,
       failureCount: 0,
       warningCount: 0,
-      latestMessage: "PLC 2026-06-01 데이터 업로드 중",
+      latestMessage: "Development upload scenario is running.",
     },
     {
-      jobId: "job_20260531_1745",
+      jobId: "dev_job_partial",
       status: "partial_failed",
       startedAt: "2026-05-31T17:45:00+09:00",
       stateContext: mockStateContext,
@@ -98,7 +98,7 @@ export const mockDashboardData: DashboardResponse = {
       latestMessage: "TEMP 파일 2개 재시도 필요",
     },
     {
-      jobId: "job_20260531_1010",
+      jobId: "dev_job_succeeded",
       status: "succeeded",
       startedAt: "2026-05-31T10:10:00+09:00",
       stateContext: mockStateContext,
@@ -172,8 +172,8 @@ export const mockDashboardData: DashboardResponse = {
       result: "success",
       action: "upload.start",
       actor: "local\\operator",
-      summary: "대상 18개, partial=false",
-      jobId: "job_20260601_0912",
+      summary: "3 training targets, partial=false",
+      jobId: "dev_job_running",
     },
     {
       auditId: "audit_002",
@@ -249,7 +249,7 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
     data.recentJobs = [
       {
         ...data.recentJobs[1],
-        jobId: "job_20260531_1745",
+        jobId: "dev_job_partial",
         status: "partial_failed",
         latestMessage: "일부 중복 3건과 TEMP 실패 2건 확인 필요",
       },
@@ -307,7 +307,7 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
     data.recentJobs = [
       {
         ...data.recentJobs[0],
-        jobId: "job_20260601_0920",
+        jobId: "dev_job_blocked",
         status: "interrupted",
         filesDone: 0,
         filesTotal: 18,
@@ -327,7 +327,7 @@ export function getMockDashboardScenario(state: DashboardResponse["overall"]["st
         action: "upload.start",
         actor: "local\\operator",
         summary: "Local Supabase unreachable",
-        jobId: "job_20260601_0920",
+        jobId: "dev_job_blocked",
       },
       ...data.auditSummary,
     ];
@@ -360,7 +360,7 @@ export function getLocalizedMockDashboard(
     },
     running: {
       title: "Upload running",
-      message: "Processing 12/18 files, 0 failures, average speed 24,000 rows/min.",
+      message: "Development upload scenario is running. This is not an operator job.",
     },
   };
 

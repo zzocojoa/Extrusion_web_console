@@ -41,20 +41,20 @@ const numericKeys = new Set([
 ]);
 
 const mockConfig: ConfigResponse = {
-  configFilePath: "mock://app-config",
+  configFilePath: "development-config",
   stateContext: {
     ...unknownStateContext,
     contextClass: "development_default",
-    label: "Mock state",
+    label: "Development state",
     storageStatus: "present",
     source: "default",
   },
   items: [
-    { key: "plcDataDir", label: "PLC directory", value: "demo://plc-source", source: "config", secret: false, envKey: "EWC_PLC_DATA_DIR", overridden: false },
+    { key: "plcDataDir", label: "PLC directory", value: "training-source/plc", source: "config", secret: false, envKey: "EWC_PLC_DATA_DIR", overridden: false },
     {
       key: "temperatureDataDir",
       label: "Temperature directory",
-      value: "mock://temperature-source",
+      value: "training-source/temperature",
       source: "default",
       secret: false,
       envKey: "EWC_TEMPERATURE_DATA_DIR",
@@ -76,7 +76,7 @@ const mockConfig: ConfigResponse = {
     {
       key: "localSupabaseProjectPath",
       label: "Project path",
-      value: "mock://local-supabase-project",
+      value: "development-runtime-project",
       source: "config",
       secret: false,
       envKey: "EWC_LOCAL_SUPABASE_PROJECT_PATH",
@@ -85,7 +85,7 @@ const mockConfig: ConfigResponse = {
     {
       key: "localSupabaseWslPath",
       label: "WSL path",
-      value: "/mock/local-supabase-project",
+      value: "/development/local-supabase-project",
       source: "config",
       secret: false,
       envKey: "EWC_LOCAL_SUPABASE_WSL_PATH",
