@@ -51,11 +51,11 @@ const mockConfig: ConfigResponse = {
     source: "default",
   },
   items: [
-    { key: "plcDataDir", label: "Process data directory", value: "training-source/plc", source: "config", secret: false, envKey: "EWC_PLC_DATA_DIR", overridden: false },
+    { key: "plcDataDir", label: "Process data directory", value: "development sample only", source: "default", secret: false, envKey: "EWC_PLC_DATA_DIR", overridden: false },
     {
       key: "temperatureDataDir",
       label: "Production daily report directory",
-      value: "training-source/temperature",
+      value: "development sample only",
       source: "default",
       secret: false,
       envKey: "EWC_TEMPERATURE_DATA_DIR",

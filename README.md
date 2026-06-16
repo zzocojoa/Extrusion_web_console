@@ -215,6 +215,10 @@ $env:EWC_SUPABASE_EDGE_URL="<local Supabase Edge URL>"
 $env:EWC_STATE_DB_PATH="<local state DB path>"
 ```
 
+For developer API-mode runs started through `launcher/start_web_console.ps1`, the launcher enforces the approved mapped-drive process-data source class before the backend starts. If process env, repo `.env`, or config JSON provides a non-canonical `plcDataDir`, the launcher refuses to start by default so Preview cannot drift to a fixture, stale UNC, or other wrong source. `-AllowNonCanonicalSource` is available only as an explicit diagnostics opt-in. Backend `Settings` does not silently replace explicit env/config source bindings. This is a developer launcher guard, not an operator package pin. Verify the active source with read-only `GET /api/config` and a backend-side path existence preflight before running Upload Preview.
+
+The API-mode frontend does not use Settings mock fallback values for active source binding. Settings, Upload Preview, and Start Upload readiness must be judged from the backend `/api/config` response and its sanitized `items` / `targetClasses` fields. The default frontend mock build may show development sample values only; it is for screenshot QA and UI development, not operational source evidence.
+
 `EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB is unreachable, preview runs still persist and DB-dependent CSV candidates are shown as `risky/db_unreachable` under a `partial_failed` run.
 
 `EWC_SUPABASE_ANON_KEY` and either `EWC_SUPABASE_EDGE_URL` or `EWC_SUPABASE_URL` are required for real Start Upload and Retry Failed execution. Preview-origin upload disables the legacy latest-timestamp Smart Sync filter and relies on the existing `all_metrics(timestamp, device_id)` upsert safety for final duplicate protection.
