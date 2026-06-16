@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { fetchAuditLogs, type AuditLog, type AuditLogListResponse, type AuditQuery, type AuditResult } from "../api/audit";
 import { fetchLatestUploadJob, type JobEvent } from "../api/uploadJobs";
+import { localizeDiagnosticMessage, localizeJobEvent, type Translate } from "../components/dashboard/localizedDashboardText";
 import { StatusBadge } from "../components/status/StatusBadge";
 import type { StatusTone } from "./dashboard/dashboardTypes";
 
@@ -236,6 +237,7 @@ interface JobLogsPanelProps {
 
 function JobLogsPanel({ events, isError, isLoading, showMock }: JobLogsPanelProps) {
   const { t } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
   const visibleEvents = showMock
     ? [
         {
@@ -268,7 +270,7 @@ function JobLogsPanel({ events, isError, isLoading, showMock }: JobLogsPanelProp
                 <span className="job-log-line__time">{formatDateTime(event.ts)}</span>
                 <span className="job-log-line__level">{event.level}</span>
                 <span className="job-log-line__type">{event.eventType}</span>
-                <span className="job-log-line__message">{event.message}</span>
+                <span className="job-log-line__message">{localizeJobEvent(event, translate)}</span>
               </div>
             ))
           )}
@@ -393,6 +395,7 @@ function AuditLogsPanel(props: AuditLogsPanelProps) {
 
 function AuditTable({ items }: { items: AuditLog[] }) {
   const { t } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
   if (items.length === 0) return <div className="audit-empty">{t("logs.audit.empty")}</div>;
   return (
     <div className="table-scroll">
@@ -410,24 +413,27 @@ function AuditTable({ items }: { items: AuditLog[] }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
-            <tr className={`row--${resultTone[item.result]}`} key={item.auditId}>
-              <td className="num">{formatDateTime(item.ts)}</td>
-              <td><StatusBadge tone={resultTone[item.result]} label={t(`logs.audit.results.${item.result}`)} /></td>
-              <td className="mono-cell">{item.action}</td>
-              <td>
-                <span className="audit-target">{item.targetType}</span>
-                <small>{item.targetId ?? "-"}</small>
-              </td>
-              <td>{item.actor}</td>
-              <td className="mono-cell">{item.jobId ?? "-"}</td>
-              <td><ParamChips params={item.params} /></td>
-              <td>
-                <span className={item.errorCode ? "audit-error-code" : "muted"}>{item.errorCode ?? "-"}</span>
-                {item.errorMessage ? <small>{item.errorMessage}</small> : null}
-              </td>
-            </tr>
-          ))}
+          {items.map((item) => {
+            const errorMessage = item.errorMessage ? localizeDiagnosticMessage(item.errorMessage, translate) : null;
+            return (
+              <tr className={`row--${resultTone[item.result]}`} key={item.auditId}>
+                <td className="num">{formatDateTime(item.ts)}</td>
+                <td><StatusBadge tone={resultTone[item.result]} label={t(`logs.audit.results.${item.result}`)} /></td>
+                <td className="mono-cell">{item.action}</td>
+                <td>
+                  <span className="audit-target">{item.targetType}</span>
+                  <small>{item.targetId ?? "-"}</small>
+                </td>
+                <td>{item.actor}</td>
+                <td className="mono-cell">{item.jobId ?? "-"}</td>
+                <td><ParamChips params={item.params} /></td>
+                <td>
+                  <span className={item.errorCode ? "audit-error-code" : "muted"}>{item.errorCode ?? "-"}</span>
+                  {errorMessage ? <small>{errorMessage}</small> : null}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { DashboardOverall, OverallSystemState } from "../../pages/dashboard/dashboardTypes";
 import { StatusBadge } from "../status/StatusBadge";
+import { dashboardOverallMessage, dashboardOverallTitle, type Translate } from "./localizedDashboardText";
 
 const overallIcon: Record<OverallSystemState, typeof CheckCircle> = {
   ready: CheckCircle,
@@ -17,6 +18,7 @@ interface SafetySummaryBannerProps {
 
 export function SafetySummaryBanner({ overall }: SafetySummaryBannerProps) {
   const { t } = useTranslation();
+  const translate: Translate = (key, options) => String(t(key, options));
   const Icon = overallIcon[overall.state];
   const actionLabel = overall.action
     ? {
@@ -38,8 +40,8 @@ export function SafetySummaryBanner({ overall }: SafetySummaryBannerProps) {
         <div className="safety-summary__kicker">
           <StatusBadge tone={overall.state === "ready" ? "ready" : overall.state} />
         </div>
-        <h2>{overall.title}</h2>
-        <p>{overall.message}</p>
+        <h2>{dashboardOverallTitle(overall, translate)}</h2>
+        <p>{dashboardOverallMessage(overall, translate)}</p>
       </div>
       {actionLabel ? (
         <button className="button button--secondary" type="button">

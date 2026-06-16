@@ -107,7 +107,7 @@ export interface RuntimeCheckRow {
 }
 
 export interface WarningQueueRow {
-  id: "partial_overlap" | "failed_retry" | "risky" | "stale_preview" | "supabase_unreachable";
+  id: "partial_overlap" | "failed_retry" | "failed_files" | "risky" | "job_warnings" | "stale_preview" | "supabase_unreachable" | "runtime_gate";
   label: string;
   tone: StatusTone;
   count: number;

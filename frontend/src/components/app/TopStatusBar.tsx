@@ -15,7 +15,7 @@ export function TopStatusBar({ title, subtitle }: TopStatusBarProps) {
         <h1 id="dashboard-title">{title}</h1>
         <p>{subtitle}</p>
       </div>
-      <StatusChipGroup chips={data?.topbarChips ?? []} />
+      <StatusChipGroup chips={data?.topbarChips ?? []} stateContext={data?.stateContext} />
     </header>
   );
 }
