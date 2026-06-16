@@ -8,6 +8,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LAUNCHER_PS1 = REPO_ROOT / "launcher" / "start_web_console.ps1"
 LAUNCHER_BAT = REPO_ROOT / "launcher" / "start_web_console.bat"
+EDGE_RUNTIME_PS1 = REPO_ROOT / "launcher" / "start_edge_runtime.ps1"
 SHORTCUT_PS1 = REPO_ROOT / "launcher" / "install_shortcuts.ps1"
 SHORTCUT_BAT = REPO_ROOT / "launcher" / "install_shortcuts.bat"
 
@@ -15,6 +16,7 @@ SHORTCUT_BAT = REPO_ROOT / "launcher" / "install_shortcuts.bat"
 def test_launcher_scripts_exist_and_wrapper_targets_powershell() -> None:
     assert LAUNCHER_PS1.exists()
     assert LAUNCHER_BAT.exists()
+    assert EDGE_RUNTIME_PS1.exists()
     assert SHORTCUT_PS1.exists()
     assert SHORTCUT_BAT.exists()
 
@@ -222,6 +224,67 @@ def test_launcher_powershell_syntax_parses() -> None:
     command = (
         "$tokens=$null; $errors=$null; "
         f"[System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw -LiteralPath '{LAUNCHER_PS1}'), [ref]$errors) | Out-Null; "
+        "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }"
+    )
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_edge_runtime_launcher_uses_supported_supabase_serve_path() -> None:
+    script = EDGE_RUNTIME_PS1.read_text(encoding="utf-8")
+    lowered = script.lower()
+
+    assert "supabase" in script
+    assert '"functions", "serve"' in script
+    assert '"--workdir", $RepoRoot' in script
+    assert '"--yes"' in script
+    assert "Start-Process" in script
+    assert "-WindowStyle Hidden" in script
+    assert "upload-metrics\\index.ts" in script
+    assert "401" in script
+    assert "403" in script
+    assert "GET=$($initial.AuthBoundary.GetClass); POST=$($initial.AuthBoundary.PostClass)" in script
+    assert "--no-verify-jwt" not in lowered
+    assert "invoke-expression" not in lowered
+
+
+def test_edge_runtime_launcher_avoids_destructive_runtime_actions() -> None:
+    script = EDGE_RUNTIME_PS1.read_text(encoding="utf-8")
+    lowered = script.lower()
+
+    forbidden_fragments = [
+        "supabase init",
+        "supabase reset",
+        "supabase db reset",
+        "docker run",
+        "docker create",
+        "docker rm",
+        "docker volume",
+        "docker prune",
+        "docker compose up",
+        "docker compose down",
+        "upload preview",
+        "start upload",
+        "retry failed",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment not in lowered
+
+
+def test_edge_runtime_launcher_powershell_syntax_parses() -> None:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    command = (
+        "$tokens=$null; $errors=$null; "
+        f"[System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw -LiteralPath '{EDGE_RUNTIME_PS1}'), [ref]$errors) | Out-Null; "
         "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }"
     )
     result = subprocess.run(
