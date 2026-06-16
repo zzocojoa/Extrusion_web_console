@@ -21,6 +21,7 @@ For non-developers: the backend can still keep English diagnostic text for logs 
 | Warning queue | Backend warning labels/impact text were shown directly. | Map known warning ids to locale keys. |
 | Recent jobs/current job | Backend job count message was shown directly. | Translate known job-count pattern. |
 | Logs and Upload job events | Known event messages were shown directly. | Translate known job event patterns without changing event codes. |
+| Audit log error messages | Known backend diagnostic `errorMessage` values could be rendered directly. | Translate known audit diagnostics at render time; keep unknown fallback visible. |
 | Settings | State-context label and env override wording could remain English. | Map known state context classes and Korean env override wording. |
 
 ## Design Decision
@@ -69,6 +70,7 @@ Implemented:
 - Dashboard status matrix, safety banner, top bar, warning queue, recent jobs, and audit summary now localize known backend text classes.
 - Runtime panel localizes known runtime reason/status classes.
 - Upload and Logs job event views localize known event message patterns.
+- Audit log error messages localize known backend diagnostics such as Preview timeout, source missing, and local token required.
 - Settings state-context and Korean env override wording are localized.
 
 Remaining gaps:

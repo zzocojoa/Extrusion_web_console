@@ -121,7 +121,7 @@ export function runtimeStateContextDetail(stateContext: StateContext, t: Transla
 }
 
 export function runtimeStatusLabel(status: string, t: Translate): string {
-  const normalized = status.replace(/\s+/g, "_");
+  const normalized = status.trim().toLowerCase().replace(/\s+/g, "_");
   const key = `runtime.serviceStatus.${normalized}`;
   const translated = t(key);
   return translated === key ? status : translated;
@@ -234,6 +234,9 @@ export function localizeDiagnosticMessage(message: string | null | undefined, t:
     "Upload start is blocked because Local Supabase is not responding.": "dashboard.overall.blocked.message",
     "Runtime status is not available.": "dashboard.messages.runtimeUnavailable",
     "Docker/WSL status is not available.": "dashboard.messages.dockerWslUnavailable",
+    "Preview run exceeded the configured time limit.": "upload.reason.timeout",
+    "Configured source folder is missing.": "upload.reason.source_missing",
+    "Local console token is missing or invalid. Restart the web console from the launcher.": "settings.save.reason.local_token_required",
     "No persisted upload job found in the active state store.": "dashboard.messages.noPersistedUploadJob",
     "No failed files in the latest job.": "dashboard.warnings.rows.failed_retry.empty",
     "Retry review is needed.": "dashboard.warnings.rows.failed_retry.impact",
