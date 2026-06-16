@@ -8,7 +8,7 @@
 
 ## Summary
 
-The implementation matches the plan: backend upload batches are deduplicated before Edge POST, the Edge function has a defensive dedupe step before Postgres upsert, and tests cover deterministic last-wins behavior plus counter separation.
+The implementation matches the plan: backend upload batches are deduplicated before Edge POST, the Edge function has a defensive dedupe step before Postgres upsert, and tests cover deterministic last-wins behavior plus counter separation. The known failed job `upl_59575d0cbe67` already had partial DB mutation evidence of processed/uploaded/accepted `2000 / 2000 / 2000` and DB delta `+2000`; retry remains gated until this fix is merged and separately approved.
 
 ## Implemented Items
 
@@ -44,5 +44,5 @@ The implementation matches the plan: backend upload batches are deduplicated bef
 ## Next Steps
 
 - [x] Run targeted tests and build checks.
-- [ ] Create PR for review.
+- [x] Create PR for review.
 - [ ] Keep `upl_59575d0cbe67` retry forbidden until this fix is merged and a separate approval is given.

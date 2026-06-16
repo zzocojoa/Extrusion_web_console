@@ -13,7 +13,7 @@ Prevent upload batches from sending duplicate `(timestamp, device_id)` keys to t
 
 ### 1.2 Background
 
-A large operational upload attempt failed after partial progress. Read-only investigation showed the target file contained more physical canonical rows than unique upload keys. Preview reconciliation counted unique keys, while upload execution streamed physical canonical rows. A later product batch could therefore contain duplicate conflict keys and fail at the Edge/Postgres upsert boundary.
+A large operational upload attempt failed after partial progress. Read-only investigation showed failed job `upl_59575d0cbe67` had already processed/uploaded/accepted `2000 / 2000 / 2000` rows and DB delta `+2000` before a later duplicate-key batch failed. The target file contained more physical canonical rows than unique upload keys. Preview reconciliation counted unique keys, while upload execution streamed physical canonical rows. A later product batch could therefore contain duplicate conflict keys and fail at the Edge/Postgres upsert boundary.
 
 ## 2. Goals
 
