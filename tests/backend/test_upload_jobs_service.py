@@ -3,7 +3,7 @@ from pathlib import Path
 from backend.app.core.settings import Settings
 from backend.app.db.upload_job_repository import UploadJobRepository, decode_json
 from backend.app.schemas.upload_jobs import UploadJobStatus
-from backend.app.services.upload_jobs import UploadJobService, parse_edge_accepted_rows
+from backend.app.services.upload_jobs import UploadJobService, deduplicate_upload_records, parse_edge_accepted_rows
 from tests.backend.test_upload_jobs_repository_contract import create_preview_with_items
 
 
@@ -69,6 +69,71 @@ def test_upload_job_service_uploads_preview_targets_and_disables_smart_sync(tmp_
     completed_data = decode_json(completed["data_json"], {})
     assert completed_data["acceptedRows"] == 2
     assert completed_data["insertedRows"] == 2
+
+
+def test_deduplicate_upload_records_uses_last_record_for_duplicate_key() -> None:
+    result = deduplicate_upload_records(
+        [
+            {"timestamp": "2026-06-02T09:00:00+09:00", "device_id": "extruder_plc", "temperature": 1},
+            {"timestamp": "2026-06-02T09:01:00+09:00", "device_id": "extruder_plc", "temperature": 2},
+            {"timestamp": "2026-06-02T09:00:00+09:00", "device_id": "extruder_plc", "temperature": 3},
+        ],
+    )
+
+    assert result.duplicate_rows == 1
+    assert result.records == [
+        {"timestamp": "2026-06-02T09:00:00+09:00", "device_id": "extruder_plc", "temperature": 3},
+        {"timestamp": "2026-06-02T09:01:00+09:00", "device_id": "extruder_plc", "temperature": 2},
+    ]
+
+
+def test_upload_job_service_deduplicates_duplicate_keys_before_edge_upload(tmp_path: Path) -> None:
+    repository, job_id, _csv_path = prepare_target_job(
+        tmp_path,
+        "\n".join(
+            [
+                "timestamp,device_id,temperature",
+                "2026-06-02T09:00:00+09:00,extruder_plc,1",
+                "2026-06-02T09:01:00+09:00,extruder_plc,2",
+                "2026-06-02T09:00:00+09:00,extruder_plc,3",
+                "",
+            ],
+        ),
+    )
+    job_file_id = repository.list_job_files(job_id)[0]["job_file_id"]
+    with repository.connect() as connection:
+        connection.execute(
+            "UPDATE upload_job_files SET row_count = ? WHERE job_file_id = ?",
+            (3, job_file_id),
+        )
+    uploader = FakeUploader()
+    service = UploadJobService(
+        Settings(supabase_edge_url="http://localhost/upload", supabase_anon_key="anon"),
+        repository,
+        uploader=uploader,  # type: ignore[arg-type]
+    )
+
+    service.run_job(job_id)
+
+    job = repository.get_job(job_id)
+    files = repository.list_job_files(job_id)
+    events = repository.list_events(job_id)
+    deduplicated = next(event for event in events if event["event_type"] == "file.deduplicated")
+    deduplicated_data = decode_json(deduplicated["data_json"], {})
+    assert job["status"] == UploadJobStatus.succeeded.value
+    assert job["processed_rows"] == 3
+    assert job["uploaded_rows"] == 2
+    assert job["inserted_rows"] == 2
+    assert files[0]["processed_rows"] == 3
+    assert files[0]["uploaded_rows"] == 2
+    assert files[0]["inserted_rows"] == 2
+    assert len(uploader.batches) == 1
+    assert len(uploader.batches[0]) == 2
+    assert uploader.batches[0][0]["timestamp"] == "2026-06-02T09:00:00+09:00"
+    assert uploader.batches[0][0]["temperature"] == 3
+    assert deduplicated_data["inputRows"] == 3
+    assert deduplicated_data["outputRows"] == 2
+    assert deduplicated_data["duplicateRows"] == 1
 
 
 def test_parse_edge_accepted_rows_prefers_canonical_count() -> None:
