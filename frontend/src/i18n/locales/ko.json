@@ -27,7 +27,7 @@
       "storage": "WSL 저장소",
       "grafana": "Grafana",
       "stateStore": "상태 저장소",
-      "state_store": "?? ???"
+      "state_store": "상태 저장소"
     },
     "jobs": {
       "title": "최근 작업",
@@ -41,7 +41,7 @@
       "failures": "실패",
       "warnings": "주의",
       "message": "메시지",
-      "stateContext": "?? ????"
+      "stateContext": "상태 컨텍스트"
     },
     "runtime": {
       "title": "런타임 상태",
@@ -56,19 +56,19 @@
       "impact": "영향",
       "rows": {
         "failed_retry": {
-          "label": "?? ??",
-          "impact": "??? ??? ?????.",
-          "empty": "?? ??? ?? ??? ????."
+          "label": "실패 파일",
+          "impact": "실패한 파일은 재시도 검토가 필요합니다.",
+          "empty": "최근 작업에 실패한 파일이 없습니다."
         },
         "risky": {
-          "label": "?? ??",
-          "impact": "?? ?? ??? ?????.",
-          "empty": "?? ??? ??? ??? ????."
+          "label": "주의 파일",
+          "impact": "주의 파일 검토가 필요합니다.",
+          "empty": "최근 작업에 주의 파일이 없습니다."
         },
         "supabase_unreachable": {
-          "label": "??? ???",
-          "impact": "Local Supabase core runtime? ??? ? ????.",
-          "empty": "??? ???? Dashboard ??? ?? ????."
+          "label": "런타임 연결",
+          "impact": "Local Supabase core runtime에 연결할 수 없습니다.",
+          "empty": "런타임 게이트가 Dashboard 검토를 차단하지 않습니다."
         }
       }
     },
@@ -97,7 +97,7 @@
     "error": "Dashboard 상태를 불러오지 못했습니다.",
     "matrix": {
       "upload": {
-        "label": "?? ???"
+        "label": "업로드 상태"
       },
       "supabase": {
         "label": "Local Supabase"
@@ -109,54 +109,54 @@
         "label": "Grafana"
       },
       "state_store": {
-        "label": "?? ???"
+        "label": "상태 저장소"
       }
     },
     "overall": {
       "noJob": {
-        "title": "??? ??? ?? ??",
-        "message": "Dashboard? API ??? ????? ?? ?? ?? ???? ??? ??? ??? ????."
+        "title": "업로드 작업 기록 없음",
+        "message": "Dashboard는 API 모드에 연결되어 있지만 활성 상태 저장소에 저장된 업로드 작업이 없습니다."
       },
       "running": {
-        "title": "??? ?? ?? ?"
+        "title": "업로드 작업 실행 중"
       },
       "succeeded": {
-        "title": "?? ??? ??"
+        "title": "최근 업로드 성공"
       },
       "review": {
-        "title": "?? ??? ?? ??"
+        "title": "최근 업로드 검토 필요"
       },
       "ready": {
-        "title": "??? ???",
-        "message": "Supabase, ?? ???, WSL ???? ???? ?? ??? ????."
+        "title": "업로드 준비됨",
+        "message": "Supabase, 상태 저장소, WSL 저장소가 준비되어 차단 항목이 없습니다."
       },
       "attention": {
-        "title": "?? ??",
-        "message": "?? ?? ?? ??? ??? ??? ????. Upload Preview? ?????."
+        "title": "확인 필요",
+        "message": "일부 중복과 재시도 가능한 실패가 있습니다. Upload Preview를 확인하세요."
       },
       "blocked": {
-        "title": "??? ???",
-        "message": "Local Supabase? ???? ?? ??? ??? ??????."
+        "title": "업로드 차단됨",
+        "message": "Local Supabase가 응답하지 않아 업로드 시작이 차단되었습니다."
       }
     },
     "messages": {
-      "jobCount": "?? {{status}}: ?? {{processed}}, ??? {{uploaded}}, ?? {{accepted}} rows.",
-      "uploadDetail": "{{done}}/{{total}}? ??, {{uploaded}} rows ???.",
-      "stateContextDetail": "???? {{contextClass}}; {{storageStatus}}.",
+      "jobCount": "상태 {{status}}: 처리 {{processed}}, 업로드 {{uploaded}}, 수락 {{accepted}}행.",
+      "uploadDetail": "{{done}}/{{total}}개 파일, {{uploaded}}행 업로드.",
+      "stateContextDetail": "컨텍스트 {{contextClass}}; {{storageStatus}}.",
       "apiDbEdge": "API {{api}}, DB {{db}}, Edge {{edge}}.",
       "wslCli": "WSL {{wsl}}, CLI {{cli}}.",
       "dockerStatus": "Docker {{status}}",
-      "noJobs": "?? ??",
-      "unknown": "???",
-      "dbEdgeOk": "DB + Edge ??",
-      "runtimeUnavailable": "??? ??? ??? ? ????.",
-      "dockerWslUnavailable": "Docker/WSL ??? ??? ? ????.",
-      "noPersistedUploadJob": "?? ?? ????? ??? ??? ??? ?? ?????.",
-      "walReady": "WAL ???",
-      "uploadMetricsReachable": "upload-metrics ???",
-      "storageFree": "{{amount}} ??",
-      "developmentUploadRunning": "??? ??? ???? ?? ?",
-      "developmentUploadRunningDetail": "??? ??? ???????. ?? ??? ????."
+      "noJobs": "작업 없음",
+      "unknown": "알 수 없음",
+      "dbEdgeOk": "DB + Edge 정상",
+      "runtimeUnavailable": "런타임 상태를 사용할 수 없습니다.",
+      "dockerWslUnavailable": "Docker/WSL 상태를 사용할 수 없습니다.",
+      "noPersistedUploadJob": "활성 상태 저장소에 저장된 업로드 작업이 없습니다.",
+      "walReady": "WAL 준비됨",
+      "uploadMetricsReachable": "upload-metrics 연결됨",
+      "storageFree": "{{amount}} 여유",
+      "developmentUploadRunning": "개발용 업로드 시나리오 실행 중",
+      "developmentUploadRunningDetail": "개발용 업로드 시나리오입니다. 운영 작업이 아닙니다."
     }
   },
   "pageSubtitle": {
@@ -187,7 +187,7 @@
       "wsl": "WSL",
       "grafana": "Grafana",
       "containers": "컨테이너",
-      "stateContext": "?? ????"
+      "stateContext": "상태 컨텍스트"
     },
     "containers": {
       "detail": "{{running}}/{{total}} 실행 중",
@@ -208,24 +208,24 @@
       "detail": "{{contextClass}} / {{storageStatus}}"
     },
     "serviceStatus": {
-      "ready": "??",
-      "running": "?? ?",
-      "attention": "?? ??",
-      "blocked": "???",
-      "unknown": "???",
-      "unreachable": "?? ??",
-      "unhealthy": "???",
-      "stopped": "???",
-      "missing": "??",
-      "starting": "?? ?",
-      "stopping": "?? ?",
-      "timed_out": "?? ??"
+      "ready": "정상",
+      "running": "실행 중",
+      "attention": "확인 필요",
+      "blocked": "차단됨",
+      "unknown": "알 수 없음",
+      "unreachable": "연결 불가",
+      "unhealthy": "비정상",
+      "stopped": "중지됨",
+      "missing": "없음",
+      "starting": "시작 중",
+      "stopping": "중지 중",
+      "timed_out": "시간 초과"
     },
     "reason": {
-      "ready": "Local Supabase core runtime? ??????.",
-      "docker_unreachable": "??? ?????? Docker? ??? ? ????.",
-      "edge_probe_timeout": "Edge route probe? ?? ??????.",
-      "required_container_missing": "?? ??? ????? ????."
+      "ready": "Local Supabase core runtime이 준비되었습니다.",
+      "docker_unreachable": "백엔드 프로세스에서 Docker에 연결할 수 없습니다.",
+      "edge_probe_timeout": "Edge route probe가 시간 초과되었습니다.",
+      "required_container_missing": "필수 런타임 컨테이너가 없습니다."
     }
   },
   "settings": {
@@ -237,8 +237,8 @@
       "apiModeRequired": "Development 모드에서는 저장하지 않습니다. 실제 저장은 API 모드에서 동작합니다.",
       "configFile": "설정 파일",
       "configFileHidden": "로컬 경로는 숨김",
-      "mockMode": "?? ??",
-      "envOverride": "{{envKey}} ???",
+      "mockMode": "개발 모드",
+      "envOverride": "{{envKey}} 재정의",
       "secretHidden": "값 숨김",
       "secretPlaceholder": "새 값 입력 시에만 저장"
     },
@@ -288,7 +288,7 @@
       "validationSummary": "입력값을 확인해야 합니다.",
       "integerError": "1~65535 사이의 정수를 입력하세요.",
       "reason": {
-        "config_env_override": "?? ??? ???? ?? ??? ? ????: {{keys}}",
+        "config_env_override": "환경 변수로 재정의된 값은 저장할 수 없습니다: {{keys}}",
         "config_validation_failed": "입력값 검증에 실패했습니다: {{keys}}",
         "config_request_validation_failed": "저장 요청 형식이 올바르지 않습니다.",
         "config_empty_update": "저장할 변경값이 없습니다.",
@@ -315,7 +315,7 @@
       "process": "프로세스 환경"
     },
     "stateContext": {
-      "label": "?? ????"
+      "label": "상태 컨텍스트"
     }
   },
   "upload": {
@@ -541,10 +541,10 @@
       "empty": "아직 업로드 작업 이벤트가 없습니다.",
       "mockMessage": "목 데이터 작업 로그입니다. 저장된 이벤트는 API 모드에서 확인할 수 있습니다.",
       "events": {
-        "jobFinished": "??? ??? {{status}} ??? ??????.",
-        "fileProgressWithName": "{{filename}} ??: {{processed}}/{{total}}.",
-        "fileProgress": "??: {{processed}}/{{total}}.",
-        "fileCompleted": "{{filename}} ??."
+        "jobFinished": "업로드 작업이 {{status}} 상태로 완료되었습니다.",
+        "fileProgressWithName": "{{filename}} 진행: {{processed}}/{{total}}.",
+        "fileProgress": "진행: {{processed}}/{{total}}.",
+        "fileCompleted": "{{filename}} 완료."
       }
     },
     "audit": {
@@ -613,14 +613,14 @@
   },
   "stateContext": {
     "class": {
-      "operator_package": "?? ??? ??",
-      "development_default": "?? ??",
-      "unknown": "?? ?? ??"
+      "operator_package": "운영자 패키지 상태",
+      "development_default": "개발 상태",
+      "unknown": "상태 컨텍스트 알 수 없음"
     },
     "storage": {
-      "present": "?? ??? ??",
-      "missing": "?? ??? ??",
-      "unknown": "?? ??? ???"
+      "present": "상태 저장소 있음",
+      "missing": "상태 저장소 없음",
+      "unknown": "상태 저장소 알 수 없음"
     }
   }
 }
