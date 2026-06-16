@@ -348,7 +348,7 @@
       "eyebrow": "Final upload confirmation",
       "title": "Confirm target count before upload",
       "badge": "Count confirmation required",
-      "warning": "Continuing will create an upload job for {{files}} target files and {{rowsFormatted}} rows. If it succeeds, the local DB row count will increase.",
+      "warning": "Continuing will create an upload job for {{files}} target files and {{rowsFormatted}} expected upload rows. Target physical rows, acceptedRows, and DB row-count delta are reviewed separately.",
       "previewRunId": "Preview run",
       "targetFiles": "Target files",
       "uploadRows": "Upload target rows",
@@ -365,7 +365,14 @@
         "dbStatus": "The DB status must be reachable.",
         "noTarget": "There are no target files or target rows to upload.",
         "risky": "Resolve risky Preview rows before starting upload."
-      }
+      },
+      "targetPhysicalRows": "Target physical rows",
+      "targetUniqueUploadKeys": "Target unique upload keys",
+      "targetDuplicateKeyCount": "Target duplicate key count",
+      "previewDbMatchedKeys": "Preview DB matched keys",
+      "expectedUploadRows": "Expected upload rows",
+      "countSemantics": "Expected upload rows is the approval gate. acceptedRows and the DB row-count delta are checked after execution and may differ from target physical rows.",
+      "partialBreakdown": "Target physical/key breakdown is based on {{loaded}} of {{total}} loaded target files. Expected upload rows remains the confirmation gate."
     },
     "controls": {
       "range": "Range",
@@ -524,6 +531,33 @@
         "resume": "Resume",
         "retry": "Retry",
         "error": "Last error"
+      }
+    },
+    "retryReview": {
+      "eyebrow": "Retry confirmation",
+      "title": "Confirm retry target count",
+      "badge": "Retry count confirmation required",
+      "warning": "Retry Failed will create one retry job for {{rowsFormatted}} remaining physical rows from failed or interrupted files only.",
+      "jobId": "Original job",
+      "retryFiles": "Retry files",
+      "physicalRows": "Physical rows",
+      "uniqueUploadKeys": "Unique upload keys",
+      "duplicateKeyCount": "Duplicate key count",
+      "dbMatchedKeys": "DB matched keys",
+      "resumeOffsetRows": "Already processed rows",
+      "remainingPhysicalRows": "Remaining physical rows",
+      "expectedUploadRows": "Expected upload rows",
+      "acceptedRows": "Accepted rows so far",
+      "unavailable": "Not available from job state",
+      "countSemantics": "Retry job state does not contain Preview-level unique key, duplicate key, DB match, or deduped expected upload row counts. Review the approved Preview evidence before retrying; remaining physical rows is only the typed retry confirmation gate.",
+      "inputLabel": "Type the remaining physical row count {{rows}} to confirm. Commas are allowed.",
+      "cancel": "Cancel",
+      "confirm": "Retry failed upload for {{rowsFormatted}} remaining rows",
+      "pending": "Retrying",
+      "blocked": {
+        "title": "Retry is blocked",
+        "noRetryFiles": "There are no failed or interrupted files to retry.",
+        "noRows": "There are no remaining physical rows to retry."
       }
     }
   },
