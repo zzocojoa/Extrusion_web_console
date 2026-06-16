@@ -261,8 +261,8 @@
       }
     },
     "fields": {
-      "plcDataDir": "PLC folder",
-      "temperatureDataDir": "Temperature folder",
+      "plcDataDir": "Process data folder",
+      "temperatureDataDir": "Production daily report folder",
       "supabaseDbUrl": "Supabase DB URL",
       "supabaseUrl": "Supabase API URL",
       "supabaseAnonKey": "Supabase anon key",
@@ -372,7 +372,7 @@
       "previewMode": "Preview mode",
       "startDate": "Start",
       "endDate": "End",
-      "source": "Source: configured PLC folder",
+      "source": "Source: configured process data folder",
       "search": "Search filename, path, or reason"
     },
     "previewMode": {
@@ -441,7 +441,7 @@
     },
     "kind": {
       "plc": "PLC",
-      "temperature": "Temp"
+      "temperature": "Production daily report"
     },
     "table": {
       "status": "Status",

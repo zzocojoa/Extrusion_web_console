@@ -308,8 +308,8 @@ Sections:
    - Edge Function URL.
    - Derived upload URL preview.
 3. Folders
-   - PLC directory.
-   - Temperature directory, displayed only if backend supports it in v1.
+   - Process data directory.
+   - Production daily report directory, displayed only if backend supports it in v1.
    - WSL VHDX path.
 4. Upload Options
    - Smart Sync.

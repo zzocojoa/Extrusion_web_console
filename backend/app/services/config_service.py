@@ -27,8 +27,8 @@ class ConfigField:
 
 
 CONFIG_FIELDS: tuple[ConfigField, ...] = (
-    ConfigField("plcDataDir", "plc_data_dir", "PLC directory", "EWC_PLC_DATA_DIR", str),
-    ConfigField("temperatureDataDir", "temperature_data_dir", "Temperature directory", "EWC_TEMPERATURE_DATA_DIR", str),
+    ConfigField("plcDataDir", "plc_data_dir", "Process data directory", "EWC_PLC_DATA_DIR", str),
+    ConfigField("temperatureDataDir", "temperature_data_dir", "Production daily report directory", "EWC_TEMPERATURE_DATA_DIR", str),
     ConfigField("supabaseDbUrl", "supabase_db_url", "Supabase DB URL", "EWC_SUPABASE_DB_URL", str, secret=True),
     ConfigField("supabaseUrl", "supabase_url", "Supabase URL", "EWC_SUPABASE_URL", str),
     ConfigField("supabaseAnonKey", "supabase_anon_key", "Supabase anon key", "EWC_SUPABASE_ANON_KEY", str, secret=True),

@@ -261,8 +261,8 @@
       }
     },
     "fields": {
-      "plcDataDir": "PLC 폴더",
-      "temperatureDataDir": "온도 폴더",
+      "plcDataDir": "공정 데이터 폴더",
+      "temperatureDataDir": "생산 일보 폴더",
       "supabaseDbUrl": "Supabase DB URL",
       "supabaseUrl": "Supabase API URL",
       "supabaseAnonKey": "Supabase anon key",
@@ -349,7 +349,7 @@
       "previewMode": "미리보기 모드",
       "startDate": "시작",
       "endDate": "종료",
-      "source": "소스: 설정된 PLC 폴더",
+      "source": "소스: 설정된 공정 데이터 폴더",
       "search": "파일명, 경로, 사유 검색"
     },
     "previewMode": {
@@ -418,7 +418,7 @@
     },
     "kind": {
       "plc": "PLC",
-      "temperature": "온도"
+      "temperature": "생산 일보"
     },
     "table": {
       "status": "상태",
