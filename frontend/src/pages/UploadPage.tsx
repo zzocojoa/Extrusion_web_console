@@ -138,6 +138,11 @@ function sumNullable(values: Array<number | null | undefined>): number {
   return values.reduce<number>((total, value) => total + (value ?? 0), 0);
 }
 
+function clampRemainingRows(rowCount: number | null, resumeOffset: number): number {
+  if (rowCount === null) return 0;
+  return Math.max(0, rowCount - resumeOffset);
+}
+
 function isActivePreviewRun(status: PreviewRunStatus) {
   return activePreviewRunStatuses.includes(status);
 }
@@ -164,6 +169,24 @@ function buildInterimSummary(response: PreviewResponse): PreviewSummary {
   };
 }
 
+function buildPreviewGateBreakdown(preview: PreviewResponse) {
+  const { summary } = preview.run;
+  const targetItems = preview.items.filter((item) => item.status === "target");
+  const physicalRowsFromItems = sumNullable(targetItems.map((item) => item.rowCount));
+  const uniqueKeysFromItems = sumNullable(targetItems.map((item) => item.localKeyCount));
+  const physicalRows = physicalRowsFromItems > 0 ? physicalRowsFromItems : summary.uploadRows;
+  const uniqueUploadKeys = uniqueKeysFromItems > 0 ? uniqueKeysFromItems : summary.uploadRows;
+  return {
+    targetPhysicalRows: physicalRows,
+    targetUniqueUploadKeys: uniqueUploadKeys,
+    targetDuplicateKeyCount: Math.max(0, physicalRows - uniqueUploadKeys),
+    previewDbMatchedKeys: summary.dbMatchedRows,
+    expectedUploadRows: summary.uploadRows,
+    loadedTargetFiles: targetItems.length,
+    targetFiles: summary.target,
+  };
+}
+
 function buildPreviewDisplayState(response: PreviewResponse) {
   const active = isActivePreviewRun(response.run.status);
   const hasItems = response.items.length > 0;
@@ -181,6 +204,21 @@ function buildPreviewDisplayState(response: PreviewResponse) {
     startUploadDisabledReasonKey: active
       ? "upload.actions.startUploadDisabledRunning"
       : "upload.actions.startUploadDisabledReason",
+  };
+}
+
+function isRetryableJobFileStatus(status: UploadJobFileStatus) {
+  return status === "failed" || status === "interrupted";
+}
+
+function buildRetryGateBreakdown(detail: UploadJobDetail) {
+  const retryFiles = detail.files.filter((file) => isRetryableJobFileStatus(file.status));
+  return {
+    retryFiles: retryFiles.length,
+    physicalRows: sumNullable(retryFiles.map((file) => file.rowCount)),
+    resumeOffsetRows: sumNullable(retryFiles.map((file) => file.resumeOffset)),
+    remainingPhysicalRows: sumNullable(retryFiles.map((file) => clampRemainingRows(file.rowCount, file.resumeOffset))),
+    acceptedRows: detail.job.summary.acceptedRows,
   };
 }
 
@@ -517,6 +555,7 @@ export function UploadPage() {
         <JobTab
           detail={currentJob}
           loading={jobQuery.isLoading || latestJobQuery.isLoading || retryMutation.isPending || controlMutation.isPending}
+          retryPending={retryMutation.isPending}
           error={jobQuery.error ?? latestJobQuery.error ?? retryMutation.error ?? controlMutation.error}
           onPause={() => controlMutation.mutate("pause")}
           onResume={() => controlMutation.mutate("resume")}
@@ -739,6 +778,7 @@ function StartUploadConfirmationModal({
   const [typedRows, setTypedRows] = useState("");
   const { run } = preview;
   const { summary } = run;
+  const breakdown = buildPreviewGateBreakdown(preview);
   const expectedRows = String(summary.uploadRows);
   const formattedUploadRows = formatNumber(summary.uploadRows);
   const confirmAllowed =
@@ -757,7 +797,11 @@ function StartUploadConfirmationModal({
   const countItems: Array<{ id: string; label: string; value: string | number }> = [
     { id: "previewRunId", label: t("upload.startReview.previewRunId"), value: run.previewRunId },
     { id: "targetFiles", label: t("upload.startReview.targetFiles"), value: summary.target },
-    { id: "uploadRows", label: t("upload.startReview.uploadRows"), value: formatNumber(summary.uploadRows) },
+    { id: "targetPhysicalRows", label: t("upload.startReview.targetPhysicalRows"), value: formatNumber(breakdown.targetPhysicalRows) },
+    { id: "targetUniqueUploadKeys", label: t("upload.startReview.targetUniqueUploadKeys"), value: formatNumber(breakdown.targetUniqueUploadKeys) },
+    { id: "targetDuplicateKeyCount", label: t("upload.startReview.targetDuplicateKeyCount"), value: formatNumber(breakdown.targetDuplicateKeyCount) },
+    { id: "previewDbMatchedKeys", label: t("upload.startReview.previewDbMatchedKeys"), value: formatNumber(breakdown.previewDbMatchedKeys) },
+    { id: "expectedUploadRows", label: t("upload.startReview.expectedUploadRows"), value: formatNumber(breakdown.expectedUploadRows) },
     { id: "alreadyInDb", label: t("upload.startReview.alreadyInDb"), value: summary.alreadyInDb },
     { id: "risky", label: t("upload.startReview.risky"), value: summary.risky },
     { id: "excluded", label: t("upload.startReview.excluded"), value: summary.excluded },
@@ -793,6 +837,18 @@ function StartUploadConfirmationModal({
             </div>
           ))}
         </dl>
+
+        <p className="start-upload-modal__note">
+          {t("upload.startReview.countSemantics")}
+        </p>
+        {breakdown.loadedTargetFiles < breakdown.targetFiles ? (
+          <p className="start-upload-modal__note start-upload-modal__note--attention">
+            {t("upload.startReview.partialBreakdown", {
+              loaded: breakdown.loadedTargetFiles,
+              total: breakdown.targetFiles,
+            })}
+          </p>
+        ) : null}
 
         {blockedReasons.length > 0 ? (
           <div className="start-upload-modal__blocked" role="alert">
@@ -922,6 +978,7 @@ function PreviewTable({ items }: { items: PreviewItem[] }) {
 function JobTab({
   detail,
   loading,
+  retryPending,
   error,
   onPause,
   onResume,
@@ -930,6 +987,7 @@ function JobTab({
 }: {
   detail: UploadJobDetail | null;
   loading: boolean;
+  retryPending: boolean;
   error: Error | null;
   onPause: () => void;
   onResume: () => void;
@@ -937,6 +995,7 @@ function JobTab({
   onRetry: () => void;
 }) {
   const { t } = useTranslation();
+  const [retryReviewOpen, setRetryReviewOpen] = useState(false);
   if (loading && !detail) {
     return <section className="panel panel--loading">{t("upload.job.loading")}</section>;
   }
@@ -965,45 +1024,178 @@ function JobTab({
   const canRetry = ["failed", "partial_failed", "interrupted"].includes(job.status) &&
     detail.files.some((file) => ["failed", "interrupted"].includes(file.status));
   return (
-    <section className="upload-job">
-      <div className="panel upload-job__header">
-        <div className="panel__header">
-          <h2>{t("upload.job.title")}</h2>
-          <div className="upload-job__actions">
-            {canPause ? <button className="button button--secondary" type="button" onClick={onPause}><Pause size={16} />{t("upload.job.actions.pause")}</button> : null}
-            {canResume ? <button className="button button--primary" type="button" onClick={onResume}><Play size={16} />{t("upload.job.actions.resume")}</button> : null}
-            {canCancel ? <button className="button button--danger" type="button" onClick={onCancel}><Square size={16} />{t("upload.job.actions.cancel")}</button> : null}
-            {canRetry ? <button className="button button--secondary" type="button" onClick={onRetry}><RotateCcw size={16} />{t("upload.job.actions.retry")}</button> : null}
-          </div>
-        </div>
-        <div className="upload-job__summary">
-          <div className="upload-job__identity">
-            <StatusBadge tone={jobTone[job.status]} label={t(`upload.job.status.${job.status}`)} />
-            <span>{t("upload.job.jobId")}: <code>{job.jobId}</code></span>
-            <span>{t("upload.job.mode")}: {t(`upload.job.modeValue.${job.mode}`)}</span>
-            <span>{t("upload.job.started")}: {formatDateTime(job.startedAt ?? job.requestedAt)}</span>
-          </div>
-          <div className="progress progress--job">
-            <div className="progress__meta">
-              <span>{t("upload.job.progress")}</span>
-              <strong>{progress}%</strong>
-            </div>
-            <div className="progress__track" aria-label={t("upload.job.progress")}>
-              <span style={{ width: `${progress}%` }} />
+    <>
+      <section className="upload-job">
+        <div className="panel upload-job__header">
+          <div className="panel__header">
+            <h2>{t("upload.job.title")}</h2>
+            <div className="upload-job__actions">
+              {canPause ? <button className="button button--secondary" type="button" onClick={onPause}><Pause size={16} />{t("upload.job.actions.pause")}</button> : null}
+              {canResume ? <button className="button button--primary" type="button" onClick={onResume}><Play size={16} />{t("upload.job.actions.resume")}</button> : null}
+              {canCancel ? <button className="button button--danger" type="button" onClick={onCancel}><Square size={16} />{t("upload.job.actions.cancel")}</button> : null}
+              {canRetry ? (
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={retryPending}
+                  onClick={() => setRetryReviewOpen(true)}
+                >
+                  <RotateCcw size={16} />
+                  {t("upload.job.actions.retry")}
+                </button>
+              ) : null}
             </div>
           </div>
-          <div className="upload-job__metrics">
-            <Metric label={t("upload.job.metrics.files")} value={`${formatNumber(job.summary.succeededFiles)}/${formatNumber(job.summary.totalFiles)}`} />
-            <Metric label={t("upload.job.metrics.rows")} value={`${formatNumber(job.summary.processedRows)}/${formatNumber(job.summary.totalRows)}`} />
-            <Metric label={t("upload.job.metrics.accepted")} value={formatNumber(job.summary.acceptedRows)} />
-            <Metric label={t("upload.job.metrics.failures")} value={formatNumber(job.summary.failedFiles)} danger={job.summary.failedFiles > 0} />
+          <div className="upload-job__summary">
+            <div className="upload-job__identity">
+              <StatusBadge tone={jobTone[job.status]} label={t(`upload.job.status.${job.status}`)} />
+              <span>{t("upload.job.jobId")}: <code>{job.jobId}</code></span>
+              <span>{t("upload.job.mode")}: {t(`upload.job.modeValue.${job.mode}`)}</span>
+              <span>{t("upload.job.started")}: {formatDateTime(job.startedAt ?? job.requestedAt)}</span>
+            </div>
+            <div className="progress progress--job">
+              <div className="progress__meta">
+                <span>{t("upload.job.progress")}</span>
+                <strong>{progress}%</strong>
+              </div>
+              <div className="progress__track" aria-label={t("upload.job.progress")}>
+                <span style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+            <div className="upload-job__metrics">
+              <Metric label={t("upload.job.metrics.files")} value={`${formatNumber(job.summary.succeededFiles)}/${formatNumber(job.summary.totalFiles)}`} />
+              <Metric label={t("upload.job.metrics.rows")} value={`${formatNumber(job.summary.processedRows)}/${formatNumber(job.summary.totalRows)}`} />
+              <Metric label={t("upload.job.metrics.accepted")} value={formatNumber(job.summary.acceptedRows)} />
+              <Metric label={t("upload.job.metrics.failures")} value={formatNumber(job.summary.failedFiles)} danger={job.summary.failedFiles > 0} />
+            </div>
+            {job.errorMessage ? <div className="error-banner" role="alert">{job.errorMessage}</div> : null}
           </div>
-          {job.errorMessage ? <div className="error-banner" role="alert">{job.errorMessage}</div> : null}
         </div>
-      </div>
-      <JobFileTable files={detail.files} />
-      <JobEvents events={detail.events} />
-    </section>
+        <JobFileTable files={detail.files} />
+        <JobEvents events={detail.events} />
+      </section>
+      {retryReviewOpen ? (
+        <RetryConfirmationModal
+          detail={detail}
+          pending={retryPending}
+          onCancel={() => setRetryReviewOpen(false)}
+          onConfirm={() => {
+            onRetry();
+            setRetryReviewOpen(false);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function RetryConfirmationModal({
+  detail,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  detail: UploadJobDetail;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useTranslation();
+  const [typedRows, setTypedRows] = useState("");
+  const breakdown = buildRetryGateBreakdown(detail);
+  const confirmationRows = String(breakdown.remainingPhysicalRows);
+  const formattedRemainingRows = formatNumber(breakdown.remainingPhysicalRows);
+  const confirmAllowed = breakdown.retryFiles > 0 && breakdown.remainingPhysicalRows > 0 && typedRows.trim() === confirmationRows;
+  const blockedReasons = [
+    breakdown.retryFiles <= 0 ? t("upload.retryReview.blocked.noRetryFiles") : null,
+    breakdown.remainingPhysicalRows <= 0 ? t("upload.retryReview.blocked.noRows") : null,
+  ].filter((reason): reason is string => Boolean(reason));
+  const unavailable = t("upload.retryReview.unavailable");
+  const countItems: Array<{ id: string; label: string; value: string | number }> = [
+    { id: "jobId", label: t("upload.retryReview.jobId"), value: detail.job.jobId },
+    { id: "retryFiles", label: t("upload.retryReview.retryFiles"), value: breakdown.retryFiles },
+    { id: "physicalRows", label: t("upload.retryReview.physicalRows"), value: formatNumber(breakdown.physicalRows) },
+    { id: "uniqueUploadKeys", label: t("upload.retryReview.uniqueUploadKeys"), value: unavailable },
+    { id: "duplicateKeyCount", label: t("upload.retryReview.duplicateKeyCount"), value: unavailable },
+    { id: "dbMatchedKeys", label: t("upload.retryReview.dbMatchedKeys"), value: unavailable },
+    { id: "resumeOffsetRows", label: t("upload.retryReview.resumeOffsetRows"), value: formatNumber(breakdown.resumeOffsetRows) },
+    { id: "remainingPhysicalRows", label: t("upload.retryReview.remainingPhysicalRows"), value: formattedRemainingRows },
+    { id: "expectedUploadRows", label: t("upload.retryReview.expectedUploadRows"), value: unavailable },
+    { id: "acceptedRows", label: t("upload.retryReview.acceptedRows"), value: formatNumber(breakdown.acceptedRows) },
+  ];
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        aria-labelledby="retry-upload-review-title"
+        aria-modal="true"
+        className="start-upload-modal"
+        role="dialog"
+      >
+        <div className="start-upload-modal__header">
+          <div>
+            <span className="panel-eyebrow">{t("upload.retryReview.eyebrow")}</span>
+            <h2 id="retry-upload-review-title">{t("upload.retryReview.title")}</h2>
+          </div>
+          <StatusBadge tone={confirmAllowed ? "attention" : "blocked"} label={t("upload.retryReview.badge")} />
+        </div>
+
+        <div className="start-upload-modal__warning" role="status">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span>{t("upload.retryReview.warning", { rowsFormatted: formattedRemainingRows })}</span>
+        </div>
+
+        <dl className="start-upload-modal__counts">
+          {countItems.map(({ id, label, value }) => (
+            <div className="start-upload-modal__count" key={id}>
+              <dt>{label}</dt>
+              <dd className="num">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="start-upload-modal__note">
+          {t("upload.retryReview.countSemantics")}
+        </p>
+
+        {blockedReasons.length > 0 ? (
+          <div className="start-upload-modal__blocked" role="alert">
+            <strong>{t("upload.retryReview.blocked.title")}</strong>
+            <ul>
+              {blockedReasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <label className="start-upload-modal__input">
+          <span>{t("upload.retryReview.inputLabel", { rows: confirmationRows })}</span>
+          <input
+            autoComplete="off"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={typedRows}
+            onChange={(event) => setTypedRows(event.target.value.replace(/[^\d]/g, ""))}
+            placeholder={confirmationRows}
+          />
+        </label>
+
+        <div className="start-upload-modal__actions">
+          <button className="button button--secondary" type="button" onClick={onCancel}>
+            {t("upload.retryReview.cancel")}
+          </button>
+          <button
+            className="button button--danger"
+            type="button"
+            disabled={!confirmAllowed || pending}
+            onClick={onConfirm}
+          >
+            {pending ? t("upload.retryReview.pending") : t("upload.retryReview.confirm", { rowsFormatted: formattedRemainingRows })}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
