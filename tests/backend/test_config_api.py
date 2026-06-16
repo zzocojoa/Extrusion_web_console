@@ -347,6 +347,52 @@ def test_config_get_uses_independent_local_supabase_defaults(tmp_path: Path, mon
     assert str(tmp_path / "state.db") not in response.text
 
 
+def test_config_get_keeps_empty_plc_default_without_launcher_fallback(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    client, _, _ = _client(tmp_path, plc_data_dir="")
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    items = {item["key"]: item for item in response.json()["items"]}
+    assert items["plcDataDir"]["source"] == "default"
+    assert items["plcDataDir"]["overridden"] is False
+    assert items["plcDataDir"]["value"] == ""
+
+
+def test_settings_preserves_explicit_env_plc_source(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    explicit_source = "//nas/share/plc"
+    monkeypatch.setenv("EWC_PLC_DATA_DIR", explicit_source)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.plc_data_dir == explicit_source
+
+
+def test_config_get_preserves_explicit_config_plc_source(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    client, _, config_path = _client(tmp_path)
+    explicit_source = "//nas/share/plc"
+    config_path.write_text(json.dumps({"plcDataDir": explicit_source}), encoding="utf-8")
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    items = {item["key"]: item for item in response.json()["items"]}
+    assert items["plcDataDir"]["source"] == "config"
+    assert items["plcDataDir"]["overridden"] is False
+    assert items["plcDataDir"]["value"] == explicit_source
+
+
 def test_config_get_reports_stale_upload_target_class_without_raw_secret(tmp_path: Path, monkeypatch) -> None:
     _clear_config_env(monkeypatch)
     monkeypatch.chdir(tmp_path)

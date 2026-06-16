@@ -6,7 +6,8 @@ param(
   [switch]$NoBrowser,
   [switch]$BuildFrontend,
   [switch]$CheckOnly,
-  [switch]$RequireFreshBackend
+  [switch]$RequireFreshBackend,
+  [switch]$AllowNonCanonicalSource
 )
 
 $ErrorActionPreference = "Stop"
@@ -175,6 +176,157 @@ function Set-EnvDefault {
   }
 }
 
+function Get-DevelopmentPlcSourceCandidate {
+  $folderName = -join ([char[]](0xD1B5, 0xD569, 0x20, 0xB370, 0xC774, 0xD130, 0x20, 0x41, 0x72, 0x63, 0x68, 0x69, 0x76, 0x65))
+  return "Z:\$folderName"
+}
+
+function Normalize-SourceForCompare {
+  param([string]$Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return ""
+  }
+  return $Value.Trim().Trim('"').Trim("'").TrimEnd("\", "/")
+}
+
+function Test-CanonicalPlcSource {
+  param([string]$Value)
+  $normalized = Normalize-SourceForCompare -Value $Value
+  $canonical = Normalize-SourceForCompare -Value (Get-DevelopmentPlcSourceCandidate)
+  return [System.StringComparer]::OrdinalIgnoreCase.Equals($normalized, $canonical)
+}
+
+function Get-SourceClass {
+  param([string]$Value)
+  $normalized = Normalize-SourceForCompare -Value $Value
+  if ([string]::IsNullOrWhiteSpace($normalized)) {
+    return "empty"
+  }
+  if (Test-CanonicalPlcSource -Value $normalized) {
+    return "canonical_mapped_drive"
+  }
+  if ($normalized -match '^[A-Za-z]:[\\/]') {
+    return "noncanonical_drive"
+  }
+  if ($normalized.StartsWith("\\") -or $normalized.StartsWith("//")) {
+    return "network_or_unc"
+  }
+  return "other"
+}
+
+function Get-DotenvValue {
+  param(
+    [string]$RepoRoot,
+    [string]$Name
+  )
+
+  $dotenvPath = Join-Path $RepoRoot ".env"
+  if (-not (Test-Path -LiteralPath $dotenvPath)) {
+    return $null
+  }
+
+  foreach ($line in Get-Content -LiteralPath $dotenvPath -Encoding UTF8) {
+    $candidate = $line.Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate) -or $candidate.StartsWith("#")) {
+      continue
+    }
+    if ($candidate.StartsWith("export ")) {
+      $candidate = $candidate.Substring(7).Trim()
+    }
+    $parts = $candidate -split "=", 2
+    if ($parts.Count -lt 2) {
+      continue
+    }
+    $key = $parts[0].Trim()
+    if ($key -eq $Name) {
+      $value = $parts[1].Trim().Trim('"').Trim("'")
+      return $value
+    }
+  }
+  return $null
+}
+
+function Get-ConfigJsonValue {
+  param(
+    [string]$ConfigPath,
+    [string]$Key
+  )
+
+  if (-not (Test-Path -LiteralPath $ConfigPath)) {
+    return $null
+  }
+
+  try {
+    $decoded = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  } catch {
+    return $null
+  }
+
+  if (-not ($decoded.PSObject.Properties.Name -contains $Key)) {
+    return $null
+  }
+  return [string]$decoded.$Key
+}
+
+function Get-PlcSourceInputs {
+  param(
+    [string]$RepoRoot,
+    [string]$ConfigPath
+  )
+
+  $inputs = @()
+  $processValue = [Environment]::GetEnvironmentVariable("EWC_PLC_DATA_DIR", "Process")
+  if ($null -ne $processValue) {
+    $inputs += [pscustomobject]@{ Source = "process_env"; Class = Get-SourceClass -Value $processValue; Canonical = Test-CanonicalPlcSource -Value $processValue }
+  }
+  $dotenvValue = Get-DotenvValue -RepoRoot $RepoRoot -Name "EWC_PLC_DATA_DIR"
+  if ($null -ne $dotenvValue) {
+    $inputs += [pscustomobject]@{ Source = "repo_dotenv"; Class = Get-SourceClass -Value $dotenvValue; Canonical = Test-CanonicalPlcSource -Value $dotenvValue }
+  }
+  $configValue = Get-ConfigJsonValue -ConfigPath $ConfigPath -Key "plcDataDir"
+  if ($null -ne $configValue) {
+    $inputs += [pscustomobject]@{ Source = "config_json"; Class = Get-SourceClass -Value $configValue; Canonical = Test-CanonicalPlcSource -Value $configValue }
+  }
+  return $inputs
+}
+
+function Set-DevelopmentPlcSourceDefault {
+  param(
+    [string]$RepoRoot,
+    [string]$ConfigPath,
+    [bool]$AllowNonCanonical
+  )
+
+  $inputs = @(Get-PlcSourceInputs -RepoRoot $RepoRoot -ConfigPath $ConfigPath)
+  if ($inputs.Count -gt 0) {
+    $nonCanonical = @($inputs | Where-Object { -not $_.Canonical })
+    if ($nonCanonical.Count -gt 0) {
+      $summary = ($nonCanonical | ForEach-Object { "$($_.Source):$($_.Class)" }) -join ", "
+      if (-not $AllowNonCanonical) {
+        Write-LauncherLog "Non-canonical PLC source binding detected ($summary). Refusing to start so Preview cannot drift to the wrong source. Fix env/dotenv/config to the approved mapped-drive class or rerun with -AllowNonCanonicalSource for diagnostics only. Raw values hidden." "ERROR"
+        exit 1
+      }
+      Write-LauncherLog "Non-canonical PLC source binding allowed by explicit -AllowNonCanonicalSource ($summary). Preview remains operator-controlled; raw values hidden." "WARNING"
+      return
+    }
+    Write-LauncherLog "Canonical PLC source binding already provided by env/dotenv/config; launcher fallback skipped."
+    return
+  }
+
+  $candidate = Get-DevelopmentPlcSourceCandidate
+  if (Test-Path -LiteralPath $candidate -PathType Container) {
+    [Environment]::SetEnvironmentVariable("EWC_PLC_DATA_DIR", $candidate, "Process")
+    Write-LauncherLog "PLC source binding defaulted to accessible mapped-drive class for this launcher process; raw path hidden."
+    return
+  }
+
+  if (-not $AllowNonCanonical) {
+    Write-LauncherLog "Canonical PLC source binding was not configured and mapped-drive class is not accessible in this launcher process. Refusing to start; raw path hidden." "ERROR"
+    exit 1
+  }
+  Write-LauncherLog "Canonical PLC source binding is missing or inaccessible, but -AllowNonCanonicalSource was set. Continuing for diagnostics only; raw path hidden." "WARNING"
+}
+
 function Set-OperatorPackageTargetDefaults {
   param([string]$RepoRoot)
 
@@ -208,9 +360,13 @@ $frontendDist = Join-Path $frontendRoot "dist"
 $frontendIndex = Join-Path $frontendDist "index.html"
 $pythonExe = Join-Path $repoRoot ".venv\Scripts\python.exe"
 $appData = Join-Path $env:APPDATA "ExtrusionWebConsole"
+$configFilePath = [Environment]::GetEnvironmentVariable("EWC_CONFIG_FILE_PATH", "Process")
+if ([string]::IsNullOrWhiteSpace($configFilePath)) {
+  $configFilePath = Join-Path $appData "config.json"
+}
 $logRoot = Join-Path $appData "logs\launcher"
 New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
 $script:LauncherLogPath = Join-Path $logRoot "launcher-$timestamp.log"
 $backendLogPath = Join-Path $logRoot "backend-$timestamp.log"
 $backendErrorLogPath = Join-Path $logRoot "backend-$timestamp.err.log"
@@ -224,6 +380,7 @@ Write-LauncherLog "Backend log: $backendLogPath"
 Write-LauncherLog "Backend error log: $backendErrorLogPath"
 Set-OperatorPackageTargetDefaults -RepoRoot $repoRoot
 Write-LauncherLog "Operator package Supabase target defaults prepared; explicit process overrides respected; raw values hidden."
+Set-DevelopmentPlcSourceDefault -RepoRoot $repoRoot -ConfigPath $configFilePath -AllowNonCanonical ([bool]$AllowNonCanonicalSource)
 
 if (-not (Test-Path -LiteralPath $pythonExe)) {
   Write-LauncherLog "Python virtual environment is missing. Expected .venv\Scripts\python.exe." "ERROR"

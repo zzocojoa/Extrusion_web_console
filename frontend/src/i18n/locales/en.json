@@ -234,7 +234,7 @@
       "subtitle": "Edit only values that can be written to config JSON. Environment-overridden values are read-only.",
       "loading": "Loading settings...",
       "error": "Settings could not be loaded.",
-      "apiModeRequired": "Development mode does not save settings. Real saves run in API mode.",
+      "apiModeRequired": "Development mode shows sample values only. API mode reads the active /api/config source and is required for real settings.",
       "configFile": "Config file",
       "configFileHidden": "Local path hidden",
       "mockMode": "development mode",
