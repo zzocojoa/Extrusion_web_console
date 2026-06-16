@@ -750,7 +750,13 @@ class UploadJobRepository:
                 },
             )
 
-    def mark_file_completed(self, job_file_id: int, uploaded_rows: int, inserted_rows: int) -> None:
+    def mark_file_completed(
+        self,
+        job_file_id: int,
+        uploaded_rows: int,
+        inserted_rows: int,
+        processed_rows: int | None = None,
+    ) -> None:
         now = iso_now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -758,6 +764,7 @@ class UploadJobRepository:
             if row is None:
                 return
             row_count = row["row_count"] if row["row_count"] is not None else uploaded_rows
+            final_processed_rows = int(processed_rows if processed_rows is not None else row_count)
             connection.execute(
                 """
                 UPDATE upload_job_files
@@ -766,7 +773,7 @@ class UploadJobRepository:
                     last_error_code = NULL, last_error_message = NULL, updated_at = ?
                 WHERE job_file_id = ?
                 """,
-                (row_count, uploaded_rows, inserted_rows, now, now, job_file_id),
+                (final_processed_rows, uploaded_rows, inserted_rows, now, now, job_file_id),
             )
             self._recompute_job_summary(connection, row["job_id"])
             self._upsert_file_state_in_connection(connection, row, "completed", 0, None, None)

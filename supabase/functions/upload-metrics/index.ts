@@ -168,6 +168,20 @@ function splitIntoUpsertBatches(
   return batches;
 }
 
+function metricConflictKey(record: Metric): string {
+  return `${record.timestamp}\u0000${record.device_id}`;
+}
+
+function deduplicateMetricsByKey(records: ReadonlyArray<Metric>): Metric[] {
+  const keyedRecords = new Map<string, Metric>();
+
+  for (const record of records) {
+    keyedRecords.set(metricConflictKey(record), record);
+  }
+
+  return Array.from(keyedRecords.values());
+}
+
 function cleanRecord(raw: JsonMap): Metric | null {
   const cleaned: Partial<Metric> = {};
 
@@ -436,8 +450,9 @@ async function handlePost(req: Request): Promise<Response> {
     );
   }
 
+  const deduplicated = deduplicateMetricsByKey(cleaned);
   const upsertBatches = splitIntoUpsertBatches(
-    cleaned,
+    deduplicated,
     UPSERT_BATCH_MAX_RECORDS,
     UPSERT_BATCH_MAX_BYTES,
   );
@@ -452,6 +467,7 @@ async function handlePost(req: Request): Promise<Response> {
     console.error("Batch upsert failed.", {
       error: message,
       recordCount: cleaned.length,
+      deduplicatedCount: deduplicated.length,
       batchCount: upsertBatches.length,
     });
     return jsonResponse(
@@ -468,6 +484,7 @@ async function handlePost(req: Request): Promise<Response> {
       success: true,
       accepted: totalAccepted,
       inserted: totalAccepted,
+      deduplicated: cleaned.length - deduplicated.length,
     },
     200,
   );

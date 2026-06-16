@@ -24,6 +24,41 @@ class UploadCounters:
     inserted_rows: int = 0
 
 
+@dataclass(frozen=True)
+class DeduplicatedUploadBatch:
+    records: list[dict[str, Any]]
+    duplicate_rows: int
+
+
+def _upload_record_key(record: dict[str, Any]) -> tuple[str, str] | None:
+    timestamp = record.get("timestamp")
+    device_id = record.get("device_id")
+    if timestamp is None or device_id is None:
+        return None
+    return str(timestamp), str(device_id)
+
+
+def deduplicate_upload_records(records: list[dict[str, Any]]) -> DeduplicatedUploadBatch:
+    keyed_records: dict[tuple[str, str], dict[str, Any]] = {}
+    key_order: list[tuple[str, str]] = []
+    passthrough_records: list[dict[str, Any]] = []
+
+    for record in records:
+        key = _upload_record_key(record)
+        if key is None:
+            passthrough_records.append(record)
+            continue
+        if key not in keyed_records:
+            key_order.append(key)
+        keyed_records[key] = record
+
+    deduplicated_records = [keyed_records[key] for key in key_order]
+    return DeduplicatedUploadBatch(
+        records=[*passthrough_records, *deduplicated_records],
+        duplicate_rows=len(records) - len(passthrough_records) - len(key_order),
+    )
+
+
 def build_upload_headers(anon_key: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {anon_key}",
@@ -187,11 +222,37 @@ class UploadJobService:
                 self._control_checkpoint(job_id)
                 for batch_start in range(0, len(chunk), options.batch_rows):
                     self._control_checkpoint(job_id)
-                    batch = chunk[batch_start : batch_start + options.batch_rows]
-                    accepted = uploader.upload_batch(batch)
-                    counters.uploaded_rows += len(batch)
+                    source_batch = chunk[batch_start : batch_start + options.batch_rows]
+                    deduplicated_batch = deduplicate_upload_records(source_batch)
+                    if deduplicated_batch.duplicate_rows > 0:
+                        self.repository.append_event(
+                            job_id,
+                            event_type="file.deduplicated",
+                            level="warning",
+                            message="Duplicate upload keys were collapsed before Edge upload.",
+                            job_file_id=job_file_id,
+                            data={
+                                "inputRows": len(source_batch),
+                                "outputRows": len(deduplicated_batch.records),
+                                "duplicateRows": deduplicated_batch.duplicate_rows,
+                                "processedRows": counters.processed_rows + len(source_batch),
+                            },
+                        )
+                    if not deduplicated_batch.records:
+                        counters.processed_rows += len(source_batch)
+                        self.repository.update_file_progress(
+                            job_file_id,
+                            processed_rows=counters.processed_rows,
+                            uploaded_rows=counters.uploaded_rows,
+                            inserted_rows=counters.inserted_rows,
+                            row_count=total_rows,
+                            resume_offset=counters.processed_rows,
+                        )
+                        continue
+                    accepted = uploader.upload_batch(deduplicated_batch.records)
+                    counters.uploaded_rows += len(deduplicated_batch.records)
                     counters.inserted_rows += accepted
-                    counters.processed_rows += len(batch)
+                    counters.processed_rows += len(source_batch)
                     self.repository.update_file_progress(
                         job_file_id,
                         processed_rows=counters.processed_rows,
@@ -203,7 +264,12 @@ class UploadJobService:
             if counters.uploaded_rows == 0:
                 self.repository.mark_file_failed(job_file_id, "no_valid_rows", "No valid upload rows were produced.", counters.processed_rows)
             else:
-                self.repository.mark_file_completed(job_file_id, counters.uploaded_rows, counters.inserted_rows)
+                self.repository.mark_file_completed(
+                    job_file_id,
+                    counters.uploaded_rows,
+                    counters.inserted_rows,
+                    processed_rows=counters.processed_rows,
+                )
         except UploadJobCancelled:
             raise
         except Exception as error:
