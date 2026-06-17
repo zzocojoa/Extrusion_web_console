@@ -161,13 +161,22 @@ export async function createUploadJob(
   return normalizeCreateResponse(await response.json());
 }
 
-export async function retryUploadJob(jobId: string): Promise<UploadJobCreateResponse> {
+export async function retryUploadJob(
+  jobId: string,
+  approval: { expectedRemainingRows: number; expectedRetryFiles?: number | null },
+): Promise<UploadJobCreateResponse> {
   const response = await apiFetch(
     `/api/upload/jobs/${jobId}/retry`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ includeInterrupted: true, includeCancelled: false, options: defaultOptions }),
+      body: JSON.stringify({
+        includeInterrupted: true,
+        includeCancelled: false,
+        expectedRemainingRows: approval.expectedRemainingRows,
+        expectedRetryFiles: approval.expectedRetryFiles ?? null,
+        options: defaultOptions,
+      }),
     },
     { mutating: true },
   );

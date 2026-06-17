@@ -26,6 +26,15 @@ class CreateJobFromPreviewResult:
     upload_row_count: int = 0
 
 
+@dataclass(frozen=True)
+class CreateRetryJobResult:
+    created: bool
+    active_job_id: str | None = None
+    rejection_reason: str | None = None
+    file_count: int = 0
+    remaining_row_count: int = 0
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -446,9 +455,11 @@ class UploadJobRepository:
         source_job_id: str,
         include_interrupted: bool,
         include_cancelled: bool,
+        expected_remaining_rows: int,
+        expected_retry_files: int | None,
         options: dict[str, Any],
         config_snapshot: dict[str, Any],
-    ) -> tuple[str | None, int]:
+    ) -> CreateRetryJobResult:
         now = iso_now()
         allowed = ["failed"]
         if include_interrupted:
@@ -468,13 +479,13 @@ class UploadJobRepository:
                 ACTIVE_JOB_STATUSES,
             ).fetchone()
             if active is not None:
-                return str(active["job_id"]), 0
+                return CreateRetryJobResult(created=False, active_job_id=str(active["job_id"]))
             source = connection.execute(
                 "SELECT * FROM upload_jobs WHERE job_id = ?",
                 (source_job_id,),
             ).fetchone()
             if source is None or source["status"] not in TERMINAL_JOB_STATUSES:
-                return None, -1
+                return CreateRetryJobResult(created=False, rejection_reason="source_job_not_retryable")
             placeholders = ",".join("?" for _ in allowed)
             source_files = connection.execute(
                 f"""
@@ -485,8 +496,34 @@ class UploadJobRepository:
                 """,
                 [source_job_id, *allowed],
             ).fetchall()
+            file_count = len(source_files)
+            remaining_row_count = sum(
+                max(int(row["row_count"] or 0) - int(row["resume_offset"] or 0), 0)
+                for row in source_files
+            )
             if not source_files:
-                return None, 0
+                return CreateRetryJobResult(created=False, rejection_reason="no_retryable_files")
+            if remaining_row_count <= 0:
+                return CreateRetryJobResult(
+                    created=False,
+                    rejection_reason="no_retryable_files",
+                    file_count=file_count,
+                    remaining_row_count=remaining_row_count,
+                )
+            if expected_retry_files is not None and expected_retry_files != file_count:
+                return CreateRetryJobResult(
+                    created=False,
+                    rejection_reason="expected_retry_files_mismatch",
+                    file_count=file_count,
+                    remaining_row_count=remaining_row_count,
+                )
+            if expected_remaining_rows != remaining_row_count:
+                return CreateRetryJobResult(
+                    created=False,
+                    rejection_reason="expected_remaining_rows_mismatch",
+                    file_count=file_count,
+                    remaining_row_count=remaining_row_count,
+                )
             connection.execute(
                 """
                 INSERT INTO upload_jobs(
@@ -546,18 +583,36 @@ class UploadJobRepository:
                 event_type="job.created",
                 level="info",
                 message="Retry job was queued from failed files.",
-                data={"retryOfJobId": source_job_id},
+                data={
+                    "retryOfJobId": source_job_id,
+                    "expectedRemainingRows": expected_remaining_rows,
+                    "actualRemainingRows": remaining_row_count,
+                    "expectedRetryFiles": expected_retry_files,
+                    "actualRetryFiles": file_count,
+                },
             )
             self._append_audit_in_connection(
                 connection,
                 action="upload.retry",
                 target_type="upload_job",
                 target_id=job_id,
-                params={"retryOfJobId": source_job_id, "includeInterrupted": include_interrupted},
+                params={
+                    "retryOfJobId": source_job_id,
+                    "includeInterrupted": include_interrupted,
+                    "includeCancelled": include_cancelled,
+                    "expectedRemainingRows": expected_remaining_rows,
+                    "actualRemainingRows": remaining_row_count,
+                    "expectedRetryFiles": expected_retry_files,
+                    "actualRetryFiles": file_count,
+                },
                 result="success",
                 job_id=job_id,
             )
-        return None, len(source_files)
+        return CreateRetryJobResult(
+            created=True,
+            file_count=file_count,
+            remaining_row_count=remaining_row_count,
+        )
 
     def start_job(self, job_id: str) -> None:
         now = iso_now()

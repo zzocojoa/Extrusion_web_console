@@ -495,19 +495,106 @@ def test_retry_job_snapshots_failed_files_only(tmp_path: Path) -> None:
     repository.mark_file_failed(file_id, "upload_failed", "boom", 1)
     repository.finish_job("upl_old", status=UploadJobStatus.failed)
 
-    active, count = repository.create_retry_job(
+    result = repository.create_retry_job(
         job_id="upl_retry",
         source_job_id="upl_old",
         include_interrupted=True,
         include_cancelled=False,
+        expected_remaining_rows=1,
+        expected_retry_files=1,
         options={},
         config_snapshot={},
     )
 
-    assert active is None
-    assert count == 1
+    assert result.created is True
+    assert result.active_job_id is None
+    assert result.file_count == 1
+    assert result.remaining_row_count == 1
     retry = repository.get_job("upl_retry")
     files = repository.list_job_files("upl_retry")
+    events = repository.list_events("upl_retry", after_seq=0, limit=10)
     assert retry["retry_of_job_id"] == "upl_old"
     assert files[0]["resume_offset"] == 1
     assert files[0]["retry_count"] == 1
+    event_data = json.loads(events[0]["data_json"])
+    assert event_data["expectedRemainingRows"] == 1
+    assert event_data["actualRemainingRows"] == 1
+    assert event_data["expectedRetryFiles"] == 1
+    assert event_data["actualRetryFiles"] == 1
+    with repository.connect() as connection:
+        audit = connection.execute("SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT 1").fetchone()
+    audit_params = json.loads(audit["params_json_redacted"])
+    assert audit_params["expectedRemainingRows"] == 1
+    assert audit_params["actualRemainingRows"] == 1
+    assert audit_params["expectedRetryFiles"] == 1
+    assert audit_params["actualRetryFiles"] == 1
+
+
+def test_retry_job_rejects_expected_remaining_rows_mismatch(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_old",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    file_id = repository.list_job_files("upl_old")[0]["job_file_id"]
+    repository.mark_file_failed(file_id, "upload_failed", "boom", 1)
+    repository.finish_job("upl_old", status=UploadJobStatus.failed)
+
+    result = repository.create_retry_job(
+        job_id="upl_retry_mismatch",
+        source_job_id="upl_old",
+        include_interrupted=True,
+        include_cancelled=False,
+        expected_remaining_rows=2,
+        expected_retry_files=1,
+        options={},
+        config_snapshot={},
+    )
+
+    assert result.created is False
+    assert result.rejection_reason == "expected_remaining_rows_mismatch"
+    assert result.file_count == 1
+    assert result.remaining_row_count == 1
+    assert repository.get_job("upl_retry_mismatch") is None
+
+
+def test_retry_job_rejects_expected_retry_file_mismatch(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_old",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    file_id = repository.list_job_files("upl_old")[0]["job_file_id"]
+    repository.mark_file_failed(file_id, "upload_failed", "boom", 1)
+    repository.finish_job("upl_old", status=UploadJobStatus.failed)
+
+    result = repository.create_retry_job(
+        job_id="upl_retry_mismatch",
+        source_job_id="upl_old",
+        include_interrupted=True,
+        include_cancelled=False,
+        expected_remaining_rows=1,
+        expected_retry_files=2,
+        options={},
+        config_snapshot={},
+    )
+
+    assert result.created is False
+    assert result.rejection_reason == "expected_retry_files_mismatch"
+    assert result.file_count == 1
+    assert result.remaining_row_count == 1
+    assert repository.get_job("upl_retry_mismatch") is None

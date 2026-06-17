@@ -494,7 +494,7 @@ export function UploadPage() {
   });
 
   const retryMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (approval: { expectedRemainingRows: number; expectedRetryFiles: number }) => {
       if (!currentJob) throw new Error("No upload job");
       if (!API_MODE) {
         const id = `mock_retry_${Date.now()}`;
@@ -503,7 +503,7 @@ export function UploadPage() {
         setMockJobCancelled(false);
         return { jobId: id, status: "queued" as const, detailUrl: "", eventsUrl: "" };
       }
-      return retryUploadJob(currentJob.job.jobId);
+      return retryUploadJob(currentJob.job.jobId, approval);
     },
     onSuccess: (response) => {
       latestSeqRef.current = 0;
@@ -587,7 +587,7 @@ export function UploadPage() {
           onPause={() => controlMutation.mutate("pause")}
           onResume={() => controlMutation.mutate("resume")}
           onCancel={() => controlMutation.mutate("cancel")}
-          onRetry={() => retryMutation.mutate()}
+          onRetry={(approval) => retryMutation.mutate(approval)}
         />
       )}
     </main>
@@ -1030,7 +1030,7 @@ function JobTab({
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
-  onRetry: () => void;
+  onRetry: (approval: { expectedRemainingRows: number; expectedRetryFiles: number }) => void;
 }) {
   const { t } = useTranslation();
   const [retryReviewOpen, setRetryReviewOpen] = useState(false);
@@ -1117,8 +1117,8 @@ function JobTab({
           detail={detail}
           pending={retryPending}
           onCancel={() => setRetryReviewOpen(false)}
-          onConfirm={() => {
-            onRetry();
+          onConfirm={(approval) => {
+            onRetry(approval);
             setRetryReviewOpen(false);
           }}
         />
@@ -1136,7 +1136,7 @@ function RetryConfirmationModal({
   detail: UploadJobDetail;
   pending: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (approval: { expectedRemainingRows: number; expectedRetryFiles: number }) => void;
 }) {
   const { t } = useTranslation();
   const [typedRows, setTypedRows] = useState("");
@@ -1227,7 +1227,10 @@ function RetryConfirmationModal({
             className="button button--danger"
             type="button"
             disabled={!confirmAllowed || pending}
-            onClick={onConfirm}
+            onClick={() => onConfirm({
+              expectedRemainingRows: breakdown.remainingPhysicalRows,
+              expectedRetryFiles: breakdown.retryFiles,
+            })}
           >
             {pending ? t("upload.retryReview.pending") : t("upload.retryReview.confirm", { rowsFormatted: formattedRemainingRows })}
           </button>

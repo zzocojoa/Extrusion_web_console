@@ -12,6 +12,7 @@ from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAP
 
 
 START_UPLOAD_APPROVAL = {"previewRunId": "prv_done", "expectedTargetRows": 2, "expectedTargetFiles": 1}
+RETRY_APPROVAL = {"expectedRemainingRows": 1, "expectedRetryFiles": 1}
 
 
 def upload_ready_settings(db_path: Path) -> Settings:
@@ -375,7 +376,7 @@ def test_retry_no_retryable_files_writes_blocked_audit(tmp_path: Path) -> None:
     client = TestClient(app)
 
     try:
-        response = client.post("/api/upload/jobs/upl_done/retry", json={})
+        response = client.post("/api/upload/jobs/upl_done/retry", json=RETRY_APPROVAL)
     finally:
         app.dependency_overrides.clear()
 
@@ -385,6 +386,147 @@ def test_retry_no_retryable_files_writes_blocked_audit(tmp_path: Path) -> None:
     assert audit["action"] == "upload.retry"
     assert audit["result"] == "blocked"
     assert audit["error_code"] == "no_retryable_files"
+
+
+def test_retry_rejects_missing_expected_remaining_rows_with_blocked_audit(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_failed",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    file_id = repository.list_job_files("upl_failed")[0]["job_file_id"]
+    repository.mark_file_failed(file_id, "upload_failed", "boom", 1)
+    repository.finish_job("upl_failed", UploadJobStatus.failed)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        state_db_path=str(db_path),
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
+        supabase_anon_key="anon",
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs/upl_failed/retry", json={})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "expected_remaining_rows_required"
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.retry"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "expected_remaining_rows_required"
+    params = json.loads(audit["params_json_redacted"])
+    assert params["retryOfJobId"] == "upl_failed"
+    assert params["expectedRemainingRows"] is None
+    with repository.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs WHERE retry_of_job_id = 'upl_failed'").fetchone()["count"]
+    assert count == 0
+
+
+def test_retry_rejects_expected_remaining_rows_mismatch_with_snapshot_counts(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_failed",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    file_id = repository.list_job_files("upl_failed")[0]["job_file_id"]
+    repository.mark_file_failed(file_id, "upload_failed", "boom", 1)
+    repository.finish_job("upl_failed", UploadJobStatus.failed)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        state_db_path=str(db_path),
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
+        supabase_anon_key="anon",
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/jobs/upl_failed/retry",
+            json={"expectedRemainingRows": 2, "expectedRetryFiles": 1},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["reason"] == "expected_remaining_rows_mismatch"
+    assert detail["actualRemainingRows"] == 1
+    assert detail["actualRetryFiles"] == 1
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.retry"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "expected_remaining_rows_mismatch"
+    params = json.loads(audit["params_json_redacted"])
+    assert params["expectedRemainingRows"] == 2
+    assert params["actualRemainingRows"] == 1
+    assert params["actualRetryFiles"] == 1
+    with repository.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs WHERE retry_of_job_id = 'upl_failed'").fetchone()["count"]
+    assert count == 0
+
+
+def test_retry_success_records_expected_and_actual_counts(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_failed",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    file_id = repository.list_job_files("upl_failed")[0]["job_file_id"]
+    repository.mark_file_failed(file_id, "upload_failed", "boom", 1)
+    repository.finish_job("upl_failed", UploadJobStatus.failed)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        state_db_path=str(db_path),
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
+        supabase_anon_key="anon",
+    )
+    submitted: list[str] = []
+    monkeypatch.setattr(
+        "backend.app.api.upload_jobs.executor.submit",
+        lambda _fn, job_id: submitted.append(job_id),
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs/upl_failed/retry", json=RETRY_APPROVAL)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "queued"
+    assert submitted == [body["jobId"]]
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.retry"
+    assert audit["result"] == "success"
+    params = json.loads(audit["params_json_redacted"])
+    assert params["expectedRemainingRows"] == 1
+    assert params["actualRemainingRows"] == 1
+    assert params["expectedRetryFiles"] == 1
+    assert params["actualRetryFiles"] == 1
 
 
 def test_upload_job_detail_exposes_accepted_rows_with_legacy_inserted_alias(tmp_path: Path) -> None:

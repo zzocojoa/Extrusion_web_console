@@ -62,6 +62,8 @@ class RetryFailedRequest(ApiModel):
     include_interrupted: bool = True
     include_cancelled: bool = False
     options: UploadJobOptions = Field(default_factory=UploadJobOptions)
+    expected_remaining_rows: int | None = Field(default=None, ge=0)
+    expected_retry_files: int | None = Field(default=None, ge=0)
 
 
 class UploadJobCreateResponse(ApiModel):
