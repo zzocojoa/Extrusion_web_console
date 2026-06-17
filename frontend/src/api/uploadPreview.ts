@@ -36,6 +36,14 @@ export interface PreviewOptions {
   forceFullScan: boolean;
 }
 
+export interface PreviewApprovalScope {
+  expectedSourceClasses: Partial<Record<PreviewSource, string>>;
+  expectedRangeMode: PreviewRangeMode;
+  expectedStartDate: string | null;
+  expectedEndDate: string | null;
+  expectedAppliedProfile: PreviewProfile;
+}
+
 export interface PreviewCreateRequest {
   rangeMode: PreviewRangeMode;
   startDate: string | null;
@@ -43,6 +51,7 @@ export interface PreviewCreateRequest {
   sources: PreviewSource[];
   options: PreviewOptions;
   retryOfRunId: string | null;
+  approvalScope: PreviewApprovalScope;
 }
 
 export interface PreviewCreateResponse {
@@ -172,6 +181,7 @@ export function createDefaultPreviewRequest(
   rangeMode: PreviewRangeMode,
   startDate: string | null,
   endDate: string | null,
+  approvalScope: PreviewApprovalScope,
 ): PreviewCreateRequest {
   return {
     rangeMode,
@@ -180,6 +190,7 @@ export function createDefaultPreviewRequest(
     sources: ["plc"],
     options: { ...defaultOptions },
     retryOfRunId: null,
+    approvalScope,
   };
 }
 
@@ -187,6 +198,7 @@ export function createLargeSourceOperationalPreviewRequest(
   rangeMode: PreviewRangeMode,
   startDate: string | null,
   endDate: string | null,
+  approvalScope: PreviewApprovalScope,
 ): PreviewCreateRequest {
   return {
     rangeMode,
@@ -195,6 +207,7 @@ export function createLargeSourceOperationalPreviewRequest(
     sources: ["plc"],
     options: { ...largeSourceOperationalOptions },
     retryOfRunId: null,
+    approvalScope,
   };
 }
 
@@ -202,6 +215,7 @@ export function createStage3ProfileABoundedFullScanPreviewRequest(
   rangeMode: PreviewRangeMode,
   startDate: string | null,
   endDate: string | null,
+  approvalScope: PreviewApprovalScope,
 ): PreviewCreateRequest {
   return {
     rangeMode,
@@ -210,6 +224,7 @@ export function createStage3ProfileABoundedFullScanPreviewRequest(
     sources: ["plc"],
     options: { ...stage3ProfileABoundedFullScanOptions },
     retryOfRunId: null,
+    approvalScope,
   };
 }
 

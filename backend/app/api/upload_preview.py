@@ -12,6 +12,7 @@ from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.schemas.audit import AuditResult
 from backend.app.schemas.upload_preview import (
+    PreviewApprovalScope,
     PreviewCancelResponse,
     PreviewCreateRequest,
     PreviewCreateResponse,
@@ -68,12 +69,68 @@ def resolve_preview_auto_safe_mode(request: PreviewCreateRequest, settings: Sett
     return request.model_copy(update={"options": PreviewOptions.model_validate(options)})
 
 
+def source_classes_for_request(settings: Settings, request: PreviewCreateRequest) -> dict[str, str]:
+    snapshot = source_gate_snapshot(settings)
+    classes: dict[str, str] = {}
+    for source in request.sources:
+        source_snapshot = snapshot.get(source.value)
+        if isinstance(source_snapshot, dict):
+            classes[source.value] = str(source_snapshot.get("pathClass") or "missing")
+        else:
+            classes[source.value] = "missing"
+    return classes
+
+
+def actual_preview_approval_scope(settings: Settings, request: PreviewCreateRequest) -> dict[str, Any]:
+    return {
+        "sourceClasses": source_classes_for_request(settings, request),
+        "rangeMode": request.range_mode.value,
+        "startDate": request.start_date.isoformat() if request.start_date else None,
+        "endDate": request.end_date.isoformat() if request.end_date else None,
+        "appliedProfile": request.options.profile.value,
+    }
+
+
+def expected_preview_approval_scope(scope: PreviewApprovalScope | None) -> dict[str, Any] | None:
+    if scope is None:
+        return None
+    return {
+        "sourceClasses": {
+            source.value if isinstance(source, PreviewSource) else str(source): source_class
+            for source, source_class in scope.expected_source_classes.items()
+        },
+        "rangeMode": scope.expected_range_mode.value,
+        "startDate": scope.expected_start_date.isoformat() if scope.expected_start_date else None,
+        "endDate": scope.expected_end_date.isoformat() if scope.expected_end_date else None,
+        "appliedProfile": scope.expected_applied_profile.value,
+    }
+
+
+def preview_approval_mismatch_fields(
+    *,
+    expected: dict[str, Any] | None,
+    actual: dict[str, Any],
+) -> list[str]:
+    if expected is None:
+        return ["approvalScope"]
+    fields: list[str] = []
+    for key in ("rangeMode", "startDate", "endDate", "appliedProfile"):
+        if expected.get(key) != actual.get(key):
+            fields.append(key)
+    expected_sources = expected.get("sourceClasses")
+    actual_sources = actual.get("sourceClasses")
+    if expected_sources != actual_sources:
+        fields.append("sourceClasses")
+    return fields
+
+
 def build_preview_config_snapshot(
     settings: Settings,
     *,
     requested_profile: PreviewProfile,
     applied_profile: PreviewProfile,
     auto_profile_reason: str | None,
+    approval_scope: dict[str, Any] | None,
 ) -> dict[str, Any]:
     return {
         "plcDataDir": settings.plc_data_dir,
@@ -85,6 +142,7 @@ def build_preview_config_snapshot(
             "appliedProfile": applied_profile.value,
             "autoProfileReason": auto_profile_reason,
         },
+        "previewApprovalScope": approval_scope,
     }
 
 
@@ -212,6 +270,34 @@ async def create_preview(
     requested_profile = request.options.profile
     auto_profile_reason = preview_auto_safe_mode_reason(request, settings)
     request = resolve_preview_auto_safe_mode(request, settings)
+    actual_approval_scope = actual_preview_approval_scope(settings, request)
+    expected_approval_scope = expected_preview_approval_scope(request.approval_scope)
+    mismatch_fields = preview_approval_mismatch_fields(
+        expected=expected_approval_scope,
+        actual=actual_approval_scope,
+    )
+    if mismatch_fields:
+        reason = (
+            "preview_approval_scope_required"
+            if request.approval_scope is None
+            else "preview_approval_scope_mismatch"
+        )
+        audit_preview_scope_blocked(
+            audit_repository,
+            request=request,
+            reason=reason,
+            expected_scope=expected_approval_scope,
+            actual_scope=actual_approval_scope,
+            mismatch_fields=mismatch_fields,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "reason": reason,
+                "mismatchFields": mismatch_fields,
+                "actualApprovalScope": actual_approval_scope,
+            },
+        )
     preview_run_id = f"prv_{uuid4().hex[:12]}"
     active_run_id = repository.create_run_if_no_active(
         preview_run_id=preview_run_id,
@@ -225,6 +311,11 @@ async def create_preview(
             requested_profile=requested_profile,
             applied_profile=request.options.profile,
             auto_profile_reason=auto_profile_reason,
+            approval_scope={
+                "expected": expected_approval_scope,
+                "actual": actual_approval_scope,
+                "mismatchFields": [],
+            },
         ),
         retry_of_run_id=request.retry_of_run_id,
     )
@@ -244,6 +335,11 @@ async def create_preview(
                 "dbStatus": "not_checked",
                 "reasonCode": "active_preview_run",
                 "requestedFilters": safe_requested_filters(request),
+                "approvalScope": {
+                    "expected": expected_approval_scope,
+                    "actual": actual_approval_scope,
+                    "mismatchFields": [],
+                },
             },
             result=AuditResult.blocked,
             error_code="active_preview_run",
@@ -315,6 +411,42 @@ def audit_preview_request_failure(
         result=AuditResult.failure,
         error_code=validation_reason,
         error_message="Upload Preview request failed validation.",
+    )
+
+
+def audit_preview_scope_blocked(
+    audit_repository: AuditRepository,
+    *,
+    request: PreviewCreateRequest,
+    reason: str,
+    expected_scope: dict[str, Any] | None,
+    actual_scope: dict[str, Any],
+    mismatch_fields: list[str],
+) -> None:
+    audit_repository.insert_audit(
+        action="upload.preview",
+        target_type="preview_run",
+        target_id=None,
+        params={
+            "previewRunId": None,
+            "candidateCount": 0,
+            "targetCount": 0,
+            "alreadyInDbCount": 0,
+            "partialOverlapCount": 0,
+            "riskyCount": 0,
+            "excludedCount": 0,
+            "dbStatus": "not_checked",
+            "reasonCode": reason,
+            "requestedFilters": safe_requested_filters(request),
+            "approvalScope": {
+                "expected": expected_scope,
+                "actual": actual_scope,
+                "mismatchFields": sorted(mismatch_fields),
+            },
+        },
+        result=AuditResult.blocked,
+        error_code=reason,
+        error_message="Upload Preview approval scope did not match the current request.",
     )
 
 

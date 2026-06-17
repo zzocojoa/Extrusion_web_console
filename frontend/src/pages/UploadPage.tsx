@@ -4,6 +4,7 @@ import { AlertTriangle, Ban, Database, FileSearch, Pause, Play, RotateCcw, Searc
 import { useTranslation } from "react-i18next";
 
 import { isLocalTokenApiError } from "../api/client";
+import { fetchConfig, type ConfigResponse } from "../api/config";
 import {
   ActiveUploadJobError,
   controlUploadJob,
@@ -25,6 +26,7 @@ import {
   createUploadPreview,
   fetchLatestUploadPreview,
   fetchUploadPreview,
+  type PreviewApprovalScope,
   type PreviewItem,
   type PreviewItemStatus,
   type PreviewProfile,
@@ -95,6 +97,39 @@ function previewAutoReasonLabelKey(reason?: string | null) {
     default:
       return null;
   }
+}
+
+function configValue(config: ConfigResponse | undefined, key: string): unknown {
+  return config?.items.find((item) => item.key === key)?.value ?? null;
+}
+
+function sourcePathClass(value: unknown): string {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) return "missing";
+  if (normalized.startsWith("\\\\") || normalized.startsWith("//")) return "network";
+  if (normalized.length >= 3 && normalized[1] === ":" && ["\\", "/"].includes(normalized[2])) {
+    return "drive_letter";
+  }
+  if (normalized.startsWith("/mnt/")) return "mounted";
+  return "local";
+}
+
+function buildPreviewApprovalScope(
+  config: ConfigResponse | undefined,
+  rangeMode: PreviewRangeMode,
+  startDate: string | null,
+  endDate: string | null,
+  appliedProfile: PreviewProfile,
+): PreviewApprovalScope {
+  return {
+    expectedSourceClasses: {
+      plc: sourcePathClass(configValue(config, "plcDataDir")),
+    },
+    expectedRangeMode: rangeMode,
+    expectedStartDate: rangeMode === "custom" ? startDate : null,
+    expectedEndDate: rangeMode === "custom" ? endDate : null,
+    expectedAppliedProfile: appliedProfile,
+  };
 }
 
 const jobTone: Record<UploadJobStatus, StatusTone> = {
@@ -283,6 +318,38 @@ export function UploadPage() {
     [search, sort, statusFilter],
   );
 
+  const configQuery = useQuery({
+    queryKey: ["config", "preview-approval-scope"],
+    queryFn: fetchConfig,
+    enabled: API_MODE,
+    retry: false,
+    refetchInterval: API_MODE ? 30_000 : false,
+  });
+
+  const previewApprovalScope = useMemo(
+    () => {
+      const normalizedStartDate = rangeMode === "custom" ? startDate || null : null;
+      const normalizedEndDate = rangeMode === "custom" ? endDate || null : null;
+      if (!API_MODE) {
+        return {
+          expectedSourceClasses: { plc: "local" },
+          expectedRangeMode: rangeMode,
+          expectedStartDate: normalizedStartDate,
+          expectedEndDate: normalizedEndDate,
+          expectedAppliedProfile: "large_source_operational" as const,
+        };
+      }
+      return buildPreviewApprovalScope(
+        configQuery.data,
+        rangeMode,
+        normalizedStartDate,
+        normalizedEndDate,
+        "large_source_operational",
+      );
+    },
+    [configQuery.data, endDate, rangeMode, startDate],
+  );
+
   const latestQuery = useQuery({
     queryKey: ["upload-preview", "latest", queryParams],
     enabled: activeTab === "preview" && !previewRunId && API_MODE,
@@ -431,10 +498,14 @@ export function UploadPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (API_MODE && !configQuery.data) {
+        throw new Error("Preview approval scope could not be built");
+      }
       const request = createLargeSourceOperationalPreviewRequest(
         rangeMode,
         rangeMode === "custom" ? startDate || null : null,
         rangeMode === "custom" ? endDate || null : null,
+        previewApprovalScope,
       );
       if (!API_MODE) {
         const id = mockRunId();
@@ -548,8 +619,19 @@ export function UploadPage() {
       {activeTab === "preview" ? (
         <PreviewTab
           currentPreview={currentPreview}
-          loading={previewQuery.isLoading || latestQuery.isLoading || createMutation.isPending}
-          error={previewQuery.error ?? latestQuery.error ?? createMutation.error ?? cancelMutation.error}
+          loading={
+            previewQuery.isLoading ||
+            latestQuery.isLoading ||
+            createMutation.isPending ||
+            (API_MODE && configQuery.isLoading && !currentPreview)
+          }
+          error={
+            previewQuery.error ??
+            latestQuery.error ??
+            configQuery.error ??
+            createMutation.error ??
+            cancelMutation.error
+          }
           rangeMode={rangeMode}
           startDate={startDate}
           endDate={endDate}
@@ -563,8 +645,10 @@ export function UploadPage() {
           runPreviewDisabled={createMutation.isPending || Boolean(
             currentPreview?.run.status &&
               ["queued", "running", "cancelling"].includes(currentPreview.run.status),
-          )}
+          ) || (API_MODE && (!configQuery.data || configQuery.isLoading))}
           cancelling={cancelMutation.isPending}
+          approvalScope={previewApprovalScope}
+          approvalScopeReady={!API_MODE || Boolean(configQuery.data)}
           onRangeModeChange={setRangeMode}
           onStartDateChange={setStartDate}
           onEndDateChange={setEndDate}
@@ -607,6 +691,8 @@ interface PreviewTabProps {
   canCancel: boolean;
   runPreviewDisabled: boolean;
   cancelling: boolean;
+  approvalScope: PreviewApprovalScope;
+  approvalScopeReady: boolean;
   canStartUpload: boolean;
   startUploadPending: boolean;
   startUploadError: Error | null;
@@ -716,6 +802,22 @@ function PreviewTab(props: PreviewTabProps) {
           <div className="upload-preview__mode-note" role="status">
             {t("upload.previewMode.largeSourceNote")}
           </div>
+        </div>
+        <div className="upload-preview__approval-scope" role="status">
+          <span>{t("upload.previewApproval.title")}</span>
+          <strong>
+            {props.approvalScopeReady
+              ? t("upload.previewApproval.detail", {
+                  sourceClass: props.approvalScope.expectedSourceClasses.plc ?? "missing",
+                  range: t(
+                    `upload.range.${props.approvalScope.expectedRangeMode === "last_2_days" ? "last2Days" : props.approvalScope.expectedRangeMode}`,
+                  ),
+                  profile: t(
+                    previewProfileLabelKey(props.approvalScope.expectedAppliedProfile) ?? "upload.previewMode.largeSource",
+                  ),
+                })
+              : t("upload.previewApproval.loading")}
+          </strong>
         </div>
       </div>
 

@@ -365,6 +365,11 @@
         "largePreviewRange": "큰 날짜 범위 감지"
       }
     },
+    "previewApproval": {
+      "title": "Preview 승인 범위",
+      "detail": "source {{sourceClass}} / {{range}} / {{profile}}",
+      "loading": "Preview 시작 전 활성 설정을 확인하는 중"
+    },
     "range": {
       "today": "오늘",
       "yesterday": "어제",
