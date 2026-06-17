@@ -157,6 +157,9 @@ class PreviewRunDto(ApiModel):
     db_status: PreviewDbStatus
     summary: PreviewRunSummary
     warnings: list[str] = Field(default_factory=list)
+    requested_profile: PreviewProfile | None = None
+    applied_profile: PreviewProfile | None = None
+    auto_profile_reason: str | None = None
     timeout_stage: str | None = None
     timing: dict[str, Any] = Field(default_factory=dict)
     error_code: str | None = None

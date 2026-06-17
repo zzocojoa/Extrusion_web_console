@@ -383,9 +383,15 @@
       "search": "Search filename, path, or reason"
     },
     "previewMode": {
+      "applied": "Applied mode",
       "standard": "Standard",
+      "stage3ProfileA": "Stage 3 Profile A",
       "largeSource": "Large source",
-      "largeSourceNote": "Automatic safe Preview budget. Upload still requires review and separate approval."
+      "largeSourceNote": "Automatic safe Preview budget. Upload still requires review and separate approval.",
+      "autoReason": {
+        "operationalSourceClass": "operational source detected",
+        "largePreviewRange": "large date range detected"
+      }
     },
     "range": {
       "today": "Today",

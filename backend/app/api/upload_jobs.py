@@ -30,6 +30,7 @@ from backend.app.schemas.upload_jobs import (
     UploadJobStatus,
     UploadJobSummary,
 )
+from backend.app.services.preview_safety import source_gate_snapshot
 from backend.app.services.upload_jobs import UploadJobService
 
 router = APIRouter(prefix="/api/upload/jobs", tags=["upload-jobs"])
@@ -243,6 +244,7 @@ def create_upload_job(
             "targetClassPreflight": build_upload_target_preflight(settings).to_api(),
             "enableSmartSync": False,
         },
+        preview_gate_snapshot=source_gate_snapshot(settings),
     )
     if result.active_job_id is not None:
         reject_with_audit(

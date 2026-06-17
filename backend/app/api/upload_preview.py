@@ -28,26 +28,15 @@ from backend.app.schemas.upload_preview import (
     PreviewRangeMode,
     PreviewSource,
 )
+from backend.app.services.preview_safety import (
+    OPERATIONAL_PLC_SOURCE_CLASSES,
+    source_gate_snapshot,
+    source_path_class,
+)
 from backend.app.services.upload_preview import PreviewService
 
 router = APIRouter(prefix="/api/upload/preview", tags=["upload-preview"])
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-preview")
-
-
-OPERATIONAL_PLC_SOURCE_CLASSES = {"network", "drive_letter", "mounted"}
-
-
-def source_path_class(path: str) -> str:
-    normalized = path.strip()
-    if not normalized:
-        return "missing"
-    if normalized.startswith("\\\\") or normalized.startswith("//"):
-        return "network"
-    if len(normalized) >= 3 and normalized[1] == ":" and normalized[2] in {"\\", "/"}:
-        return "drive_letter"
-    if normalized.startswith("/mnt/"):
-        return "mounted"
-    return "local"
 
 
 def is_large_preview_range(request: PreviewCreateRequest) -> bool:
@@ -58,20 +47,45 @@ def is_large_preview_range(request: PreviewCreateRequest) -> bool:
     return False
 
 
-def resolve_preview_auto_safe_mode(request: PreviewCreateRequest, settings: Settings) -> PreviewCreateRequest:
+def preview_auto_safe_mode_reason(request: PreviewCreateRequest, settings: Settings) -> str | None:
     if request.options.profile != PreviewProfile.default:
-        return request
+        return None
     if PreviewSource.plc not in request.sources:
-        return request
-    if (
-        source_path_class(settings.plc_data_dir) not in OPERATIONAL_PLC_SOURCE_CLASSES
-        and not is_large_preview_range(request)
-    ):
+        return None
+    if source_path_class(settings.plc_data_dir) in OPERATIONAL_PLC_SOURCE_CLASSES:
+        return "operational_source_class"
+    if is_large_preview_range(request):
+        return "large_preview_range"
+    return None
+
+
+def resolve_preview_auto_safe_mode(request: PreviewCreateRequest, settings: Settings) -> PreviewCreateRequest:
+    if preview_auto_safe_mode_reason(request, settings) is None:
         return request
 
     options = request.options.model_dump(mode="json", by_alias=True)
     options["profile"] = PreviewProfile.large_source_operational.value
     return request.model_copy(update={"options": PreviewOptions.model_validate(options)})
+
+
+def build_preview_config_snapshot(
+    settings: Settings,
+    *,
+    requested_profile: PreviewProfile,
+    applied_profile: PreviewProfile,
+    auto_profile_reason: str | None,
+) -> dict[str, Any]:
+    return {
+        "plcDataDir": settings.plc_data_dir,
+        "temperatureDataDir": settings.temperature_data_dir,
+        "supabaseDbUrlConfigured": bool(settings.supabase_db_url),
+        "previewGate": source_gate_snapshot(settings),
+        "previewProfile": {
+            "requestedProfile": requested_profile.value,
+            "appliedProfile": applied_profile.value,
+            "autoProfileReason": auto_profile_reason,
+        },
+    }
 
 
 def get_preview_repository(settings: Settings = Depends(get_settings)) -> PreviewRepository:
@@ -99,6 +113,11 @@ def parse_json_dict(value: str | None) -> dict[str, Any]:
 
 
 def run_dto(row: Any) -> PreviewRunDto:
+    config_snapshot = parse_json_dict(row["config_snapshot_json"])
+    options = parse_json_dict(row["options_json"])
+    profile_snapshot = config_snapshot.get("previewProfile", {})
+    if not isinstance(profile_snapshot, dict):
+        profile_snapshot = {}
     return PreviewRunDto(
         preview_run_id=row["preview_run_id"],
         status=PreviewRunStatus(row["status"]),
@@ -117,6 +136,9 @@ def run_dto(row: Any) -> PreviewRunDto:
             db_matched_rows=row["db_match_count"],
         ),
         warnings=[],
+        requested_profile=profile_snapshot.get("requestedProfile") or options.get("profile"),
+        applied_profile=profile_snapshot.get("appliedProfile") or options.get("profile"),
+        auto_profile_reason=profile_snapshot.get("autoProfileReason"),
         timeout_stage=row["timeout_stage"],
         timing=parse_json_dict(row["timing_json"]),
         error_code=row["error_code"],
@@ -187,6 +209,8 @@ async def create_preview(
             detail={"reason": "preview_request_validation_failed", "keys": rejected_fields},
         ) from exc
 
+    requested_profile = request.options.profile
+    auto_profile_reason = preview_auto_safe_mode_reason(request, settings)
     request = resolve_preview_auto_safe_mode(request, settings)
     preview_run_id = f"prv_{uuid4().hex[:12]}"
     active_run_id = repository.create_run_if_no_active(
@@ -196,11 +220,12 @@ async def create_preview(
         end_date=request.end_date.isoformat() if request.end_date else None,
         sources=[source.value for source in request.sources],
         options=request.options.model_dump(mode="json", by_alias=True),
-        config_snapshot={
-            "plcDataDir": settings.plc_data_dir,
-            "temperatureDataDir": settings.temperature_data_dir,
-            "supabaseDbUrlConfigured": bool(settings.supabase_db_url),
-        },
+        config_snapshot=build_preview_config_snapshot(
+            settings,
+            requested_profile=requested_profile,
+            applied_profile=request.options.profile,
+            auto_profile_reason=auto_profile_reason,
+        ),
         retry_of_run_id=request.retry_of_run_id,
     )
     if active_run_id is not None:

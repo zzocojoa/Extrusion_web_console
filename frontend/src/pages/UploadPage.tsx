@@ -27,6 +27,7 @@ import {
   fetchUploadPreview,
   type PreviewItem,
   type PreviewItemStatus,
+  type PreviewProfile,
   type PreviewQueryParams,
   type PreviewRangeMode,
   type PreviewResponse,
@@ -71,6 +72,30 @@ const activePreviewRunStatuses: PreviewRunStatus[] = ["queued", "running", "canc
 const dbDerivedItemStatuses: PreviewItemStatus[] = ["target", "already_in_db", "partial_overlap"];
 
 const activeJobStatuses: UploadJobStatus[] = ["queued", "running", "pausing", "paused", "cancelling"];
+
+function previewProfileLabelKey(profile?: PreviewProfile | null) {
+  switch (profile) {
+    case "large_source_operational":
+      return "upload.previewMode.largeSource";
+    case "stage3_profile_a_bounded_full_scan":
+      return "upload.previewMode.stage3ProfileA";
+    case "default":
+      return "upload.previewMode.standard";
+    default:
+      return null;
+  }
+}
+
+function previewAutoReasonLabelKey(reason?: string | null) {
+  switch (reason) {
+    case "operational_source_class":
+      return "upload.previewMode.autoReason.operationalSourceClass";
+    case "large_preview_range":
+      return "upload.previewMode.autoReason.largePreviewRange";
+    default:
+      return null;
+  }
+}
 
 const jobTone: Record<UploadJobStatus, StatusTone> = {
   queued: "muted",
@@ -297,7 +322,9 @@ export function UploadPage() {
   const canStartUpload = Boolean(
     currentPreview?.run.status === "succeeded" &&
       currentPreview.run.dbStatus === "reachable" &&
-      currentPreview.run.summary.target > 0,
+      currentPreview.run.summary.target > 0 &&
+      currentPreview.run.summary.uploadRows > 0 &&
+      currentPreview.run.summary.risky === 0,
   );
 
   const latestJobQuery = useQuery({
@@ -607,6 +634,8 @@ function PreviewTab(props: PreviewTabProps) {
   );
   const startUploadDisabledReason = displayState?.startUploadDisabledReasonKey ?? "upload.actions.startUploadDisabledReason";
   const reviewablePreview = props.currentPreview && run && summary ? props.currentPreview : null;
+  const appliedProfileLabelKey = previewProfileLabelKey(run?.appliedProfile);
+  const autoProfileReasonLabelKey = previewAutoReasonLabelKey(run?.autoProfileReason);
 
   function openStartUploadReview() {
     if (!props.canStartUpload || !reviewablePreview) return;
@@ -692,6 +721,12 @@ function PreviewTab(props: PreviewTabProps) {
           <StatusBadge tone={runTone[run.status]} label={t(`upload.runStatus.${run.status}`)} />
           <span>{t("upload.preview.runId")}: <code>{run.previewRunId}</code></span>
           <span>{t("upload.preview.db")}: {t(displayState?.dbStatusLabelKey ?? `upload.dbStatus.${run.dbStatus}`)}</span>
+          {appliedProfileLabelKey ? (
+            <span>
+              {t("upload.previewMode.applied")}: {t(appliedProfileLabelKey)}
+              {autoProfileReasonLabelKey ? ` (${t(autoProfileReasonLabelKey)})` : ""}
+            </span>
+          ) : null}
           <span>{t("upload.preview.updated")}: {formatDateTime(run.finishedAt ?? run.startedAt ?? run.requestedAt)}</span>
           {run.errorMessage ? (
             <strong>{formatPreviewReason(run.errorCode, run.errorMessage, t, (key) => i18n.exists(key))}</strong>

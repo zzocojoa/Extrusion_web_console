@@ -71,6 +71,11 @@ export interface PreviewRun {
   dbStatus: PreviewDbStatus;
   summary: PreviewSummary;
   warnings: string[];
+  requestedProfile?: PreviewProfile | null;
+  appliedProfile?: PreviewProfile | null;
+  autoProfileReason?: string | null;
+  timeoutStage?: string | null;
+  timing?: Record<string, unknown> | null;
   errorCode?: string | null;
   errorMessage?: string | null;
 }
@@ -232,6 +237,11 @@ function toCamelPreviewResponse(raw: any): PreviewResponse {
         dbMatchedRows: summary.dbMatchedRows ?? summary.db_matched_rows ?? summary.db_match_count ?? 0,
       },
       warnings: run.warnings ?? [],
+      requestedProfile: run.requestedProfile ?? run.requested_profile ?? null,
+      appliedProfile: run.appliedProfile ?? run.applied_profile ?? null,
+      autoProfileReason: run.autoProfileReason ?? run.auto_profile_reason ?? null,
+      timeoutStage: run.timeoutStage ?? run.timeout_stage ?? null,
+      timing: run.timing ?? null,
       errorCode: run.errorCode ?? run.error_code ?? null,
       errorMessage: run.errorMessage ?? run.error_message ?? null,
     },

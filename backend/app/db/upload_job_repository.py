@@ -2,6 +2,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -11,6 +12,7 @@ from backend.app.schemas.upload_jobs import UploadJobFileStatus, UploadJobMode, 
 
 ACTIVE_JOB_STATUSES = ("queued", "running", "pausing", "paused", "cancelling")
 TERMINAL_JOB_STATUSES = ("succeeded", "partial_failed", "failed", "cancelled", "interrupted")
+PREVIEW_FRESHNESS_MAX_AGE_SECONDS = 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,26 @@ def _loads(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _preview_reference_time(preview: sqlite3.Row) -> datetime | None:
+    return (
+        _parse_iso_datetime(preview["finished_at"])
+        or _parse_iso_datetime(preview["started_at"])
+        or _parse_iso_datetime(preview["requested_at"])
+    )
 
 
 class UploadJobRepository:
@@ -235,8 +257,11 @@ class UploadJobRepository:
         preview_run_id: str,
         options: dict[str, Any],
         config_snapshot: dict[str, Any],
+        preview_gate_snapshot: dict[str, Any],
+        freshness_max_age_seconds: int = PREVIEW_FRESHNESS_MAX_AGE_SECONDS,
     ) -> CreateJobFromPreviewResult:
         now = iso_now()
+        now_dt = _parse_iso_datetime(now) or datetime.now(timezone.utc)
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             active = connection.execute(
@@ -257,6 +282,21 @@ class UploadJobRepository:
             ).fetchone()
             if preview is None:
                 return CreateJobFromPreviewResult(created=False, rejection_reason="preview_missing")
+            latest_preview = connection.execute(
+                """
+                SELECT preview_run_id
+                FROM preview_runs
+                ORDER BY requested_at DESC, created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if latest_preview is not None and str(latest_preview["preview_run_id"]) != preview_run_id:
+                return CreateJobFromPreviewResult(created=False, rejection_reason="preview_not_latest")
+            reference_time = _preview_reference_time(preview)
+            if reference_time is None:
+                return CreateJobFromPreviewResult(created=False, rejection_reason="preview_freshness_unknown")
+            if (now_dt - reference_time).total_seconds() > freshness_max_age_seconds:
+                return CreateJobFromPreviewResult(created=False, rejection_reason="preview_stale")
             if preview["status"] != "succeeded":
                 return CreateJobFromPreviewResult(
                     created=False,
@@ -269,6 +309,30 @@ class UploadJobRepository:
                     rejection_reason="preview_db_not_reachable",
                     db_status=str(preview["db_status"]),
                 )
+            risky_count_row = connection.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM preview_items
+                WHERE preview_run_id = ? AND status = 'risky'
+                """,
+                (preview_run_id,),
+            ).fetchone()
+            risky_count = int(risky_count_row["count"] if risky_count_row else 0)
+            if risky_count > 0:
+                return CreateJobFromPreviewResult(created=False, rejection_reason="preview_has_risky_items")
+            preview_config_snapshot = _loads(preview["config_snapshot_json"], {})
+            preview_gate = (
+                preview_config_snapshot.get("previewGate")
+                if isinstance(preview_config_snapshot, dict)
+                else None
+            )
+            if not isinstance(preview_gate, dict):
+                return CreateJobFromPreviewResult(
+                    created=False,
+                    rejection_reason="preview_source_snapshot_missing",
+                )
+            if preview_gate != preview_gate_snapshot:
+                return CreateJobFromPreviewResult(created=False, rejection_reason="preview_source_mismatch")
             target_count_row = connection.execute(
                 """
                 SELECT COUNT(*) AS count

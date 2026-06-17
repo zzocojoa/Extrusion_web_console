@@ -4,7 +4,7 @@ from backend.app.core.settings import Settings
 from backend.app.db.upload_job_repository import UploadJobRepository, decode_json
 from backend.app.schemas.upload_jobs import UploadJobStatus
 from backend.app.services.upload_jobs import UploadJobService, deduplicate_upload_records, parse_edge_accepted_rows
-from tests.backend.test_upload_jobs_repository_contract import create_preview_with_items
+from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
 
 
 class FakeUploader:
@@ -25,7 +25,13 @@ def prepare_target_job(tmp_path: Path, content: str) -> tuple[UploadJobRepositor
     csv_path = tmp_path / "target.csv"
     csv_path.write_text(content, encoding="utf-8")
     repository = UploadJobRepository(db_path)
-    repository.create_job_from_preview(job_id="upl_service", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.create_job_from_preview(
+        job_id="upl_service",
+        preview_run_id="prv_done",
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
     file_id = repository.list_job_files("upl_service")[0]["job_file_id"]
     stat = csv_path.stat()
     signature = f"size={stat.st_size}|mtime_ns={stat.st_mtime_ns}"
