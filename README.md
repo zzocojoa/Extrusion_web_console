@@ -186,6 +186,11 @@ When `-CreateZip` is used, a SHA-256 checksum file is written next to the zip. T
 
 For operator handoff, follow `docs/32_operator_package_handoff_runbook.md` for zip/checksum verification, extraction, shortcut install, first launch, Settings checks, log collection, rollback, and support escalation.
 
+For day-to-day upload decisions, including the normal "no upload target" outcome,
+follow `docs/151_operator_upload_gate_runbook.md`. This keeps fresh Preview-only,
+target count review, separate Start Upload approval, and separate Retry Failed
+approval as the required operating path.
+
 ## Backend Development
 
 From the repository root:
