@@ -360,13 +360,44 @@ def retry_upload_job(
     settings: Settings = Depends(get_settings),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
 ) -> UploadJobCreateResponse:
-    ensure_upload_config(settings, repository, "upload.retry", {"retryOfJobId": job_id})
+    approval_params = {
+        "retryOfJobId": job_id,
+        "includeInterrupted": request.include_interrupted,
+        "includeCancelled": request.include_cancelled,
+        "expectedRemainingRows": request.expected_remaining_rows,
+        "expectedRetryFiles": request.expected_retry_files,
+    }
+    if request.expected_remaining_rows is None or request.expected_remaining_rows <= 0:
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action="upload.retry",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="expected_remaining_rows_required",
+            params=approval_params,
+        )
+    if request.expected_retry_files is not None and request.expected_retry_files <= 0:
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action="upload.retry",
+            target_type="upload_job",
+            target_id=job_id,
+            reason="expected_retry_files_invalid",
+            params=approval_params,
+        )
+    expected_remaining_rows = request.expected_remaining_rows
+    assert expected_remaining_rows is not None
+    ensure_upload_config(settings, repository, "upload.retry", approval_params)
     retry_job_id = f"upl_{uuid4().hex[:12]}"
-    active_job_id, file_count = repository.create_retry_job(
+    result = repository.create_retry_job(
         job_id=retry_job_id,
         source_job_id=job_id,
         include_interrupted=request.include_interrupted,
         include_cancelled=request.include_cancelled,
+        expected_remaining_rows=expected_remaining_rows,
+        expected_retry_files=request.expected_retry_files,
         options=request.options.model_dump(mode="json", by_alias=True),
         config_snapshot={
             "uploadEdgeUrlConfigured": bool(settings.upload_edge_url),
@@ -375,7 +406,7 @@ def retry_upload_job(
             "enableSmartSync": False,
         },
     )
-    if active_job_id is not None:
+    if result.active_job_id is not None:
         reject_with_audit(
             repository,
             status_code=status.HTTP_409_CONFLICT,
@@ -383,29 +414,35 @@ def retry_upload_job(
             target_type="upload_job",
             target_id=job_id,
             reason="active_upload_job",
-            params={"retryOfJobId": job_id, "activeJobId": active_job_id},
-            headers={"Location": f"/api/upload/jobs/{active_job_id}"},
-            detail_extra={"activeJobId": active_job_id},
+            params={**approval_params, "activeJobId": result.active_job_id},
+            headers={"Location": f"/api/upload/jobs/{result.active_job_id}"},
+            detail_extra={"activeJobId": result.active_job_id},
         )
-    if file_count < 0:
+    if not result.created:
+        reason = result.rejection_reason or "source_job_not_retryable"
+        status_code = (
+            status.HTTP_409_CONFLICT
+            if reason == "source_job_not_retryable"
+            else status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+        detail_extra: dict[str, int] = {}
+        if result.file_count:
+            detail_extra["actualRetryFiles"] = result.file_count
+        if result.remaining_row_count:
+            detail_extra["actualRemainingRows"] = result.remaining_row_count
         reject_with_audit(
             repository,
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status_code,
             action="upload.retry",
             target_type="upload_job",
             target_id=job_id,
-            reason="source_job_not_retryable",
-            params={"retryOfJobId": job_id},
-        )
-    if file_count == 0:
-        reject_with_audit(
-            repository,
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            action="upload.retry",
-            target_type="upload_job",
-            target_id=job_id,
-            reason="no_retryable_files",
-            params={"retryOfJobId": job_id},
+            reason=reason,
+            params={
+                **approval_params,
+                "actualRetryFiles": result.file_count,
+                "actualRemainingRows": result.remaining_row_count,
+            },
+            detail_extra=detail_extra,
         )
     executor.submit(UploadJobService(settings, repository).run_job, retry_job_id)
     return UploadJobCreateResponse(
