@@ -82,6 +82,14 @@ class PreviewOptions(ApiModel):
         return values
 
 
+class PreviewApprovalScope(ApiModel):
+    expected_source_classes: dict[PreviewSource, str] = Field(default_factory=dict)
+    expected_range_mode: PreviewRangeMode
+    expected_start_date: date | None = None
+    expected_end_date: date | None = None
+    expected_applied_profile: PreviewProfile
+
+
 class PreviewCreateRequest(ApiModel):
     range_mode: PreviewRangeMode
     start_date: date | None = None
@@ -89,6 +97,7 @@ class PreviewCreateRequest(ApiModel):
     sources: list[PreviewSource] = Field(default_factory=lambda: [PreviewSource.plc])
     options: PreviewOptions = Field(default_factory=PreviewOptions)
     retry_of_run_id: str | None = None
+    approval_scope: PreviewApprovalScope | None = None
 
     @model_validator(mode="after")
     def validate_date_range(self) -> "PreviewCreateRequest":

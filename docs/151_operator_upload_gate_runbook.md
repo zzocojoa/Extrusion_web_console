@@ -92,6 +92,16 @@ stop. Do not run Preview.
 
 Run Upload Preview exactly once only after source and runtime preflight pass.
 
+Backend checks before Preview run creation:
+
+- `approvalScope` is present in the request;
+- expected source class matches the active backend source class;
+- expected range mode and custom date window match the request;
+- expected applied profile matches the profile after backend safe-mode
+  adjustment;
+- mismatch or missing approval scope blocks run creation with a blocked
+  `upload.preview` audit row.
+
 Expected successful Preview:
 
 - `status = succeeded`;

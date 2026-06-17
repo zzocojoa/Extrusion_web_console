@@ -249,6 +249,15 @@ Coverage caveat:
   requires separate approval" is a procedural/runbook invariant rather than a
   backend count-contract invariant.
 
+Follow-up implementation note:
+
+- Branch `codex/preview-approval-scope-contract` narrows this caveat by adding
+  a backend Preview approval-scope contract. Preview creation now requires
+  expected source class, range, and applied profile evidence, blocks mismatches
+  before run creation, and records expected/actual scope in `upload.preview`
+  audit evidence. This does not approve any Preview run by itself; it makes the
+  approved Preview scope machine-checkable.
+
 ## P1 Decision
 
 | Question | Answer |

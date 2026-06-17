@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import json
 import os
 import re
 import time
@@ -928,6 +929,14 @@ class PreviewService:
             return
         result = audit_result_for_preview_status(status)
         reason_code = error_code or (str(row["error_code"]) if row["error_code"] else None)
+        config_snapshot: dict[str, Any] = {}
+        if row["config_snapshot_json"]:
+            try:
+                decoded = json.loads(str(row["config_snapshot_json"]))
+                if isinstance(decoded, dict):
+                    config_snapshot = decoded
+            except json.JSONDecodeError:
+                config_snapshot = {}
         params = {
             "previewRunId": preview_run_id,
             "candidateCount": int(row["total_files"]),
@@ -940,6 +949,9 @@ class PreviewService:
             "reasonCode": reason_code,
             "requestedFilters": safe_requested_filters(request),
         }
+        approval_scope = config_snapshot.get("previewApprovalScope")
+        if isinstance(approval_scope, dict):
+            params["approvalScope"] = approval_scope
         if row["timeout_stage"]:
             params["timeoutStage"] = str(row["timeout_stage"])
         self.audit_repository.insert_audit(

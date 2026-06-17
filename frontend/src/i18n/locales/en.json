@@ -395,6 +395,11 @@
         "largePreviewRange": "large date range detected"
       }
     },
+    "previewApproval": {
+      "title": "Preview approval scope",
+      "detail": "source {{sourceClass}} / {{range}} / {{profile}}",
+      "loading": "Loading active config before Preview can start"
+    },
     "range": {
       "today": "Today",
       "yesterday": "Yesterday",

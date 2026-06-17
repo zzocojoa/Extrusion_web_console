@@ -15,6 +15,23 @@ from backend.app.main import app, create_app
 from backend.app.schemas.upload_preview import PreviewDbStatus, PreviewRunStatus
 
 
+def approval_scope(
+    *,
+    source_class: str = "local",
+    range_mode: str = "today",
+    start_date: str | None = None,
+    end_date: str | None = None,
+    applied_profile: str = "default",
+) -> dict[str, object]:
+    return {
+        "expectedSourceClasses": {"plc": source_class},
+        "expectedRangeMode": range_mode,
+        "expectedStartDate": start_date,
+        "expectedEndDate": end_date,
+        "expectedAppliedProfile": applied_profile,
+    }
+
+
 def test_upload_preview_routes_are_registered_in_openapi(monkeypatch) -> None:
     monkeypatch.setenv("EWC_API_DOCS_MODE", "enabled")
     get_settings.cache_clear()
@@ -116,6 +133,11 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_operational_
                     "maxRunSeconds": 120,
                     "maxFileSeconds": 30,
                 },
+                "approvalScope": approval_scope(
+                    source_class="network",
+                    range_mode="last_2_days",
+                    applied_profile="large_source_operational",
+                ),
             },
         )
         detail_response = client.get(f"/api/upload/preview/{response.json()['previewRunId']}")
@@ -161,6 +183,13 @@ def test_upload_preview_create_preserves_explicit_bounded_profile_for_operationa
                 "endDate": "2026-05-23",
                 "sources": ["plc"],
                 "options": {"profile": "stage3_profile_a_bounded_full_scan"},
+                "approvalScope": approval_scope(
+                    source_class="network",
+                    range_mode="custom",
+                    start_date="2026-05-23",
+                    end_date="2026-05-23",
+                    applied_profile="stage3_profile_a_bounded_full_scan",
+                ),
             },
         )
     finally:
@@ -198,6 +227,12 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_large_date_r
                 "endDate": "2026-01-02",
                 "sources": ["plc"],
                 "options": {"profile": "default"},
+                "approvalScope": approval_scope(
+                    range_mode="custom",
+                    start_date="2026-01-01",
+                    end_date="2026-01-02",
+                    applied_profile="large_source_operational",
+                ),
             },
         )
     finally:
@@ -229,7 +264,12 @@ def test_upload_preview_create_keeps_default_budget_for_small_local_source(
     try:
         response = client.post(
             "/api/upload/preview",
-            json={"rangeMode": "today", "sources": ["plc"], "options": {"profile": "default"}},
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "options": {"profile": "default"},
+                "approvalScope": approval_scope(),
+            },
         )
     finally:
         app.dependency_overrides.clear()
@@ -241,6 +281,75 @@ def test_upload_preview_create_keeps_default_budget_for_small_local_source(
     assert options["profile"] == "default"
     assert options["maxRunSeconds"] == 120
     assert options["maxFileSeconds"] == 30
+
+
+def test_upload_preview_create_rejects_missing_approval_scope_before_run_creation(tmp_path) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={"rangeMode": "today", "sources": ["plc"], "options": {"profile": "default"}},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "preview_approval_scope_required"
+    assert repository.get_latest_run() is None
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
+    params = decode_params_json(row["params_json_redacted"])
+    assert row["result"] == "blocked"
+    assert row["error_code"] == "preview_approval_scope_required"
+    assert params["reasonCode"] == "preview_approval_scope_required"
+    assert params["approvalScope"]["actual"]["sourceClasses"] == {"plc": "local"}
+    assert params["approvalScope"]["mismatchFields"] == ["approvalScope"]
+
+
+def test_upload_preview_create_rejects_approval_scope_mismatch_before_run_creation(tmp_path) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="//operator-share/plc")
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "options": {"profile": "default"},
+                "approvalScope": approval_scope(
+                    source_class="drive_letter",
+                    range_mode="today",
+                    applied_profile="default",
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["reason"] == "preview_approval_scope_mismatch"
+    assert set(detail["mismatchFields"]) == {"sourceClasses", "appliedProfile"}
+    assert repository.get_latest_run() is None
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
+    params = decode_params_json(row["params_json_redacted"])
+    assert row["result"] == "blocked"
+    assert params["approvalScope"]["expected"]["sourceClasses"] == {"plc": "drive_letter"}
+    assert params["approvalScope"]["actual"]["sourceClasses"] == {"plc": "network"}
+    assert params["approvalScope"]["actual"]["appliedProfile"] == "large_source_operational"
+    assert "operator-share" not in row["params_json_redacted"]
 
 
 def test_upload_preview_delete_is_not_a_v1_api() -> None:
@@ -336,6 +445,7 @@ def test_upload_preview_latest_returns_persisted_run_details(tmp_path) -> None:
 def test_upload_preview_conflict_returns_active_run_location(tmp_path) -> None:
     repository = PreviewRepository(str(tmp_path / "state.db"))
     audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
     repository.create_run(
         preview_run_id="prv_active",
         range_mode="today",
@@ -346,6 +456,7 @@ def test_upload_preview_conflict_returns_active_run_location(tmp_path) -> None:
         config_snapshot={},
         retry_of_run_id=None,
     )
+    app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_preview_repository] = lambda: repository
     app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
     client = TestClient(app)
@@ -353,7 +464,11 @@ def test_upload_preview_conflict_returns_active_run_location(tmp_path) -> None:
     try:
         response = client.post(
             "/api/upload/preview",
-            json={"rangeMode": "today", "sources": ["plc"]},
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "approvalScope": approval_scope(),
+            },
         )
     finally:
         app.dependency_overrides.clear()
