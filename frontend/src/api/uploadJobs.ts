@@ -130,7 +130,10 @@ const defaultOptions: UploadJobOptions = {
   retryAttempts: 3,
 };
 
-export async function createUploadJob(previewRunId: string): Promise<UploadJobCreateResponse> {
+export async function createUploadJob(
+  previewRunId: string,
+  approval: { expectedTargetRows: number; expectedTargetFiles?: number | null },
+): Promise<UploadJobCreateResponse> {
   const response = await apiFetch(
     "/api/upload/jobs",
     {
@@ -139,6 +142,8 @@ export async function createUploadJob(previewRunId: string): Promise<UploadJobCr
       body: JSON.stringify({
         previewRunId,
         mode: "preview_targets",
+        expectedTargetRows: approval.expectedTargetRows,
+        expectedTargetFiles: approval.expectedTargetFiles ?? null,
         options: defaultOptions,
       }),
     },

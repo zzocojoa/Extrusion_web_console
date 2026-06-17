@@ -232,11 +232,40 @@ def create_upload_job(
             reason="unsupported_upload_mode",
             params={"previewRunId": request.preview_run_id, "mode": request.mode.value},
         )
-    ensure_upload_config(settings, repository, "upload.start", {"previewRunId": request.preview_run_id})
+    approval_params = {
+        "previewRunId": request.preview_run_id,
+        "expectedTargetRows": request.expected_target_rows,
+        "expectedTargetFiles": request.expected_target_files,
+    }
+    if request.expected_target_rows is None or request.expected_target_rows <= 0:
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action="upload.start",
+            target_type="preview_run",
+            target_id=request.preview_run_id,
+            reason="expected_target_rows_required",
+            params=approval_params,
+        )
+    if request.expected_target_files is not None and request.expected_target_files <= 0:
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action="upload.start",
+            target_type="preview_run",
+            target_id=request.preview_run_id,
+            reason="expected_target_files_invalid",
+            params=approval_params,
+        )
+    expected_target_rows = request.expected_target_rows
+    assert expected_target_rows is not None
+    ensure_upload_config(settings, repository, "upload.start", approval_params)
     job_id = f"upl_{uuid4().hex[:12]}"
     result = repository.create_job_from_preview(
         job_id=job_id,
         preview_run_id=request.preview_run_id,
+        expected_target_rows=expected_target_rows,
+        expected_target_files=request.expected_target_files,
         options=request.options.model_dump(mode="json", by_alias=True),
         config_snapshot={
             "uploadEdgeUrlConfigured": bool(settings.upload_edge_url),
@@ -254,7 +283,7 @@ def create_upload_job(
             target_type="preview_run",
             target_id=request.preview_run_id,
             reason="active_upload_job",
-            params={"previewRunId": request.preview_run_id, "activeJobId": result.active_job_id},
+            params={**approval_params, "activeJobId": result.active_job_id},
             headers={"Location": f"/api/upload/jobs/{result.active_job_id}"},
             detail_extra={"activeJobId": result.active_job_id},
         )
@@ -266,6 +295,10 @@ def create_upload_job(
             detail_extra["status"] = result.rejection_status
         if result.db_status:
             detail_extra["dbStatus"] = result.db_status
+        if result.file_count:
+            detail_extra["actualTargetFiles"] = result.file_count
+        if result.upload_row_count:
+            detail_extra["actualTargetRows"] = result.upload_row_count
         reject_with_audit(
             repository,
             status_code=status_code,
@@ -273,7 +306,11 @@ def create_upload_job(
             target_type="preview_run",
             target_id=request.preview_run_id,
             reason=reason,
-            params={"previewRunId": request.preview_run_id},
+            params={
+                **approval_params,
+                "actualTargetFiles": result.file_count,
+                "actualTargetRows": result.upload_row_count,
+            },
             detail_extra=detail_extra,
         )
     executor.submit(UploadJobService(settings, repository).run_job, job_id)

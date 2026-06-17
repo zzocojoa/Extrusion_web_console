@@ -23,6 +23,7 @@ class CreateJobFromPreviewResult:
     rejection_status: str | None = None
     db_status: str | None = None
     file_count: int = 0
+    upload_row_count: int = 0
 
 
 def _json(value: Any) -> str:
@@ -255,6 +256,8 @@ class UploadJobRepository:
         *,
         job_id: str,
         preview_run_id: str,
+        expected_target_rows: int,
+        expected_target_files: int | None,
         options: dict[str, Any],
         config_snapshot: dict[str, Any],
         preview_gate_snapshot: dict[str, Any],
@@ -335,15 +338,37 @@ class UploadJobRepository:
                 return CreateJobFromPreviewResult(created=False, rejection_reason="preview_source_mismatch")
             target_count_row = connection.execute(
                 """
-                SELECT COUNT(*) AS count
+                SELECT
+                  COUNT(*) AS count,
+                  COALESCE(SUM(COALESCE(upload_row_estimate, 0)), 0) AS upload_rows
                 FROM preview_items
                 WHERE preview_run_id = ? AND status = 'target'
                 """,
                 (preview_run_id,),
             ).fetchone()
             target_count = int(target_count_row["count"] if target_count_row else 0)
-            if target_count <= 0:
-                return CreateJobFromPreviewResult(created=False, rejection_reason="no_upload_targets")
+            target_upload_rows = int(target_count_row["upload_rows"] if target_count_row else 0)
+            if target_count <= 0 or target_upload_rows <= 0:
+                return CreateJobFromPreviewResult(
+                    created=False,
+                    rejection_reason="no_upload_targets",
+                    file_count=target_count,
+                    upload_row_count=target_upload_rows,
+                )
+            if expected_target_files is not None and expected_target_files != target_count:
+                return CreateJobFromPreviewResult(
+                    created=False,
+                    rejection_reason="expected_target_files_mismatch",
+                    file_count=target_count,
+                    upload_row_count=target_upload_rows,
+                )
+            if expected_target_rows != target_upload_rows:
+                return CreateJobFromPreviewResult(
+                    created=False,
+                    rejection_reason="expected_target_rows_mismatch",
+                    file_count=target_count,
+                    upload_row_count=target_upload_rows,
+                )
 
             connection.execute(
                 """
@@ -388,18 +413,31 @@ class UploadJobRepository:
                 event_type="job.created",
                 level="info",
                 message="Upload job was queued from preview targets.",
-                data={"previewRunId": preview_run_id},
+                data={
+                    "previewRunId": preview_run_id,
+                    "expectedTargetRows": expected_target_rows,
+                    "actualTargetRows": target_upload_rows,
+                    "expectedTargetFiles": expected_target_files,
+                    "actualTargetFiles": target_count,
+                },
             )
             self._append_audit_in_connection(
                 connection,
                 action="upload.start",
                 target_type="upload_job",
                 target_id=job_id,
-                params={"previewRunId": preview_run_id, "mode": UploadJobMode.preview_targets.value},
+                params={
+                    "previewRunId": preview_run_id,
+                    "mode": UploadJobMode.preview_targets.value,
+                    "expectedTargetRows": expected_target_rows,
+                    "actualTargetRows": target_upload_rows,
+                    "expectedTargetFiles": expected_target_files,
+                    "actualTargetFiles": target_count,
+                },
                 result="success",
                 job_id=job_id,
             )
-        return CreateJobFromPreviewResult(created=True, file_count=target_count)
+        return CreateJobFromPreviewResult(created=True, file_count=target_count, upload_row_count=target_upload_rows)
 
     def create_retry_job(
         self,

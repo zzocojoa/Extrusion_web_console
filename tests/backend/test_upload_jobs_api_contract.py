@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -8,6 +9,21 @@ from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.upload_jobs import UploadJobStatus
 from backend.app.main import app, create_app
 from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
+
+
+START_UPLOAD_APPROVAL = {"previewRunId": "prv_done", "expectedTargetRows": 2, "expectedTargetFiles": 1}
+
+
+def upload_ready_settings(db_path: Path) -> Settings:
+    return Settings(
+        state_db_path=str(db_path),
+        plc_data_dir="",
+        temperature_data_dir="",
+        supabase_db_url="",
+        supabase_url="",
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
+        supabase_anon_key="anon",
+    )
 
 
 def test_upload_job_routes_are_registered_in_openapi(monkeypatch) -> None:
@@ -41,7 +57,7 @@ def test_upload_job_start_rejects_missing_upload_config(tmp_path: Path) -> None:
     client = TestClient(app)
 
     try:
-        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
     finally:
         app.dependency_overrides.clear()
 
@@ -69,7 +85,7 @@ def test_upload_job_start_rejects_stale_upload_target_preflight(tmp_path: Path) 
     client = TestClient(app)
 
     try:
-        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
     finally:
         app.dependency_overrides.clear()
 
@@ -86,6 +102,99 @@ def test_upload_job_start_rejects_stale_upload_target_preflight(tmp_path: Path) 
     with repository.connect() as connection:
         count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs").fetchone()["count"]
     assert count == 0
+
+
+def test_upload_job_start_rejects_missing_expected_target_rows_with_blocked_audit(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: upload_ready_settings(db_path)
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "expected_target_rows_required"
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.start"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "expected_target_rows_required"
+    params = json.loads(audit["params_json_redacted"])
+    assert params["previewRunId"] == "prv_done"
+    assert params["expectedTargetRows"] is None
+    with repository.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs").fetchone()["count"]
+    assert count == 0
+
+
+def test_upload_job_start_rejects_expected_target_row_mismatch_with_snapshot_counts(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: upload_ready_settings(db_path)
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/jobs",
+            json={"previewRunId": "prv_done", "expectedTargetRows": 999, "expectedTargetFiles": 1},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["reason"] == "expected_target_rows_mismatch"
+    assert detail["actualTargetRows"] == 2
+    assert detail["actualTargetFiles"] == 1
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.start"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "expected_target_rows_mismatch"
+    params = json.loads(audit["params_json_redacted"])
+    assert params["expectedTargetRows"] == 999
+    assert params["actualTargetRows"] == 2
+    assert params["actualTargetFiles"] == 1
+    with repository.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs").fetchone()["count"]
+    assert count == 0
+
+
+def test_upload_job_start_success_records_expected_and_actual_counts(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: upload_ready_settings(db_path)
+    submitted: list[str] = []
+    monkeypatch.setattr(
+        "backend.app.api.upload_jobs.executor.submit",
+        lambda _fn, job_id: submitted.append(job_id),
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "queued"
+    assert submitted == [body["jobId"]]
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.start"
+    assert audit["result"] == "success"
+    params = json.loads(audit["params_json_redacted"])
+    assert params["expectedTargetRows"] == 2
+    assert params["actualTargetRows"] == 2
+    assert params["expectedTargetFiles"] == 1
+    assert params["actualTargetFiles"] == 1
 
 
 def test_upload_job_latest_returns_404_when_empty(tmp_path: Path) -> None:
@@ -108,6 +217,8 @@ def test_upload_job_start_active_job_writes_blocked_audit(tmp_path: Path) -> Non
     repository.create_job_from_preview(
         job_id="upl_active",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -121,7 +232,7 @@ def test_upload_job_start_active_job_writes_blocked_audit(tmp_path: Path) -> Non
     client = TestClient(app)
 
     try:
-        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
     finally:
         app.dependency_overrides.clear()
 
@@ -148,7 +259,7 @@ def test_upload_job_start_preview_not_uploadable_writes_blocked_audit(tmp_path: 
     client = TestClient(app)
 
     try:
-        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
     finally:
         app.dependency_overrides.clear()
 
@@ -183,7 +294,7 @@ def test_upload_job_start_rejects_preview_source_mismatch(tmp_path: Path) -> Non
     client = TestClient(app)
 
     try:
-        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
     finally:
         app.dependency_overrides.clear()
 
@@ -223,7 +334,7 @@ def test_upload_job_start_rejects_timed_out_preview_without_creating_job(tmp_pat
     client = TestClient(app)
 
     try:
-        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
     finally:
         app.dependency_overrides.clear()
 
@@ -246,6 +357,8 @@ def test_retry_no_retryable_files_writes_blocked_audit(tmp_path: Path) -> None:
     repository.create_job_from_preview(
         job_id="upl_done",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -281,6 +394,8 @@ def test_upload_job_detail_exposes_accepted_rows_with_legacy_inserted_alias(tmp_
     repository.create_job_from_preview(
         job_id="upl_counts",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -314,6 +429,8 @@ def test_upload_job_events_replays_after_seq(tmp_path: Path) -> None:
     repository.create_job_from_preview(
         job_id="upl_events",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,

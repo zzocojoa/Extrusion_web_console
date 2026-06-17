@@ -82,6 +82,8 @@ def test_dashboard_endpoint_uses_latest_succeeded_upload_job(tmp_path: Path) -> 
     upload_repository.create_job_from_preview(
         job_id="upl_stage4",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
