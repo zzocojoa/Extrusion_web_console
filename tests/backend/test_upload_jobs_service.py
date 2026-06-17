@@ -28,6 +28,8 @@ def prepare_target_job(tmp_path: Path, content: str) -> tuple[UploadJobRepositor
     repository.create_job_from_preview(
         job_id="upl_service",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,

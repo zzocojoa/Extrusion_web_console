@@ -54,6 +54,8 @@ class UploadJobCreateRequest(ApiModel):
     preview_run_id: str
     mode: UploadJobMode = UploadJobMode.preview_targets
     options: UploadJobOptions = Field(default_factory=UploadJobOptions)
+    expected_target_rows: int | None = Field(default=None, ge=0)
+    expected_target_files: int | None = Field(default=None, ge=0)
 
 
 class RetryFailedRequest(ApiModel):

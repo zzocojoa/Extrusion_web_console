@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -107,6 +108,8 @@ def test_create_job_from_preview_snapshots_only_target_items(tmp_path: Path) -> 
     result = repository.create_job_from_preview(
         job_id="upl_test",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -120,6 +123,18 @@ def test_create_job_from_preview_snapshots_only_target_items(tmp_path: Path) -> 
     assert job["total_files"] == 1
     assert [row["filename"] for row in files] == ["target.csv"]
     assert events[0]["event_type"] == "job.created"
+    event_data = json.loads(events[0]["data_json"])
+    assert event_data["expectedTargetRows"] == 2
+    assert event_data["actualTargetRows"] == 2
+    assert event_data["expectedTargetFiles"] == 1
+    assert event_data["actualTargetFiles"] == 1
+    with repository.connect() as connection:
+        audit = connection.execute("SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT 1").fetchone()
+    audit_params = json.loads(audit["params_json_redacted"])
+    assert audit_params["expectedTargetRows"] == 2
+    assert audit_params["actualTargetRows"] == 2
+    assert audit_params["expectedTargetFiles"] == 1
+    assert audit_params["actualTargetFiles"] == 1
 
 
 def test_create_job_from_preview_rejects_non_latest_preview(tmp_path: Path) -> None:
@@ -131,6 +146,8 @@ def test_create_job_from_preview_rejects_non_latest_preview(tmp_path: Path) -> N
     result = repository.create_job_from_preview(
         job_id="upl_old_preview",
         preview_run_id="prv_old",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -164,6 +181,8 @@ def test_create_job_from_preview_rejects_stale_preview(tmp_path: Path) -> None:
     result = repository.create_job_from_preview(
         job_id="upl_stale_preview",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -182,6 +201,8 @@ def test_create_job_from_preview_rejects_risky_preview(tmp_path: Path) -> None:
     result = repository.create_job_from_preview(
         job_id="upl_risky_preview",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -192,6 +213,50 @@ def test_create_job_from_preview_rejects_risky_preview(tmp_path: Path) -> None:
     assert repository.get_job("upl_risky_preview") is None
 
 
+def test_create_job_from_preview_rejects_expected_target_row_mismatch(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+
+    result = repository.create_job_from_preview(
+        job_id="upl_row_mismatch",
+        preview_run_id="prv_done",
+        expected_target_rows=999,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+
+    assert result.created is False
+    assert result.rejection_reason == "expected_target_rows_mismatch"
+    assert result.file_count == 1
+    assert result.upload_row_count == 2
+    assert repository.get_job("upl_row_mismatch") is None
+
+
+def test_create_job_from_preview_rejects_expected_target_file_mismatch(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+
+    result = repository.create_job_from_preview(
+        job_id="upl_file_mismatch",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=2,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+
+    assert result.created is False
+    assert result.rejection_reason == "expected_target_files_mismatch"
+    assert result.file_count == 1
+    assert result.upload_row_count == 2
+    assert repository.get_job("upl_file_mismatch") is None
+
+
 def test_create_job_from_preview_rejects_source_snapshot_mismatch(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
@@ -200,6 +265,8 @@ def test_create_job_from_preview_rejects_source_snapshot_mismatch(tmp_path: Path
     result = repository.create_job_from_preview(
         job_id="upl_source_mismatch",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot={
@@ -221,6 +288,8 @@ def test_create_job_from_preview_rejects_missing_source_snapshot(tmp_path: Path)
     result = repository.create_job_from_preview(
         job_id="upl_missing_source_snapshot",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -238,6 +307,8 @@ def test_active_job_guard_blocks_second_job(tmp_path: Path) -> None:
     repository.create_job_from_preview(
         job_id="upl_active",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -246,6 +317,8 @@ def test_active_job_guard_blocks_second_job(tmp_path: Path) -> None:
     result = repository.create_job_from_preview(
         job_id="upl_new",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -264,6 +337,8 @@ def test_create_job_from_preview_revalidates_preview_state_inside_transaction(tm
     result = repository.create_job_from_preview(
         job_id="upl_blocked",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -281,6 +356,8 @@ def test_startup_marks_active_upload_job_interrupted(tmp_path: Path) -> None:
     repository.create_job_from_preview(
         job_id="upl_stale",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -305,6 +382,8 @@ def test_finish_job_does_not_overwrite_cancel_requested_job(tmp_path: Path) -> N
     repository.create_job_from_preview(
         job_id="upl_cancel",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -326,6 +405,8 @@ def test_finish_job_does_not_overwrite_terminal_interrupted_job(tmp_path: Path) 
     repository.create_job_from_preview(
         job_id="upl_interrupted",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -347,6 +428,8 @@ def test_mark_paused_is_idempotent_and_does_not_duplicate_events(tmp_path: Path)
     repository.create_job_from_preview(
         job_id="upl_pause",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -370,6 +453,8 @@ def test_append_event_assigns_unique_monotonic_seq_under_concurrent_writers(tmp_
     repository.create_job_from_preview(
         job_id="upl_events",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
@@ -400,6 +485,8 @@ def test_retry_job_snapshots_failed_files_only(tmp_path: Path) -> None:
     repository.create_job_from_preview(
         job_id="upl_old",
         preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
         options={},
         config_snapshot={},
         preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,

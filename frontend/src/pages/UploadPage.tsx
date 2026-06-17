@@ -468,7 +468,7 @@ export function UploadPage() {
   });
 
   const startUploadMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (approval: { expectedTargetRows: number; expectedTargetFiles: number }) => {
       if (!activePreviewRunId) throw new Error("No preview run");
       if (!API_MODE) {
         const id = `mock_upl_${Date.now()}`;
@@ -477,7 +477,7 @@ export function UploadPage() {
         setMockJobCancelled(false);
         return { jobId: id, status: "queued" as const, detailUrl: "", eventsUrl: "" };
       }
-      return createUploadJob(activePreviewRunId);
+      return createUploadJob(activePreviewRunId, approval);
     },
     onSuccess: (response) => {
       latestSeqRef.current = 0;
@@ -573,7 +573,7 @@ export function UploadPage() {
           canStartUpload={canStartUpload}
           startUploadPending={startUploadMutation.isPending}
           startUploadError={startUploadMutation.error}
-          onStartUpload={() => startUploadMutation.mutate()}
+          onStartUpload={(approval) => startUploadMutation.mutate(approval)}
           onStatusFilterChange={setStatusFilter}
           onSearchChange={setSearch}
           onSortChange={setSort}
@@ -615,7 +615,7 @@ interface PreviewTabProps {
   onEndDateChange: (value: string) => void;
   onRunPreview: () => void;
   onCancel: () => void;
-  onStartUpload: () => void;
+  onStartUpload: (approval: { expectedTargetRows: number; expectedTargetFiles: number }) => void;
   onStatusFilterChange: (value: PreviewItemStatus | "all") => void;
   onSearchChange: (value: string) => void;
   onSortChange: (value: PreviewSortKey) => void;
@@ -647,7 +647,10 @@ function PreviewTab(props: PreviewTabProps) {
   }
 
   function confirmStartUpload() {
-    props.onStartUpload();
+    props.onStartUpload({
+      expectedTargetRows: reviewablePreview?.run.summary.uploadRows ?? 0,
+      expectedTargetFiles: reviewablePreview?.run.summary.target ?? 0,
+    });
     setStartReviewOpen(false);
   }
 
