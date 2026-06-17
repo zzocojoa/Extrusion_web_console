@@ -353,9 +353,15 @@
       "search": "파일명, 경로, 사유 검색"
     },
     "previewMode": {
+      "applied": "적용 모드",
       "standard": "기본",
+      "stage3ProfileA": "Stage 3 Profile A",
       "largeSource": "대용량",
-      "largeSourceNote": "자동 안전 미리보기 예산을 사용합니다. 업로드는 검토와 별도 승인 후 가능합니다."
+      "largeSourceNote": "자동 안전 미리보기 예산을 사용합니다. 업로드는 검토와 별도 승인 후 가능합니다.",
+      "autoReason": {
+        "operationalSourceClass": "운영 source 감지",
+        "largePreviewRange": "큰 날짜 범위 감지"
+      }
     },
     "range": {
       "today": "오늘",

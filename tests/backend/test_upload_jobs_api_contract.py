@@ -7,7 +7,7 @@ from backend.app.core.settings import Settings, get_settings
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.upload_jobs import UploadJobStatus
 from backend.app.main import app, create_app
-from tests.backend.test_upload_jobs_repository_contract import create_preview_with_items
+from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
 
 
 def test_upload_job_routes_are_registered_in_openapi(monkeypatch) -> None:
@@ -105,7 +105,13 @@ def test_upload_job_start_active_job_writes_blocked_audit(tmp_path: Path) -> Non
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
     repository = UploadJobRepository(db_path)
-    repository.create_job_from_preview(job_id="upl_active", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.create_job_from_preview(
+        job_id="upl_active",
+        preview_run_id="prv_done",
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
     app.dependency_overrides[get_upload_job_repository] = lambda: repository
     app.dependency_overrides[get_settings] = lambda: Settings(
         state_db_path=str(db_path),
@@ -154,6 +160,44 @@ def test_upload_job_start_preview_not_uploadable_writes_blocked_audit(tmp_path: 
     assert audit["error_code"] == "preview_not_uploadable"
 
 
+def test_upload_job_start_rejects_preview_source_mismatch(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(
+        db_path,
+        config_snapshot={
+            "previewGate": {
+                "plc": {"pathClass": "network", "pathFingerprint": "old-source"},
+                "temperature": {"pathClass": "missing", "pathFingerprint": None},
+                "supabaseDbUrlConfigured": False,
+            }
+        },
+    )
+    repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        state_db_path=str(db_path),
+        local_supabase_api_port=55321,
+        supabase_edge_url="http://127.0.0.1:55321/functions/v1/upload-metrics",
+        supabase_anon_key="anon",
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs", json={"previewRunId": "prv_done"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "preview_source_mismatch"
+    audit = latest_audit(repository)
+    assert audit["action"] == "upload.start"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "preview_source_mismatch"
+    with repository.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) AS count FROM upload_jobs").fetchone()["count"]
+    assert count == 0
+
+
 def test_upload_job_start_rejects_timed_out_preview_without_creating_job(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
@@ -199,7 +243,13 @@ def test_retry_no_retryable_files_writes_blocked_audit(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
     repository = UploadJobRepository(db_path)
-    repository.create_job_from_preview(job_id="upl_done", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.create_job_from_preview(
+        job_id="upl_done",
+        preview_run_id="prv_done",
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
     file_id = repository.list_job_files("upl_done")[0]["job_file_id"]
     repository.mark_file_completed(file_id, uploaded_rows=2, inserted_rows=2)
     repository.finish_job("upl_done", UploadJobStatus.succeeded)
@@ -228,7 +278,13 @@ def test_upload_job_detail_exposes_accepted_rows_with_legacy_inserted_alias(tmp_
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
     repository = UploadJobRepository(db_path)
-    repository.create_job_from_preview(job_id="upl_counts", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.create_job_from_preview(
+        job_id="upl_counts",
+        preview_run_id="prv_done",
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
     file_id = repository.list_job_files("upl_counts")[0]["job_file_id"]
     repository.mark_file_completed(file_id, uploaded_rows=2, inserted_rows=2)
     repository.finish_job("upl_counts", UploadJobStatus.succeeded)
@@ -255,7 +311,13 @@ def test_upload_job_events_replays_after_seq(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
     repository = UploadJobRepository(db_path)
-    repository.create_job_from_preview(job_id="upl_events", preview_run_id="prv_done", options={}, config_snapshot={})
+    repository.create_job_from_preview(
+        job_id="upl_events",
+        preview_run_id="prv_done",
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
     repository.append_event("upl_events", event_type="log.info", level="info", message="second")
     repository.finish_job("upl_events", UploadJobStatus.succeeded)
     app.dependency_overrides[get_upload_job_repository] = lambda: repository

@@ -21,7 +21,7 @@ from backend.app.schemas.runtime import (
     RuntimeStatusResponse,
 )
 from backend.app.schemas.upload_jobs import UploadJobStatus
-from tests.backend.test_upload_jobs_repository_contract import create_preview_with_items
+from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
 
 
 def ready_runtime(tmp_path: Path) -> RuntimeStatusResponse:
@@ -79,7 +79,13 @@ def test_dashboard_endpoint_uses_latest_succeeded_upload_job(tmp_path: Path) -> 
     create_preview_with_items(db_path)
     upload_repository = UploadJobRepository(db_path)
     audit_repository = AuditRepository(db_path)
-    upload_repository.create_job_from_preview(job_id="upl_stage4", preview_run_id="prv_done", options={}, config_snapshot={})
+    upload_repository.create_job_from_preview(
+        job_id="upl_stage4",
+        preview_run_id="prv_done",
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
     upload_repository.start_job("upl_stage4")
     job_file_id = upload_repository.list_job_files("upl_stage4")[0]["job_file_id"]
     upload_repository.update_file_progress(

@@ -118,10 +118,12 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_operational_
                 },
             },
         )
+        detail_response = client.get(f"/api/upload/preview/{response.json()['previewRunId']}")
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 202
+    assert detail_response.status_code == 200
     preview_run_id = response.json()["previewRunId"]
     row = repository.get_run(preview_run_id)
     assert row is not None
@@ -130,6 +132,10 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_operational_
     assert options["chunkRows"] == 1000
     assert options["maxRunSeconds"] == 900
     assert options["maxFileSeconds"] == 300
+    run = detail_response.json()["run"]
+    assert run["requestedProfile"] == "default"
+    assert run["appliedProfile"] == "large_source_operational"
+    assert run["autoProfileReason"] == "operational_source_class"
     assert submitted[0][1].options.profile.value == "large_source_operational"
 
 

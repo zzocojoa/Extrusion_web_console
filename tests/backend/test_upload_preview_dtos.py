@@ -137,6 +137,28 @@ def test_large_source_operational_profile_applies_long_preview_budget() -> None:
     assert api_payload["options"]["forceFullScan"] is False
 
 
+def test_preview_run_dto_serializes_applied_profile_metadata() -> None:
+    schema = _schema_module()
+
+    dto = schema.PreviewRunDto.model_validate(
+        {
+            "previewRunId": "prv_test",
+            "status": "succeeded",
+            "requestedAt": "2026-06-17T00:00:00+00:00",
+            "dbStatus": "reachable",
+            "summary": {"target": 1, "uploadRows": 10},
+            "requestedProfile": "default",
+            "appliedProfile": "large_source_operational",
+            "autoProfileReason": "operational_source_class",
+        }
+    )
+
+    payload = dto.model_dump(by_alias=True)
+    assert payload["requestedProfile"] == "default"
+    assert payload["appliedProfile"] == "large_source_operational"
+    assert payload["autoProfileReason"] == "operational_source_class"
+
+
 def test_preview_create_request_custom_range_requires_both_dates_and_valid_order() -> None:
     schema = _schema_module()
 
