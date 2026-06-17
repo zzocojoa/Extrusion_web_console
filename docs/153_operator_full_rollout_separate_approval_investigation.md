@@ -31,6 +31,14 @@ audit paths. Upload Preview is protected by the local token guard, writes
 backend cannot prove a human approval record for each Preview request by itself.
 That is the remaining caveat and why this report is `95%`, not `100%`.
 
+Follow-up closeout: PR #177 (`f2609fc`) later added the backend
+`approvalScope` Preview contract to `main`. The Preview approval-scope caveat
+in this original report is now closed for source class, range, and applied
+profile mismatch detection before Preview run creation. This closeout does not
+approve any new Preview, Start Upload, Retry Failed, duplicate rerun, full
+rollout, release, tag, package artifact, Settings save, database operation,
+Supabase operation, Docker operation, or operational source mutation.
+
 This investigation did not execute Upload Preview, Start Upload, Retry Failed,
 duplicate rerun, authenticated Edge call, full rollout, Settings save,
 DB/Supabase/Docker lifecycle, DB destructive work, or operational source

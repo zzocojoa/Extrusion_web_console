@@ -395,9 +395,15 @@ export function UploadPage() {
   );
 
   const latestJobQuery = useQuery({
-    queryKey: ["upload-job", "latest"],
-    enabled: activeTab === "job" && !jobId && API_MODE,
-    queryFn: fetchLatestUploadJob,
+    queryKey: ["upload-job", "latest", API_MODE ? "api" : "mock"],
+    enabled: activeTab === "job" && !jobId,
+    queryFn: async () => {
+      if (!API_MODE) {
+        const { getMockUploadJob } = await import("./upload/mockUploadJob");
+        return getMockUploadJob("mock_upl_latest", Date.now() - 8_000, false, false);
+      }
+      return fetchLatestUploadJob();
+    },
     retry: false,
   });
 
