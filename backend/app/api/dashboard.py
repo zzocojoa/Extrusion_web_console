@@ -126,6 +126,13 @@ def _now() -> str:
 
 
 def _overall(row: Any | None, supabase_tone: str) -> DashboardOverall:
+    if supabase_tone == "blocked":
+        return DashboardOverall(
+            state="blocked",
+            title="Upload blocked",
+            message="Local Supabase core runtime is not reachable.",
+            action="start_supabase",
+        )
     if row is None:
         return DashboardOverall(
             state="ready",
@@ -143,7 +150,7 @@ def _overall(row: Any | None, supabase_tone: str) -> DashboardOverall:
         )
     if status == "succeeded":
         return DashboardOverall(
-            state="ready" if supabase_tone != "blocked" else "attention",
+            state="ready",
             title="Latest upload succeeded",
             message=_job_count_message(row),
             action="open_job",
@@ -265,15 +272,19 @@ def _runtime_summary(runtime_status: RuntimeStatusResponse | None, settings: Set
             "grafana_value": "unknown",
             "grafana_detail": settings.grafana_url,
         }
-    core_ready = runtime_status.api.status == RuntimeServiceStatus.ready and runtime_status.db.status == RuntimeServiceStatus.ready
-    edge_ready = runtime_status.edge_runtime.status == RuntimeServiceStatus.ready
-    supabase_tone = "ready" if core_ready and edge_ready else "attention" if core_ready else "blocked"
+    core_ready = (
+        runtime_status.api.status == RuntimeServiceStatus.ready
+        and runtime_status.db.status == RuntimeServiceStatus.ready
+        and runtime_status.studio.status == RuntimeServiceStatus.ready
+        and runtime_status.edge_runtime.status == RuntimeServiceStatus.ready
+    )
+    supabase_tone = "ready" if core_ready else "blocked"
     storage_ready = runtime_status.docker.status == RuntimeServiceStatus.ready and runtime_status.wsl.status == RuntimeServiceStatus.ready
     grafana_tone = _runtime_tone(runtime_status.grafana.status)
     return {
         "supabase_tone": supabase_tone,
-        "supabase_value": "DB + Edge OK" if core_ready and edge_ready else runtime_status.overall_status.value,
-        "supabase_detail": f"API {runtime_status.api.status.value}, DB {runtime_status.db.status.value}, Edge {runtime_status.edge_runtime.status.value}.",
+        "supabase_value": "Core runtime OK" if core_ready else runtime_status.overall_status.value,
+        "supabase_detail": f"API {runtime_status.api.status.value}, DB {runtime_status.db.status.value}, Studio {runtime_status.studio.status.value}, Edge {runtime_status.edge_runtime.status.value}.",
         "storage_tone": "ready" if storage_ready else "attention",
         "storage_value": f"Docker {runtime_status.docker.status.value}",
         "storage_detail": f"WSL {runtime_status.wsl.status.value}, CLI {runtime_status.supabase_cli.status.value}.",

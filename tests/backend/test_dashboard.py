@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.dashboard import (
@@ -24,23 +25,37 @@ from backend.app.schemas.upload_jobs import UploadJobStatus
 from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
 
 
-def ready_runtime(tmp_path: Path) -> RuntimeStatusResponse:
+def ready_runtime(
+    tmp_path: Path,
+    *,
+    api: RuntimeServiceStatus = RuntimeServiceStatus.ready,
+    db: RuntimeServiceStatus = RuntimeServiceStatus.ready,
+    studio: RuntimeServiceStatus = RuntimeServiceStatus.ready,
+    edge: RuntimeServiceStatus = RuntimeServiceStatus.ready,
+    grafana: RuntimeServiceStatus = RuntimeServiceStatus.ready,
+) -> RuntimeStatusResponse:
     checked_at = datetime(2026, 6, 13, 9, 0, tzinfo=timezone.utc)
+    core_ready = (
+        api == RuntimeServiceStatus.ready
+        and db == RuntimeServiceStatus.ready
+        and studio == RuntimeServiceStatus.ready
+        and edge == RuntimeServiceStatus.ready
+    )
     return RuntimeStatusResponse(
-        overall_status=RuntimeOverallStatus.ready,
-        reason_code="runtime_ready",
-        reason_text="Runtime ready.",
+        overall_status=RuntimeOverallStatus.ready if core_ready and grafana == RuntimeServiceStatus.ready else RuntimeOverallStatus.blocked if not core_ready else RuntimeOverallStatus.attention,
+        reason_code="runtime_ready" if core_ready and grafana == RuntimeServiceStatus.ready else "core_runtime_unreachable" if not core_ready else "non_core_runtime_attention",
+        reason_text="Runtime ready." if core_ready else "Core runtime unreachable.",
         checked_at=checked_at,
         project_path=str(tmp_path / "runtime"),
         project_id="Extrusion_web_console",
         docker=RuntimeProbeStatus(name="Docker", status=RuntimeServiceStatus.ready, detail="ready"),
         wsl=RuntimeProbeStatus(name="WSL", status=RuntimeServiceStatus.ready, detail="ready"),
         supabase_cli=RuntimeProbeStatus(name="Supabase CLI", status=RuntimeServiceStatus.ready, detail="ready"),
-        api=RuntimePortStatus(name="Supabase API", port=55321, status=RuntimeServiceStatus.ready, detail="ready"),
-        db=RuntimePortStatus(name="Supabase DB", port=25433, status=RuntimeServiceStatus.ready, detail="ready"),
-        studio=RuntimePortStatus(name="Supabase Studio", port=55323, status=RuntimeServiceStatus.ready, detail="ready"),
-        edge_runtime=RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="ready"),
-        grafana=RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="HTTP 200"),
+        api=RuntimePortStatus(name="Supabase API", port=55321, status=api, detail="ready"),
+        db=RuntimePortStatus(name="Supabase DB", port=25433, status=db, detail="ready"),
+        studio=RuntimePortStatus(name="Supabase Studio", port=55323, status=studio, detail="ready"),
+        edge_runtime=RuntimeProbeStatus(name="Edge Function", status=edge, detail="ready"),
+        grafana=RuntimeProbeStatus(name="Grafana", status=grafana, detail="HTTP 200"),
         containers=[],
         config=[],
         active_operation=None,
@@ -136,6 +151,56 @@ def test_dashboard_endpoint_uses_latest_succeeded_upload_job(tmp_path: Path) -> 
     assert data["auditSummary"][0]["action"] == "upload.start"
     assert "hidden-value" not in response.text
     assert str(db_path) not in response.text
+
+
+@pytest.mark.parametrize("failed_probe", ["api", "db", "studio", "edge"])
+def test_dashboard_marks_core_runtime_failure_as_blocking(tmp_path: Path, failed_probe: str) -> None:
+    state_path = tmp_path / "missing-state.db"
+    app.dependency_overrides[get_settings] = lambda: Settings(state_db_path=str(state_path))
+    app.dependency_overrides[get_dashboard_runtime_status] = lambda: ready_runtime(
+        tmp_path,
+        api=RuntimeServiceStatus.unreachable if failed_probe == "api" else RuntimeServiceStatus.ready,
+        db=RuntimeServiceStatus.unreachable if failed_probe == "db" else RuntimeServiceStatus.ready,
+        studio=RuntimeServiceStatus.unreachable if failed_probe == "studio" else RuntimeServiceStatus.ready,
+        edge=RuntimeServiceStatus.unreachable if failed_probe == "edge" else RuntimeServiceStatus.ready,
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/dashboard")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall"]["state"] == "blocked"
+    runtime_chip = next(item for item in data["topbarChips"] if item["id"] == "supabase")
+    runtime_warning = next(item for item in data["warningQueue"] if item["id"] == "supabase_unreachable")
+    assert runtime_chip["tone"] == "blocked"
+    assert runtime_warning["tone"] == "blocked"
+    assert runtime_warning["count"] == 1
+
+
+def test_dashboard_keeps_grafana_failure_as_non_core_caveat(tmp_path: Path) -> None:
+    state_path = tmp_path / "missing-state.db"
+    app.dependency_overrides[get_settings] = lambda: Settings(state_db_path=str(state_path))
+    app.dependency_overrides[get_dashboard_runtime_status] = lambda: ready_runtime(tmp_path, grafana=RuntimeServiceStatus.unreachable)
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/dashboard")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    runtime_chip = next(item for item in data["topbarChips"] if item["id"] == "supabase")
+    grafana_chip = next(item for item in data["topbarChips"] if item["id"] == "grafana")
+    runtime_warning = next(item for item in data["warningQueue"] if item["id"] == "supabase_unreachable")
+    assert runtime_chip["tone"] == "ready"
+    assert grafana_chip["tone"] == "blocked"
+    assert runtime_warning["tone"] == "ready"
+    assert runtime_warning["count"] == 0
 
 
 def test_dashboard_summary_endpoint_uses_same_real_state_contract(tmp_path: Path) -> None:
