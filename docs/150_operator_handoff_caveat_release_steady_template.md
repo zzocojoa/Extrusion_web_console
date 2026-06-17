@@ -53,7 +53,12 @@ versioned package artifact through the formal release process.
 
 ### Non-Core Caveats
 
-Grafana and Vector are non-core only when all core gates below remain healthy:
+Grafana and Vector are non-core only when all core gates below remain healthy.
+Core gates are API, DB, Studio, Edge, Dashboard, Upload, Logs/Audit, local token
+guard, and state context. Grafana is represented in the runtime API/UI as a
+status/link-only service. Vector remains a documented observability caveat in
+this runbook unless a later implementation adds a sanitized runtime API row for
+it.
 
 | Core gate | Required state |
 | --- | --- |
@@ -75,7 +80,7 @@ If these pass, the following remain caveats rather than blockers:
 | Caveat | Classification | Required note |
 | --- | --- | --- |
 | Grafana unreachable | non-core caveat | status/link dashboard unavailable, Core Ops still usable |
-| Vector unavailable or restarting | non-core caveat | log shipping/observability reduced, local app logs/audit still authoritative |
+| Vector unavailable or restarting | document-only non-core caveat | log shipping/observability reduced, local app logs/audit still authoritative |
 | Browser network artifact incomplete | evidence caveat | API/route smoke can substitute only if console errors are zero or unavailable by tool limitation |
 
 ### Promote To Blocker
@@ -91,6 +96,10 @@ or hides any of the following:
 | Upload Job final state or audit trail is unavailable | do not approve retry or final acceptance |
 | Token guard or API docs hardening regresses | block release/handoff |
 | Operator cannot distinguish package/API-mode state from dev/mock state | block hard retirement or package handoff |
+
+Do not classify Studio or Edge as a non-core caveat. If either is unavailable,
+the upload runtime gate is blocked even when Grafana is the only visible
+monitoring link failure.
 
 ## Release And Tag Decision
 

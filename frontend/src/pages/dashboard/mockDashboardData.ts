@@ -33,7 +33,7 @@ export const mockDashboardData: DashboardResponse = {
       id: "supabase",
       label: "Local Supabase",
       tone: "ready",
-      value: "DB + Edge OK",
+      value: "Core runtime OK",
       detail: "127.0.0.1:55321",
     },
     {

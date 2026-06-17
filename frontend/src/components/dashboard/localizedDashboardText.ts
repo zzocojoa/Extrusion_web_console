@@ -192,12 +192,13 @@ export function localizeDiagnosticMessage(message: string | null | undefined, t:
     });
   }
 
-  const apiDbEdge = message.match(/^API ([a-z_ ]+), DB ([a-z_ ]+), Edge ([a-z_ ]+)\.$/);
-  if (apiDbEdge) {
-    return t("dashboard.messages.apiDbEdge", {
-      api: runtimeStatusLabel(apiDbEdge[1], t),
-      db: runtimeStatusLabel(apiDbEdge[2], t),
-      edge: runtimeStatusLabel(apiDbEdge[3], t),
+  const apiDbStudioEdge = message.match(/^API ([a-z_ ]+), DB ([a-z_ ]+), Studio ([a-z_ ]+), Edge ([a-z_ ]+)\.$/);
+  if (apiDbStudioEdge) {
+    return t("dashboard.messages.apiDbStudioEdge", {
+      api: runtimeStatusLabel(apiDbStudioEdge[1], t),
+      db: runtimeStatusLabel(apiDbStudioEdge[2], t),
+      studio: runtimeStatusLabel(apiDbStudioEdge[3], t),
+      edge: runtimeStatusLabel(apiDbStudioEdge[4], t),
     });
   }
 
@@ -224,7 +225,7 @@ export function localizeDiagnosticMessage(message: string | null | undefined, t:
   const simpleMappings: Record<string, string> = {
     "No jobs": "dashboard.messages.noJobs",
     unknown: "dashboard.messages.unknown",
-    "DB + Edge OK": "dashboard.messages.dbEdgeOk",
+    "Core runtime OK": "dashboard.messages.coreRuntimeOk",
     "WAL ready": "dashboard.messages.walReady",
     "upload-metrics reachable": "dashboard.messages.uploadMetricsReachable",
     "Development upload scenario is running.": "dashboard.messages.developmentUploadRunning",

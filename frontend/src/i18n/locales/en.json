@@ -143,12 +143,12 @@
       "jobCount": "Status {{status}}: processed {{processed}}, uploaded {{uploaded}}, accepted {{accepted}} rows.",
       "uploadDetail": "{{done}}/{{total}} files, {{uploaded}} uploaded rows.",
       "stateContextDetail": "Context class {{contextClass}}; {{storageStatus}}.",
-      "apiDbEdge": "API {{api}}, DB {{db}}, Edge {{edge}}.",
+      "apiDbStudioEdge": "API {{api}}, DB {{db}}, Studio {{studio}}, Edge {{edge}}.",
       "wslCli": "WSL {{wsl}}, CLI {{cli}}.",
       "dockerStatus": "Docker {{status}}",
       "noJobs": "No jobs",
       "unknown": "unknown",
-      "dbEdgeOk": "DB + Edge OK",
+      "coreRuntimeOk": "Core runtime OK",
       "runtimeUnavailable": "Runtime status is not available.",
       "dockerWslUnavailable": "Docker/WSL status is not available.",
       "noPersistedUploadJob": "No persisted upload job found in the active state store.",
@@ -223,6 +223,8 @@
     },
     "reason": {
       "ready": "Local Supabase core runtime is ready.",
+      "core_runtime_unreachable": "Core runtime is blocked because API, DB, Studio, or Edge is not reachable.",
+      "non_core_runtime_attention": "Core runtime is ready. Non-core Grafana needs attention.",
       "docker_unreachable": "Docker is not reachable from the backend process.",
       "edge_probe_timeout": "Edge route probe timed out.",
       "required_container_missing": "Required runtime containers are missing."

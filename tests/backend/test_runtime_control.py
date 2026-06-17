@@ -300,6 +300,71 @@ def test_status_blocks_when_config_ports_do_not_match(tmp_path: Path) -> None:
     assert status.reason_code == "config_port_mismatch"
 
 
+@pytest.mark.parametrize("failed_probe", ["api", "db", "studio", "edge"])
+def test_status_blocks_when_core_runtime_probe_is_unreachable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_probe: str,
+) -> None:
+    app_settings = settings(tmp_path)
+
+    def fake_port_status(name: str, port: int, *, timeout_seconds: float = 0.25) -> RuntimePortStatus:
+        status = RuntimeServiceStatus.ready
+        if failed_probe == "api" and name == "Supabase API":
+            status = RuntimeServiceStatus.unreachable
+        if failed_probe == "db" and name == "Supabase DB":
+            status = RuntimeServiceStatus.unreachable
+        if failed_probe == "studio" and name == "Supabase Studio":
+            status = RuntimeServiceStatus.unreachable
+        return RuntimePortStatus(name=name, port=port, status=status, detail="test")
+
+    def fake_probe_edge_route(url: str, *, timeout_seconds: float = 2.0) -> RuntimeProbeStatus:
+        status = RuntimeServiceStatus.unreachable if failed_probe == "edge" else RuntimeServiceStatus.ready
+        return RuntimeProbeStatus(name="Edge Function", status=status, detail="test", url=url)
+
+    monkeypatch.setattr("backend.app.services.runtime_readiness.port_status", fake_port_status)
+    monkeypatch.setattr("backend.app.services.runtime_readiness.probe_edge_route", fake_probe_edge_route)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="test"),
+    )
+    service = RuntimeReadinessService(
+        app_settings,
+        FakeRunner(docker_ps_output=all_containers_output(running=True)),
+    )
+
+    status = service.check_status()
+
+    assert status.overall_status == RuntimeOverallStatus.blocked
+    assert status.reason_code == "core_runtime_unreachable"
+
+
+def test_status_keeps_grafana_unreachable_as_non_core_attention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings(tmp_path)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.unreachable, detail="test"),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.runtime_readiness.probe_edge_route",
+        lambda url, *, timeout_seconds=2.0: RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url),
+    )
+    service = RuntimeReadinessService(
+        app_settings,
+        FakeRunner(docker_ps_output=all_containers_output(running=True)),
+    )
+
+    status = service.check_status()
+
+    assert status.overall_status == RuntimeOverallStatus.attention
+    assert status.reason_code == "non_core_runtime_attention"
+
+
 def test_stop_with_docker_unavailable_fails_instead_of_noop_success(tmp_path: Path) -> None:
     app_settings = settings(tmp_path)
     runtime = RuntimeRepository(app_settings.state_db_path)

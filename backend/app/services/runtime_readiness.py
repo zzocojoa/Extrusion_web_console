@@ -102,14 +102,19 @@ class RuntimeReadinessService:
             overall = RuntimeOverallStatus.blocked
             reason_code = "required_container_missing"
             reason_text = "Required local Supabase containers are missing. v1 does not create a new stack."
-        elif api.status != RuntimeServiceStatus.ready or db.status != RuntimeServiceStatus.ready:
+        elif (
+            api.status != RuntimeServiceStatus.ready
+            or db.status != RuntimeServiceStatus.ready
+            or studio.status != RuntimeServiceStatus.ready
+            or edge.status != RuntimeServiceStatus.ready
+        ):
             overall = RuntimeOverallStatus.blocked
-            reason_code = "core_port_unreachable"
-            reason_text = "Supabase API or DB port is not reachable."
-        elif edge.status != RuntimeServiceStatus.ready or studio.status != RuntimeServiceStatus.ready or grafana.status != RuntimeServiceStatus.ready:
+            reason_code = "core_runtime_unreachable"
+            reason_text = "Supabase API, DB, Studio, or Edge is not reachable."
+        elif grafana.status != RuntimeServiceStatus.ready:
             overall = RuntimeOverallStatus.attention
             reason_code = "non_core_runtime_attention"
-            reason_text = "Core DB/API is reachable, but Studio, Edge, or Grafana needs attention."
+            reason_text = "Core runtime is reachable, but non-core Grafana needs attention."
         else:
             overall = RuntimeOverallStatus.ready
             reason_code = "runtime_ready"
