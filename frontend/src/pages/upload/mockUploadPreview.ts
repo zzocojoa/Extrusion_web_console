@@ -7,7 +7,7 @@ import type {
   PreviewSummary,
 } from "../../api/uploadPreview";
 
-const baseItems: PreviewItem[] = [
+const uploadableItems: PreviewItem[] = [
   {
     previewItemId: 101,
     status: "target",
@@ -75,28 +75,6 @@ const baseItems: PreviewItem[] = [
     issues: ["overlap"],
   },
   {
-    previewItemId: 104,
-    status: "risky",
-    reasonCode: "schema_mismatch",
-    reasonText: "CSV schema is incomplete; timestamp or device_id could not be confirmed.",
-    kind: "plc",
-    folderLabel: "PLC",
-    filename: "training_fixture_schema_check.csv",
-    path: "training-source/upload-preview/schema-check.csv",
-    fileDate: "2026-06-01",
-    sizeBytes: 2_231_902,
-    modifiedAt: "2026-06-01T07:58:00+09:00",
-    scanMode: "sample",
-    rowCount: null,
-    localKeyCount: null,
-    dbMatchCount: null,
-    uploadRowEstimate: 0,
-    firstTimestamp: null,
-    lastTimestamp: null,
-    deviceIds: [],
-    issues: ["schema_mismatch"],
-  },
-  {
     previewItemId: 105,
     status: "excluded",
     reasonCode: "file_unstable",
@@ -120,6 +98,35 @@ const baseItems: PreviewItem[] = [
   },
 ];
 
+const riskyBlockedItem: PreviewItem = {
+  previewItemId: 104,
+  status: "risky",
+  reasonCode: "schema_mismatch",
+  reasonText: "CSV schema is incomplete; timestamp or device_id could not be confirmed.",
+  kind: "plc",
+  folderLabel: "PLC",
+  filename: "training_fixture_schema_check.csv",
+  path: "training-source/upload-preview/schema-check.csv",
+  fileDate: "2026-06-01",
+  sizeBytes: 2_231_902,
+  modifiedAt: "2026-06-01T07:58:00+09:00",
+  scanMode: "sample",
+  rowCount: null,
+  localKeyCount: null,
+  dbMatchCount: null,
+  uploadRowEstimate: 0,
+  firstTimestamp: null,
+  lastTimestamp: null,
+  deviceIds: [],
+  issues: ["schema_mismatch"],
+};
+
+const riskyBlockedItems: PreviewItem[] = [
+  ...uploadableItems.slice(0, 3),
+  riskyBlockedItem,
+  uploadableItems[3],
+];
+
 const koreanReasons: Record<number, string> = {
   101: "DB에서 일치하는 키가 없어 업로드 대상입니다.",
   102: "모든 (timestamp, device_id) 키가 이미 DB에 있습니다.",
@@ -136,9 +143,9 @@ const statusRank: Record<PreviewItemStatus, number> = {
   excluded: 5,
 };
 
-function localizeItems(language: string): PreviewItem[] {
-  if (language.startsWith("en")) return baseItems;
-  return baseItems.map((item) => ({
+function localizeItems(items: PreviewItem[], language: string): PreviewItem[] {
+  if (language.startsWith("en")) return items;
+  return items.map((item) => ({
     ...item,
     reasonText: koreanReasons[item.previewItemId] ?? item.reasonText,
   }));
@@ -198,9 +205,18 @@ function summarize(items: PreviewItem[]): PreviewSummary {
     partialOverlap: items.filter((item) => item.status === "partial_overlap").length,
     risky: items.filter((item) => item.status === "risky").length,
     excluded: items.filter((item) => item.status === "excluded").length,
-    uploadRows: items.reduce((sum, item) => sum + (item.uploadRowEstimate ?? 0), 0),
+    uploadRows: items
+      .filter((item) => item.status === "target")
+      .reduce((sum, item) => sum + (item.uploadRowEstimate ?? 0), 0),
     dbMatchedRows: items.reduce((sum, item) => sum + (item.dbMatchCount ?? 0), 0),
   };
+}
+
+function getMockPreviewItems(language: string): PreviewItem[] {
+  const scenario = new URLSearchParams(window.location.search).get("preview");
+  if (scenario === "db_unreachable") return buildDbUnreachableItems(language);
+  if (scenario === "risky_blocked") return localizeItems(riskyBlockedItems, language);
+  return localizeItems(uploadableItems, language);
 }
 
 export function getMockUploadPreview(
@@ -216,7 +232,7 @@ export function getMockUploadPreview(
     : dbUnreachable
       ? "partial_failed"
       : getMockStatus(startedAt);
-  const allItems = dbUnreachable ? buildDbUnreachableItems(language) : localizeItems(language);
+  const allItems = getMockPreviewItems(language);
   const filteredItems = applyFilters(allItems, params, runStatus);
   const offset = params.offset ?? 0;
   const limit = params.limit ?? 100;
@@ -248,7 +264,7 @@ export function getMockUploadPreview(
 }
 
 function buildDbUnreachableItems(language: string): PreviewItem[] {
-  return localizeItems(language).map((item) =>
+  return localizeItems(uploadableItems, language).map((item) =>
     item.status === "excluded"
       ? item
       : {

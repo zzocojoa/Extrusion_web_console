@@ -117,19 +117,33 @@ async function gotoPage(page: Page, pageName: "dashboard" | "upload" | "logs" | 
   await page.locator("main").waitFor({ state: "visible" });
 }
 
-async function runUploadPreview(page: Page) {
+async function runUploadPreview(page: Page, startUploadState: "enabled" | "disabled" = "enabled") {
   await gotoPage(page, "upload");
   const controls = page.locator(".upload-preview__actions");
   await controls.getByRole("button", { name: /미리보기|Preview/ }).click();
   await expect(page.locator(".preview-status-strip")).toContainText(/완료|Succeeded/, { timeout: 15_000 });
   await expect(page.locator(".preview-summary-strip").getByText(/DB에 있음|Already in DB/)).toBeVisible();
-  await expect(controls.getByRole("button", { name: /업로드 시작|Start Upload/ })).toBeEnabled({ timeout: 15_000 });
+  const startUploadButton = controls.getByRole("button", { name: /업로드 시작|Start Upload/ });
+  if (startUploadState === "enabled") {
+    await expect(startUploadButton).toBeEnabled({ timeout: 15_000 });
+  } else {
+    await expect(startUploadButton).toBeDisabled({ timeout: 15_000 });
+  }
 }
 
-async function openUploadJob(page: Page, shouldRunPreview = true) {
-  if (shouldRunPreview) await runUploadPreview(page);
+async function openAndCancelStartUploadReview(page: Page) {
   const controls = page.locator(".upload-preview__actions");
   await controls.getByRole("button", { name: /업로드 시작|Start Upload/ }).click();
+  const dialog = page.locator(".start-upload-modal");
+  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  await expect(dialog.locator(".start-upload-modal__actions .button--danger")).toBeDisabled();
+  await dialog.locator(".start-upload-modal__actions .button--secondary").click();
+  await expect(dialog).toBeHidden({ timeout: 5_000 });
+}
+
+async function openMockUploadJob(page: Page) {
+  await gotoPage(page, "upload");
+  await page.locator(".upload-tabs button").nth(1).click();
   await expect(page.locator(".upload-job")).toBeVisible({ timeout: 5_000 });
 }
 
@@ -191,6 +205,10 @@ test.describe("Upload Job and Audit Logs screenshot QA", () => {
       }
     });
 
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/?preview=risky_blocked");
+    await runUploadPreview(page, "disabled");
+
     for (const viewport of viewports) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await setLanguage(page, "ko");
@@ -200,8 +218,9 @@ test.describe("Upload Job and Audit Logs screenshot QA", () => {
 
       await runUploadPreview(page);
       await capture(page, testInfo, viewport, "upload-preview-ko", screenshots);
+      await openAndCancelStartUploadReview(page);
 
-      await openUploadJob(page, false);
+      await openMockUploadJob(page);
       await expect(page.getByText("수락").first()).toBeVisible();
       await capture(page, testInfo, viewport, "upload-job-ko", screenshots);
 
@@ -216,7 +235,7 @@ test.describe("Upload Job and Audit Logs screenshot QA", () => {
 
       await setLanguage(page, "en");
       await page.reload();
-      await openUploadJob(page);
+      await openMockUploadJob(page);
       await expect(page.getByText("Accepted").first()).toBeVisible();
       await capture(page, testInfo, viewport, "upload-job-en", screenshots);
 
