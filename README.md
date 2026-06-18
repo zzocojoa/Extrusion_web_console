@@ -47,6 +47,11 @@ Maintainers may use `timestampStartDate` and `timestampEndDate` on Delete
 Preflight only after separate approval for that exact timestamp-date scope.
 Whole-item delete must not be used to remove one date from a mixed-date item.
 
+Project status summaries and infographics must follow
+`docs/158_operator_status_language_policy.md`. Do not label safety restrictions,
+approval boundaries, intentional v1 exclusions, or conditional caveats as a
+generic `미완료` / `미작업` / `미승인` bucket.
+
 The Dashboard layout has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 
 ## Repository Layout
@@ -528,6 +533,7 @@ Browser QA has been run against:
 - `docs/10_audit_logs_plan.md`
 - `docs/156_operator_already_in_db_delete_contract.md`
 - `docs/157_operator_2026-01-19_delete_execution.md`
+- `docs/158_operator_status_language_policy.md`
 
 ## Reference Project
 

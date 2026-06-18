@@ -2,6 +2,13 @@
 
 All notable changes to Extrusion Web Console are documented here.
 
+## [0.1.0.1] - 2026-06-19
+
+### Added
+
+- Project status summaries and infographics now have a language policy that separates completed evidence, operating restrictions, review gates, conditional caveats, and intentional v1 exclusions instead of grouping them as generic unfinished work.
+- README and the operator upload gate runbook now point future status artifacts to the status language policy so destructive-action restrictions are not mistaken for pending tasks.
+
 ## [0.1.0.0] - 2026-06-02
 
 ### Added

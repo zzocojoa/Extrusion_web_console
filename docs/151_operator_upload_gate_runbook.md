@@ -553,6 +553,7 @@ Stop and investigate when any of these occur:
 | `docs/32_operator_package_handoff_runbook.md` | Package handoff and first-launch flow |
 | `docs/148_operator_legacy_gui_hard_retirement_review.md` | Legacy GUI retirement decision |
 | `docs/150_operator_handoff_caveat_release_steady_template.md` | Steady period and non-core caveat policy |
+| `docs/158_operator_status_language_policy.md` | Required wording for status summaries, infographics, approval boundaries, restrictions, and caveats |
 | `docs/03-analysis/start-upload-expected-count-contract.analysis.md` | Start Upload count contract |
 | `docs/03-analysis/retry-failed-expected-count-contract.analysis.md` | Retry Failed count contract |
 
