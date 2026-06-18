@@ -26,7 +26,6 @@ The recommended path is a staged decommission program, not immediate deletion.
 
 Read or searched:
 
-- `docs/03-analysis/v1-compatibility-usage-audit.analysis.md`
 - `backend/app/core/settings.py`
 - `backend/app/core/target_class.py`
 - `backend/app/db/upload_job_repository.py`
