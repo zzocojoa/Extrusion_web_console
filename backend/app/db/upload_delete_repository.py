@@ -78,6 +78,8 @@ class UploadDeleteRepository:
                   rollback_ready INTEGER NOT NULL DEFAULT 0,
                   rollback_blockers_json TEXT NOT NULL DEFAULT '[]',
                   expires_at TEXT NOT NULL,
+                  timestamp_start_date TEXT,
+                  timestamp_end_date TEXT,
                   reason_code TEXT,
                   error_message TEXT,
                   created_at TEXT NOT NULL,
@@ -134,9 +136,16 @@ class UploadDeleteRepository:
                   ON delete_run_items(delete_run_id, status);
                 """
             )
+            self._ensure_column(connection, "delete_preflight_runs", "timestamp_start_date", "TEXT")
+            self._ensure_column(connection, "delete_preflight_runs", "timestamp_end_date", "TEXT")
 
     def initialize(self) -> None:
         self.bootstrap()
+
+    def _ensure_column(self, connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        existing = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in existing:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def ensure_schema(self) -> None:
         self.bootstrap()
@@ -226,6 +235,8 @@ class UploadDeleteRepository:
         rollback_ready: bool,
         rollback_blockers: list[str],
         expires_at: str,
+        timestamp_start_date: str | None = None,
+        timestamp_end_date: str | None = None,
         reason_code: str | None = None,
         error_message: str | None = None,
     ) -> None:
@@ -237,10 +248,11 @@ class UploadDeleteRepository:
                   preflight_id, preview_run_id, status, selected_item_count,
                   selected_key_count, selected_item_ids_json, selection_hash,
                   keyset_hash, db_fingerprint_hash, db_target_class, rollback_ready,
-                  rollback_blockers_json, expires_at, reason_code, error_message,
+                  rollback_blockers_json, expires_at, timestamp_start_date,
+                  timestamp_end_date, reason_code, error_message,
                   created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     preflight_id,
@@ -256,6 +268,8 @@ class UploadDeleteRepository:
                     int(rollback_ready),
                     _json(rollback_blockers),
                     expires_at,
+                    timestamp_start_date,
+                    timestamp_end_date,
                     reason_code,
                     error_message,
                     now,

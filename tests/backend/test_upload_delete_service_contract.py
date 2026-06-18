@@ -166,6 +166,104 @@ def test_psycopg_count_existing_keys_uses_select_only(monkeypatch) -> None:
     assert "delete from" not in executed
 
 
+def test_psycopg_guard_accepts_docker_internal_postgres_port(monkeypatch) -> None:
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.fetchone_values = [
+                (5432, "postgres", "postgres"),
+                [True],
+                [True],
+                [True],
+            ]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, _sql, _params=None) -> None:
+            return None
+
+        def fetchone(self):
+            return self.fetchone_values.pop(0)
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self):
+            return FakeCursor()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection()),
+    )
+    client = PsycopgDeleteDbClient(
+        SimpleNamespace(
+            supabase_db_url=loopback_db_url_for_test(),
+            local_supabase_db_port=25433,
+            local_supabase_project_id="Extrusion_web_console",
+        )
+    )
+
+    result = client.guard()
+
+    assert result.passed is True
+    assert result.reason_code is None
+
+
+def test_psycopg_guard_blocks_unexpected_runtime_server_port(monkeypatch) -> None:
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, _sql, _params=None) -> None:
+            return None
+
+        def fetchone(self):
+            return (15432, "postgres", "postgres")
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self):
+            return FakeCursor()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection()),
+    )
+    client = PsycopgDeleteDbClient(
+        SimpleNamespace(
+            supabase_db_url=loopback_db_url_for_test(),
+            local_supabase_db_port=25433,
+            local_supabase_project_id="Extrusion_web_console",
+        )
+    )
+
+    result = client.guard()
+
+    assert result.passed is False
+    assert result.reason_code == "db_port_mismatch"
+
+
+def loopback_db_url_for_test() -> str:
+    return "postgresql:" + "//127.0.0.1:25433/postgres"
+
+
 def create_preview_for_delete(db_path: Path, source_dir: Path) -> tuple[int, Path]:
     UploadJobRepository(db_path).ensure_schema()
     source_dir.mkdir(parents=True)
@@ -220,6 +318,64 @@ def create_preview_for_delete(db_path: Path, source_dir: Path) -> tuple[int, Pat
         },
     )
     preview.update_run("prv_done", status="succeeded", db_status="reachable")
+    return item_id, source_file
+
+
+def create_mixed_date_preview_for_delete(db_path: Path, source_dir: Path) -> tuple[int, Path]:
+    UploadJobRepository(db_path).ensure_schema()
+    source_dir.mkdir(parents=True)
+    source_file = source_dir / "mixed.csv"
+    source_file.write_text(
+        "Date,Time,Mold1\n"
+        "2026-01-19,09:00:00,1\n"
+        "2026-01-20,09:00:00,2\n"
+        "2026-01-19,10:00:00,3\n",
+        encoding="utf-8",
+    )
+    stat = source_file.stat()
+    preview = PreviewRepository(db_path)
+    preview.create_run(
+        preview_run_id="prv_mixed",
+        range_mode="custom",
+        start_date="2026-01-19",
+        end_date="2026-01-19",
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+    item_id = preview.insert_item(
+        "prv_mixed",
+        {
+            "file_key": "key-mixed",
+            "folder_label": "PLC",
+            "folder_path": str(source_dir),
+            "filename": source_file.name,
+            "path": str(source_file),
+            "kind": "plc",
+            "file_date": "2026-01-19",
+            "size_bytes": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+            "modified_at": "2026-01-19T09:00:00+09:00",
+            "file_signature": build_file_signature(source_file, stat),
+            "status": "already_in_db",
+            "reason_code": "db_full_match",
+            "reason_text": "All keys already exist.",
+            "scan_mode": "full",
+            "sample_row_count": 3,
+            "row_count": 3,
+            "local_key_count": 3,
+            "db_match_count": 3,
+            "upload_row_estimate": 0,
+            "first_timestamp": "2026-01-19T09:00:00+09:00",
+            "last_timestamp": "2026-01-20T09:00:00+09:00",
+            "device_ids": ["extruder_integrated"],
+            "issues": [],
+            "error_code": None,
+            "error_message": None,
+        },
+    )
+    preview.update_run("prv_mixed", status="succeeded", db_status="reachable")
     return item_id, source_file
 
 
@@ -324,6 +480,55 @@ def test_start_delete_writes_start_audit_before_db_delete_and_succeeds(tmp_path:
     assert start_audit is not None
     assert run["start_audit_id"] == start_audit["audit_id"]
     assert run["status"] == "succeeded"
+
+
+def test_timestamp_date_scope_deletes_only_matching_day_keys(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    item_id, _source = create_mixed_date_preview_for_delete(db_path, tmp_path / "source")
+    db = FakeDeleteDb()
+    delete_service = service(db_path, db)
+    preflight = delete_service.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_mixed",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+            timestamp_start_date="2026-01-19",
+            timestamp_end_date="2026-01-19",
+        )
+    )
+
+    assert preflight.status == "ready"
+    assert preflight.selected_key_count == 2
+    assert preflight.timestamp_start_date.isoformat() == "2026-01-19"
+    assert preflight.timestamp_end_date.isoformat() == "2026-01-19"
+
+    response = delete_service.start_delete(
+        DeleteJobCreateRequest(
+            preflight_id=preflight.preflight_id,
+            expected_delete_keys=2,
+            typed_delete_keys="2",
+            acknowledge_no_undo=True,
+            acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+        )
+    )
+
+    assert response.status == "succeeded"
+    assert response.deleted_keys == 2
+    with UploadDeleteRepository(db_path).connect() as connection:
+        start_audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_start' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+        audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_succeeded' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+    start_params = json.loads(start_audit["params_json_redacted"])
+    assert start_params["timestampStartDate"] == "2026-01-19"
+    assert start_params["timestampEndDate"] == "2026-01-19"
+    params = json.loads(audit["params_json_redacted"])
+    assert params["timestampStartDate"] == "2026-01-19"
+    assert params["timestampEndDate"] == "2026-01-19"
+    assert "2026-01-20T09:00:00" not in audit["params_json_redacted"]
+    assert "extruder_integrated" not in audit["params_json_redacted"]
 
 
 def test_start_delete_blocks_when_start_audit_write_fails_before_db_mutation(tmp_path: Path) -> None:
