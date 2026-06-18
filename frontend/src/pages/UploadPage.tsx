@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square } from "lucide-react";
+import { AlertTriangle, Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { isLocalTokenApiError } from "../api/client";
 import { fetchConfig, type ConfigResponse } from "../api/config";
+import {
+  createDeletePreflight,
+  fetchLatestDeleteJob,
+  reconcileDeleteJob,
+  startDeleteJob,
+  type DeleteJobCreateResponse,
+  type DeleteJobLatestResponse,
+  type DeletePreflightResponse,
+} from "../api/uploadDelete";
 import {
   ActiveUploadJobError,
   controlUploadJob,
@@ -299,6 +308,9 @@ export function UploadPage() {
   const [statusFilter, setStatusFilter] = useState<PreviewItemStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<PreviewSortKey>("status");
+  const [selectedDeleteItemIds, setSelectedDeleteItemIds] = useState<number[]>([]);
+  const [deleteReviewPreflight, setDeleteReviewPreflight] = useState<DeletePreflightResponse | null>(null);
+  const [lastDeleteResult, setLastDeleteResult] = useState<DeleteJobCreateResponse | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [mockJobStartedAt, setMockJobStartedAt] = useState<number | null>(null);
   const [mockJobPaused, setMockJobPaused] = useState(false);
@@ -386,6 +398,11 @@ export function UploadPage() {
 
   const currentPreview = previewRunId ? previewQuery.data ?? null : latestQuery.data ?? null;
   const activePreviewRunId = currentPreview?.run.previewRunId ?? previewRunId;
+  const selectedDeleteItems = useMemo(() => {
+    if (!currentPreview) return [];
+    const selected = new Set(selectedDeleteItemIds);
+    return currentPreview.items.filter((item) => selected.has(item.previewItemId) && item.status === "already_in_db");
+  }, [currentPreview, selectedDeleteItemIds]);
   const canStartUpload = Boolean(
     currentPreview?.run.status === "succeeded" &&
       currentPreview.run.dbStatus === "reachable" &&
@@ -393,6 +410,38 @@ export function UploadPage() {
       currentPreview.run.summary.uploadRows > 0 &&
       currentPreview.run.summary.risky === 0,
   );
+  const latestDeleteJobQuery = useQuery({
+    queryKey: ["upload-delete", "latest"],
+    enabled: API_MODE,
+    queryFn: fetchLatestDeleteJob,
+    retry: false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.job.status;
+      return status && ["preparing", "running", "finalizing", "reconciling"].includes(status) ? 1200 : false;
+    },
+  });
+  const activeDeleteBlocker = Boolean(latestDeleteJobQuery.data?.activeDeleteBlocker);
+  const canPreflightDelete = Boolean(
+    API_MODE &&
+      currentPreview?.run.status === "succeeded" &&
+      currentPreview.run.dbStatus === "reachable" &&
+      !activeDeleteBlocker &&
+      selectedDeleteItems.length > 0 &&
+      selectedDeleteItems.length === selectedDeleteItemIds.length,
+  );
+
+  useEffect(() => {
+    if (!currentPreview) {
+      setSelectedDeleteItemIds([]);
+      return;
+    }
+    const selectableIds = new Set(
+      currentPreview.items
+        .filter((item) => item.status === "already_in_db")
+        .map((item) => item.previewItemId),
+    );
+    setSelectedDeleteItemIds((previous) => previous.filter((itemId) => selectableIds.has(itemId)));
+  }, [currentPreview?.run.previewRunId, currentPreview?.items]);
 
   const latestJobQuery = useQuery({
     queryKey: ["upload-job", "latest", API_MODE ? "api" : "mock"],
@@ -570,6 +619,45 @@ export function UploadPage() {
     },
   });
 
+  const deletePreflightMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentPreview) throw new Error("No preview run");
+      return createDeletePreflight({
+        previewRunId: currentPreview.run.previewRunId,
+        previewItemIds: selectedDeleteItemIds,
+        expectedAlreadyInDbItems: selectedDeleteItemIds.length,
+      });
+    },
+    onSuccess: (response) => {
+      setDeleteReviewPreflight(response);
+    },
+  });
+
+  const startDeleteMutation = useMutation({
+    mutationFn: async (confirmation: {
+      preflightId: string;
+      expectedDeleteKeys: number;
+      typedDeleteKeys: string;
+      acknowledgeNoUndo: boolean;
+      acknowledgeRollbackRequiresFreshPreviewAndStartUpload: boolean;
+    }) => startDeleteJob(confirmation),
+    onSuccess: (response) => {
+      setLastDeleteResult(response);
+      setDeleteReviewPreflight(null);
+      setSelectedDeleteItemIds([]);
+      void queryClient.invalidateQueries({ queryKey: ["upload-delete", "latest"] });
+      void queryClient.invalidateQueries({ queryKey: ["upload-preview"] });
+    },
+  });
+
+  const reconcileDeleteMutation = useMutation({
+    mutationFn: async (job: DeleteJobLatestResponse["job"]) =>
+      reconcileDeleteJob(job.deleteRunId, job.status === "reconciliation_failed"),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["upload-delete", "latest"] });
+    },
+  });
+
   const retryMutation = useMutation({
     mutationFn: async (approval: { expectedRemainingRows: number; expectedRetryFiles: number }) => {
       if (!currentJob) throw new Error("No upload job");
@@ -664,6 +752,29 @@ export function UploadPage() {
           startUploadPending={startUploadMutation.isPending}
           startUploadError={startUploadMutation.error}
           onStartUpload={(approval) => startUploadMutation.mutate(approval)}
+          selectedDeleteItemIds={selectedDeleteItemIds}
+          canPreflightDelete={canPreflightDelete}
+          deletePreflight={deleteReviewPreflight}
+          deletePreflightPending={deletePreflightMutation.isPending}
+          deletePreflightError={deletePreflightMutation.error}
+          startDeletePending={startDeleteMutation.isPending}
+          startDeleteError={startDeleteMutation.error}
+          latestDeleteJob={latestDeleteJobQuery.data ?? null}
+          latestDeleteJobError={latestDeleteJobQuery.error}
+          lastDeleteResult={lastDeleteResult}
+          reconcileDeletePending={reconcileDeleteMutation.isPending}
+          reconcileDeleteError={reconcileDeleteMutation.error}
+          onToggleDeleteItem={(itemId, selected) => {
+            setSelectedDeleteItemIds((previous) => {
+              if (selected) return previous.includes(itemId) ? previous : [...previous, itemId].sort((a, b) => a - b);
+              return previous.filter((value) => value !== itemId);
+            });
+          }}
+          onClearDeleteSelection={() => setSelectedDeleteItemIds([])}
+          onOpenDeletePreflight={() => deletePreflightMutation.mutate()}
+          onCancelDeleteReview={() => setDeleteReviewPreflight(null)}
+          onStartDelete={(confirmation) => startDeleteMutation.mutate(confirmation)}
+          onReconcileDelete={(job) => reconcileDeleteMutation.mutate(job)}
           onStatusFilterChange={setStatusFilter}
           onSearchChange={setSearch}
           onSortChange={setSort}
@@ -702,12 +813,36 @@ interface PreviewTabProps {
   canStartUpload: boolean;
   startUploadPending: boolean;
   startUploadError: Error | null;
+  selectedDeleteItemIds: number[];
+  canPreflightDelete: boolean;
+  deletePreflight: DeletePreflightResponse | null;
+  deletePreflightPending: boolean;
+  deletePreflightError: Error | null;
+  startDeletePending: boolean;
+  startDeleteError: Error | null;
+  latestDeleteJob: DeleteJobLatestResponse | null;
+  latestDeleteJobError: Error | null;
+  lastDeleteResult: DeleteJobCreateResponse | null;
+  reconcileDeletePending: boolean;
+  reconcileDeleteError: Error | null;
   onRangeModeChange: (value: PreviewRangeMode) => void;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
   onRunPreview: () => void;
   onCancel: () => void;
   onStartUpload: (approval: { expectedTargetRows: number; expectedTargetFiles: number }) => void;
+  onToggleDeleteItem: (itemId: number, selected: boolean) => void;
+  onClearDeleteSelection: () => void;
+  onOpenDeletePreflight: () => void;
+  onCancelDeleteReview: () => void;
+  onStartDelete: (confirmation: {
+    preflightId: string;
+    expectedDeleteKeys: number;
+    typedDeleteKeys: string;
+    acknowledgeNoUndo: boolean;
+    acknowledgeRollbackRequiresFreshPreviewAndStartUpload: boolean;
+  }) => void;
+  onReconcileDelete: (job: DeleteJobLatestResponse["job"]) => void;
   onStatusFilterChange: (value: PreviewItemStatus | "all") => void;
   onSearchChange: (value: string) => void;
   onSortChange: (value: PreviewSortKey) => void;
@@ -728,6 +863,12 @@ function PreviewTab(props: PreviewTabProps) {
   const reviewablePreview = props.currentPreview && run && summary ? props.currentPreview : null;
   const appliedProfileLabelKey = previewProfileLabelKey(run?.appliedProfile);
   const autoProfileReasonLabelKey = previewAutoReasonLabelKey(run?.autoProfileReason);
+  const selectedAlreadyInDbCount = props.selectedDeleteItemIds.length;
+  const deleteDisabledReason = !API_MODE
+    ? "upload.delete.actions.apiModeRequired"
+    : selectedAlreadyInDbCount <= 0
+      ? "upload.delete.actions.noSelection"
+      : "upload.delete.actions.preflightDisabled";
 
   function openStartUploadReview() {
     if (!props.canStartUpload || !reviewablePreview) return;
@@ -744,6 +885,11 @@ function PreviewTab(props: PreviewTabProps) {
       expectedTargetFiles: reviewablePreview?.run.summary.target ?? 0,
     });
     setStartReviewOpen(false);
+  }
+
+  function openDeletePreflight() {
+    if (!props.canPreflightDelete || props.deletePreflightPending) return;
+    props.onOpenDeletePreflight();
   }
 
   return (
@@ -776,6 +922,18 @@ function PreviewTab(props: PreviewTabProps) {
             >
               <Play size={16} aria-hidden="true" />
               {props.startUploadPending ? t("upload.actions.startingUpload") : t("upload.actions.startUpload")}
+            </button>
+            <button
+              className="button button--danger"
+              type="button"
+              disabled={!props.canPreflightDelete || props.deletePreflightPending}
+              onClick={openDeletePreflight}
+              title={!props.canPreflightDelete ? t(deleteDisabledReason) : undefined}
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              {props.deletePreflightPending
+                ? t("upload.delete.actions.preflighting")
+                : t("upload.delete.actions.reviewDelete", { count: selectedAlreadyInDbCount })}
             </button>
           </div>
         </div>
@@ -857,6 +1015,34 @@ function PreviewTab(props: PreviewTabProps) {
           {t("upload.job.startError")}: {props.startUploadError.message}
         </div>
       ) : null}
+      {props.deletePreflightError ? (
+        <div className="error-banner" role="alert">
+          {t("upload.delete.preflightError")}: {props.deletePreflightError.message}
+        </div>
+      ) : null}
+      {props.startDeleteError ? (
+        <div className="error-banner" role="alert">
+          {t("upload.delete.startError")}: {props.startDeleteError.message}
+        </div>
+      ) : null}
+      {props.reconcileDeleteError ? (
+        <div className="error-banner" role="alert">
+          {t("upload.delete.reconcileError")}: {props.reconcileDeleteError.message}
+        </div>
+      ) : null}
+
+      <DeleteSelectionPanel
+        selectedCount={selectedAlreadyInDbCount}
+        canPreflight={props.canPreflightDelete}
+        pending={props.deletePreflightPending}
+        latestDeleteJob={props.latestDeleteJob}
+        latestDeleteJobError={props.latestDeleteJobError}
+        lastDeleteResult={props.lastDeleteResult}
+        reconcilePending={props.reconcileDeletePending}
+        onReviewDelete={openDeletePreflight}
+        onClear={props.onClearDeleteSelection}
+        onReconcile={props.onReconcileDelete}
+      />
 
       <div className="panel">
         <div className="preview-table-toolbar">
@@ -887,7 +1073,11 @@ function PreviewTab(props: PreviewTabProps) {
         {props.loading && !props.currentPreview ? (
           <div className="panel--loading">{t("upload.preview.loading")}</div>
         ) : props.currentPreview ? (
-          <PreviewTable items={props.currentPreview.items} />
+          <PreviewTable
+            items={props.currentPreview.items}
+            selectedDeleteItemIds={props.selectedDeleteItemIds}
+            onToggleDeleteItem={props.onToggleDeleteItem}
+          />
         ) : (
           <div className="upload-empty">
             <FileSearch aria-hidden="true" />
@@ -903,6 +1093,14 @@ function PreviewTab(props: PreviewTabProps) {
           onCancel={closeStartUploadReview}
           onConfirm={confirmStartUpload}
           pending={props.startUploadPending}
+        />
+      ) : null}
+      {props.deletePreflight ? (
+        <DeleteConfirmationModal
+          preflight={props.deletePreflight}
+          pending={props.startDeletePending}
+          onCancel={props.onCancelDeleteReview}
+          onConfirm={props.onStartDelete}
         />
       ) : null}
     </section>
@@ -1037,6 +1235,261 @@ function StartUploadConfirmationModal({
   );
 }
 
+function DeleteSelectionPanel({
+  selectedCount,
+  canPreflight,
+  pending,
+  latestDeleteJob,
+  latestDeleteJobError,
+  lastDeleteResult,
+  reconcilePending,
+  onReviewDelete,
+  onClear,
+  onReconcile,
+}: {
+  selectedCount: number;
+  canPreflight: boolean;
+  pending: boolean;
+  latestDeleteJob: DeleteJobLatestResponse | null;
+  latestDeleteJobError: Error | null;
+  lastDeleteResult: DeleteJobCreateResponse | null;
+  reconcilePending: boolean;
+  onReviewDelete: () => void;
+  onClear: () => void;
+  onReconcile: (job: DeleteJobLatestResponse["job"]) => void;
+}) {
+  const { t } = useTranslation();
+  const job = latestDeleteJob?.job ?? null;
+  const showPanel = selectedCount > 0 || job || lastDeleteResult || latestDeleteJobError;
+  if (!showPanel) return null;
+  const canReconcile = Boolean(job?.recoveryRequired);
+  return (
+    <section className="panel delete-selection-panel" aria-label={t("upload.delete.panel.title")}>
+      <div className="delete-selection-panel__summary">
+        <div>
+          <span className="panel-eyebrow">{t("upload.delete.panel.eyebrow")}</span>
+          <strong>{t("upload.delete.panel.selected", { count: selectedCount })}</strong>
+        </div>
+        <div className="delete-selection-panel__actions">
+          {selectedCount > 0 ? (
+            <button className="button button--secondary" type="button" onClick={onClear}>
+              {t("upload.delete.actions.clearSelection")}
+            </button>
+          ) : null}
+          {selectedCount > 0 ? (
+            <button
+              className="button button--danger"
+              type="button"
+              disabled={!canPreflight || pending}
+              onClick={onReviewDelete}
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              {pending ? t("upload.delete.actions.preflighting") : t("upload.delete.actions.reviewDelete", { count: selectedCount })}
+            </button>
+          ) : null}
+          {job && canReconcile ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={reconcilePending}
+              onClick={() => onReconcile(job)}
+            >
+              <RotateCcw size={16} aria-hidden="true" />
+              {reconcilePending ? t("upload.delete.actions.reconciling") : t("upload.delete.actions.reconcile")}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {lastDeleteResult ? (
+        <div className="delete-selection-panel__line" role="status">
+          {t("upload.delete.panel.lastResult", {
+            status: t(`upload.delete.status.${lastDeleteResult.status}`),
+            rows: formatNumber(lastDeleteResult.deletedKeys),
+          })}
+        </div>
+      ) : null}
+      {job ? (
+        <div className="delete-selection-panel__line" role={job.recoveryRequired ? "alert" : "status"}>
+          {t("upload.delete.panel.latestJob", {
+            status: t(`upload.delete.status.${job.status}`),
+            expected: formatNumber(job.expectedDeleteKeys),
+            deleted: formatNumber(job.deletedKeys),
+          })}
+          {job.errorCode ? <span>{t("upload.delete.panel.reason", { reason: localizeDeleteReason(job.errorCode, t) })}</span> : null}
+        </div>
+      ) : null}
+      {latestDeleteJobError ? (
+        <div className="error-banner" role="alert">
+          {t("upload.delete.latestError")}: {latestDeleteJobError.message}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function DeleteConfirmationModal({
+  preflight,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  preflight: DeletePreflightResponse;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (confirmation: {
+    preflightId: string;
+    expectedDeleteKeys: number;
+    typedDeleteKeys: string;
+    acknowledgeNoUndo: boolean;
+    acknowledgeRollbackRequiresFreshPreviewAndStartUpload: boolean;
+  }) => void;
+}) {
+  const { t } = useTranslation();
+  const [typedRows, setTypedRows] = useState("");
+  const [ackNoUndo, setAckNoUndo] = useState(false);
+  const [ackRollback, setAckRollback] = useState(false);
+  const expectedRows = String(preflight.selectedKeyCount);
+  const ready = preflight.status === "ready" && preflight.rollbackReady && preflight.dbTargetGuard.status === "passed";
+  const confirmAllowed = ready && ackNoUndo && ackRollback && typedRows.replace(/,/g, "").trim() === expectedRows;
+  const blockedReasons = [
+    preflight.status !== "ready" ? localizeDeleteReason(preflight.reasonCode, t) : null,
+    !preflight.rollbackReady ? t("upload.delete.review.blocked.rollback") : null,
+    preflight.dbTargetGuard.status !== "passed" ? localizeDeleteReason(preflight.dbTargetGuard.reasonCode, t) : null,
+  ].filter((reason): reason is string => Boolean(reason));
+  const counts: Array<{ id: string; label: string; value: string | number }> = [
+    { id: "preflightId", label: t("upload.delete.review.preflightId"), value: preflight.preflightId },
+    { id: "selectedItems", label: t("upload.delete.review.selectedItems"), value: preflight.selectedItemCount },
+    { id: "selectedKeys", label: t("upload.delete.review.selectedKeys"), value: formatNumber(preflight.selectedKeyCount) },
+    { id: "dbGuard", label: t("upload.delete.review.dbGuard"), value: t(`upload.delete.guard.${preflight.dbTargetGuard.status}`) },
+    { id: "targetClass", label: t("upload.delete.review.targetClass"), value: preflight.dbTargetGuard.targetClass },
+    { id: "rollback", label: t("upload.delete.review.rollback"), value: preflight.rollbackReady ? t("status.ready") : t("status.blocked") },
+    { id: "expiresAt", label: t("upload.delete.review.expiresAt"), value: formatDateTime(preflight.expiresAt) },
+  ];
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        aria-labelledby="delete-review-title"
+        aria-modal="true"
+        className="start-upload-modal"
+        role="dialog"
+      >
+        <div className="start-upload-modal__header">
+          <div>
+            <span className="panel-eyebrow">{t("upload.delete.review.eyebrow")}</span>
+            <h2 id="delete-review-title">{t("upload.delete.review.title")}</h2>
+          </div>
+          <StatusBadge tone={confirmAllowed ? "risk" : "blocked"} label={t("upload.delete.review.badge")} />
+        </div>
+
+        <div className="start-upload-modal__warning" role="status">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span>
+            {t("upload.delete.review.warning", {
+              rowsFormatted: formatNumber(preflight.selectedKeyCount),
+              items: preflight.selectedItemCount,
+            })}
+          </span>
+        </div>
+
+        <dl className="start-upload-modal__counts">
+          {counts.map(({ id, label, value }) => (
+            <div className="start-upload-modal__count" key={id}>
+              <dt>{label}</dt>
+              <dd className="num">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="start-upload-modal__note">
+          {t("upload.delete.review.countSemantics")}
+        </p>
+
+        {preflight.rollbackBlockers.length > 0 ? (
+          <div className="start-upload-modal__blocked" role="alert">
+            <strong>{t("upload.delete.review.rollbackBlockers")}</strong>
+            <ul>
+              {preflight.rollbackBlockers.map((reason) => (
+                <li key={reason}>{localizeDeleteReason(reason, t)}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {blockedReasons.length > 0 ? (
+          <div className="start-upload-modal__blocked" role="alert">
+            <strong>{t("upload.delete.review.blocked.title")}</strong>
+            <ul>
+              {blockedReasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <label className="start-upload-modal__input">
+          <span>{t("upload.delete.review.inputLabel", { rows: expectedRows })}</span>
+          <input
+            autoComplete="off"
+            inputMode="numeric"
+            pattern="[0-9,]*"
+            value={typedRows}
+            onChange={(event) => setTypedRows(event.target.value.replace(/[^\d,]/g, ""))}
+            placeholder={expectedRows}
+          />
+        </label>
+
+        <label className="start-upload-modal__check">
+          <input
+            type="checkbox"
+            checked={ackNoUndo}
+            onChange={(event) => setAckNoUndo(event.target.checked)}
+          />
+          <span>{t("upload.delete.review.ackNoUndo")}</span>
+        </label>
+        <label className="start-upload-modal__check">
+          <input
+            type="checkbox"
+            checked={ackRollback}
+            onChange={(event) => setAckRollback(event.target.checked)}
+          />
+          <span>{t("upload.delete.review.ackRollback")}</span>
+        </label>
+
+        <div className="start-upload-modal__actions">
+          <button className="button button--secondary" type="button" onClick={onCancel}>
+            {t("upload.delete.review.cancel")}
+          </button>
+          <button
+            className="button button--danger"
+            type="button"
+            disabled={!confirmAllowed || pending}
+            onClick={() =>
+              onConfirm({
+                preflightId: preflight.preflightId,
+                expectedDeleteKeys: preflight.selectedKeyCount,
+                typedDeleteKeys: typedRows,
+                acknowledgeNoUndo: ackNoUndo,
+                acknowledgeRollbackRequiresFreshPreviewAndStartUpload: ackRollback,
+              })
+            }
+          >
+            {pending
+              ? t("upload.delete.review.pending")
+              : t("upload.delete.review.confirm", { rowsFormatted: formatNumber(preflight.selectedKeyCount) })}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function localizeDeleteReason(reasonCode: string | null | undefined, translate: (key: string) => string): string {
+  if (!reasonCode) return translate("upload.delete.reason.unknown");
+  const key = `upload.delete.reason.${reasonCode}`;
+  const translated = translate(key);
+  return translated === key ? reasonCode : translated;
+}
+
 function PreviewSummaryStrip({
   summary,
   interim,
@@ -1073,8 +1526,17 @@ function PreviewSummaryStrip({
   );
 }
 
-function PreviewTable({ items }: { items: PreviewItem[] }) {
+function PreviewTable({
+  items,
+  selectedDeleteItemIds,
+  onToggleDeleteItem,
+}: {
+  items: PreviewItem[];
+  selectedDeleteItemIds: number[];
+  onToggleDeleteItem: (itemId: number, selected: boolean) => void;
+}) {
   const { i18n, t } = useTranslation();
+  const selectedIds = new Set(selectedDeleteItemIds);
   if (items.length === 0) {
     return <div className="panel--loading">{t("upload.empty.noRows")}</div>;
   }
@@ -1083,6 +1545,7 @@ function PreviewTable({ items }: { items: PreviewItem[] }) {
       <table className="data-table data-table--preview">
         <thead>
           <tr>
+            <th>{t("upload.delete.table.select")}</th>
             <th>{t("upload.table.status")}</th>
             <th>{t("upload.table.filename")}</th>
             <th>{t("upload.table.kind")}</th>
@@ -1098,6 +1561,18 @@ function PreviewTable({ items }: { items: PreviewItem[] }) {
         <tbody>
           {items.map((item) => (
             <tr className={`row--${statusTone[item.status]}`} key={item.previewItemId}>
+              <td className="preview-select-cell">
+                {item.status === "already_in_db" ? (
+                  <input
+                    aria-label={t("upload.delete.table.selectRow", { filename: item.filename })}
+                    checked={selectedIds.has(item.previewItemId)}
+                    type="checkbox"
+                    onChange={(event) => onToggleDeleteItem(item.previewItemId, event.target.checked)}
+                  />
+                ) : (
+                  <span aria-hidden="true">-</span>
+                )}
+              </td>
               <td><StatusBadge tone={statusTone[item.status]} label={t(`upload.status.${item.status}`)} /></td>
               <td className="preview-file-cell">
                 <strong>{item.filename}</strong>

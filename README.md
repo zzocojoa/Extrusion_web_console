@@ -19,6 +19,7 @@ The current local console baseline is in place:
 - Dashboard Variant D UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
 - Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, SSE event replay, and canonical `acceptedRows` counts for Edge/Supabase upsert-accepted rows.
+- Already-in-DB hard delete API/UI for selected `already_in_db` Preview rows only, with local DB target guard, DELETE privilege preflight, typed exact-key confirmation, rollback-readiness gate, commit-unknown reconciliation, and safe audit evidence.
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
 - Dashboard runtime module connected to the runtime API in API mode.
 - Settings save UI connected to `GET /api/config` and `PUT /api/config`, with editable config fields, dirty state, Save/Reset controls, validation feedback, and save status.
@@ -37,6 +38,8 @@ In API mode, Dashboard endpoints read the active backend state instead of scaffo
 Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
 
 Preview requests are audit logged as `upload.preview`. Successful previews write `success` rows; DB unreachable, missing source, malformed JSON, and validation failures write `failure` rows; active preview conflicts write `blocked` rows. Audit params use safe summary fields such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`. Raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
+
+Already-in-DB hard delete is a production-critical maintenance flow, not a general database cleanup tool. It can target only selected Preview items whose status is `already_in_db`. The backend rebuilds exact keys from current source files, verifies rollback readiness, proves the configured DB is the expected local Supabase target, checks DELETE privilege non-destructively, writes `delete_run` state and `upload.delete_start` audit before DB mutation, then performs an all-or-nothing transaction. API responses and audits expose counts, hashes, status, and safe reason codes only; raw `(timestamp, device_id)` values, source paths, filenames, DB URLs, tokens, Authorization values, JWTs, and secrets are not returned.
 
 The Dashboard layout has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 
@@ -128,7 +131,7 @@ http://127.0.0.1:8000/
 
 Operator mode does not start Vite. FastAPI serves `frontend/dist` and the frontend calls same-origin `/api/*`.
 
-The launcher generates a per-run local API token, passes it to the backend through process environment, and never puts it in the browser URL. FastAPI injects the token into the served app shell at response time, and the frontend keeps it in memory only. Protected writes such as Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, and Local Supabase start/stop send `X-EWC-Local-Token`. Read-only APIs such as `/api/health`, `GET /api/config`, `GET /api/audit`, and upload/job status reads remain token-free. `OPTIONS` requests are not blocked by the local token guard; route-level method handling may still return the normal API response. Missing or invalid tokens return `403 local_token_required`, while valid-token requests proceed through the existing API validation. Operator launcher mode disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes instead of token-gating them.
+The launcher generates a per-run local API token, passes it to the backend through process environment, and never puts it in the browser URL. FastAPI injects the token into the served app shell at response time, and the frontend keeps it in memory only. Protected writes such as Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, Upload Delete preflight/start/reconcile, and Local Supabase start/stop send `X-EWC-Local-Token`. Read-only APIs such as `/api/health`, `GET /api/config`, `GET /api/audit`, and upload/job status reads remain token-free. `OPTIONS` requests are not blocked by the local token guard; route-level method handling may still return the normal API response. Missing or invalid tokens return `403 local_token_required`, while valid-token requests proceed through the existing API validation. Operator launcher mode disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes instead of token-gating them.
 
 The local API token must not be stored or copied into URL query strings, `localStorage`, `sessionStorage`, launcher logs, backend logs, audit params, screenshots, generated `.gstack` artifacts, or `frontend/dist`. Development with Vite should use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` when the backend is not serving the token bootstrap. Dev/test API docs can be retained with `EWC_API_DOCS_MODE=enabled`; this override is for developer and test use only. If a developer sets only `EWC_LOCAL_API_TOKEN` on the backend while using the Vite dev shell, mutating API calls can fail because the Vite page does not receive the backend-served bootstrap token.
 
@@ -326,6 +329,15 @@ Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/$($job.jobId)
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/latest
 ```
 
+Already-in-DB hard delete API contract:
+
+- `POST /api/upload/delete/preflight` is a protected preflight. It accepts a Preview run id, selected Preview item ids, and an expected selected item count. It returns `ready` or `blocked`, exact selected key count, rollback readiness, sanitized DB target guard, hashes, expiry, and safe reason code.
+- `POST /api/upload/delete/jobs` is protected and destructive. It requires a ready preflight, typed exact key count, no-undo acknowledgement, and rollback-limit acknowledgement. It must not be used against operational data without separate explicit approval.
+- `GET /api/upload/delete/jobs/latest` is read-only and safe for status checks.
+- `POST /api/upload/delete/jobs/{deleteRunId}/reconcile` is protected but read-only against local Supabase. It updates local delete state/audit for `commit_unknown` or explicitly retried `reconciliation_failed` runs and never issues a delete.
+
+Implementation and destructive smoke for delete must use disposable local fixture DBs unless an operator gives separate production approval. Normal upload troubleshooting must still not use DB reset, truncate, broad manual cleanup, Supabase lifecycle, or Docker cleanup.
+
 Backend tests:
 
 ```powershell
@@ -383,7 +395,7 @@ npm run qa:screenshots
 ```
 
 The screenshot runner writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`, checks the required viewport matrix, verifies `Accepted` / `수락` wording, captures console/network failures, and redacts path/credential-like markers before writing text artifacts.
-It uses `127.0.0.1:5174` by default to avoid reusing an existing `5173` dev server that may be running in API mode.
+It uses `127.0.0.1:5175` by default and does not reuse an existing server, so screenshot QA cannot silently attach to a stale app or API-mode dev server.
 The runner captures 32 screenshots across Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings, verifies `DB에 있음` / `Already in DB`, blocks inserted-row wording such as `Inserted`, `적재`, `삽입`, and `새로 삽입`, and scans artifacts for generic timestamp-style CSV names, Windows absolute paths, DB URLs, tokens, and credential-like markers. Source docs and mock labels should use sanitized sample names instead of operational CSV filename patterns.
 
 Mock Dashboard states can be checked with query strings:
@@ -424,6 +436,8 @@ Upload Preview QA:
 - Preview audit params expose safe summary fields only and do not include raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, or malformed raw request bodies.
 - Start Upload is enabled only for a succeeded preview with reachable DB and `target` rows.
 - Start Upload excludes `already_in_db`, `partial_overlap`, `risky`, and `excluded` rows by default.
+- Already-in-DB delete selection is available only for `already_in_db` rows, requires API mode, preflight, typed exact count, rollback acknowledgements, local token protection, and safe audit rows.
+- Delete commit-unknown recovery is visible and requires explicit reconcile before another delete preflight/start can proceed.
 - Upload Job tab shows file progress, pause/resume/cancel controls, Retry Failed, and live/persisted events.
 
 Audit Logs QA:
@@ -462,7 +476,7 @@ Upload Job Accepted Rows QA:
 Playwright Screenshot QA:
 
 - PR #22 adds project-owned Playwright screenshot QA through `npm run qa:screenshots` under `frontend/`.
-- QA runs in mock mode on `127.0.0.1:5174`, does not require Docker, local Supabase, DB URLs, auth keys, or operational CSV fixtures, and writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`.
+- QA runs in mock mode on `127.0.0.1:5175`, does not require Docker, local Supabase, DB URLs, auth keys, or operational CSV fixtures, and writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`.
 - QA captures 32 screenshots across `1440x900`, `1366x768`, `1024x768`, and `720x900`; smoke covers `/`, `/upload`, `/logs`, and `/settings`.
 - QA verifies `Accepted` / `수락`, `DB에 있음` / `Already in DB`, blocks inserted-row wording, captures console/page/network failures, and scans text artifacts for generic timestamp-style CSV names, Windows absolute paths, credential-like markers, DB URLs, and token markers.
 - PR #22 blocker fix `b570207` removed operational CSV filename-pattern markers from source/docs and kept mock filename/path/event labels sanitized.
@@ -506,6 +520,7 @@ Browser QA has been run against:
 - `docs/08_upload_job_sse_plan.md`
 - `docs/09_local_supabase_control_plan.md`
 - `docs/10_audit_logs_plan.md`
+- `docs/156_operator_already_in_db_delete_contract.md`
 
 ## Reference Project
 

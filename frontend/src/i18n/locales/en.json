@@ -572,6 +572,100 @@
         "noRetryFiles": "There are no failed or interrupted files to retry.",
         "noRows": "There are no remaining physical rows to retry."
       }
+    },
+    "delete": {
+      "panel": {
+        "title": "Already-in-DB delete state",
+        "eyebrow": "Already in DB hard delete",
+        "selected": "{{count}} already-in-DB item selected",
+        "latestJob": "Latest delete job: {{status}}, expected {{expected}}, deleted {{deleted}}.",
+        "lastResult": "Delete result: {{status}}, {{rows}} rows deleted.",
+        "reason": "Reason: {{reason}}"
+      },
+      "actions": {
+        "reviewDelete": "Review delete ({{count}})",
+        "preflighting": "Checking delete",
+        "clearSelection": "Clear selection",
+        "preflightDisabled": "Delete preflight requires a succeeded Preview, reachable DB, and only already-in-DB rows selected.",
+        "apiModeRequired": "Delete is available only in API mode.",
+        "noSelection": "Select already-in-DB rows before delete preflight.",
+        "reconcile": "Reconcile delete",
+        "reconciling": "Reconciling"
+      },
+      "table": {
+        "select": "Delete",
+        "selectRow": "Select {{filename}} for already-in-DB delete"
+      },
+      "preflightError": "Delete preflight failed",
+      "startError": "Delete start failed",
+      "reconcileError": "Delete reconcile failed",
+      "latestError": "Latest delete job could not be loaded",
+      "guard": {
+        "passed": "Passed",
+        "blocked": "Blocked"
+      },
+      "status": {
+        "preparing": "Preparing",
+        "running": "Running",
+        "finalizing": "Finalizing",
+        "blocked": "Blocked",
+        "failed": "Failed",
+        "succeeded": "Succeeded",
+        "commit_unknown": "Commit unknown",
+        "reconciling": "Reconciling",
+        "reconciled_succeeded": "Reconciled succeeded",
+        "reconciled_rolled_back": "Reconciled rolled back",
+        "reconciliation_failed": "Reconciliation failed"
+      },
+      "review": {
+        "eyebrow": "Destructive delete confirmation",
+        "title": "Confirm already-in-DB hard delete",
+        "badge": "Hard delete confirmation required",
+        "warning": "Continuing will delete {{rowsFormatted}} exact DB rows from {{items}} already-in-DB Preview items. This does not upload or retry files.",
+        "preflightId": "Preflight",
+        "selectedItems": "Selected items",
+        "selectedKeys": "Exact rows",
+        "dbGuard": "DB guard",
+        "targetClass": "DB target",
+        "rollback": "Rollback readiness",
+        "expiresAt": "Expires",
+        "countSemantics": "The backend revalidates Preview freshness, file signatures, keyset hash, DB fingerprint, DELETE permission, and audit write before the transaction.",
+        "rollbackBlockers": "Rollback blockers",
+        "inputLabel": "Type the exact row count {{rows}} to confirm. Commas are allowed.",
+        "ackNoUndo": "I understand this is a hard delete with no in-app undo.",
+        "ackRollback": "I understand rollback requires a fresh Preview and a separately approved Start Upload from unchanged source files.",
+        "cancel": "Cancel",
+        "confirm": "Hard delete {{rowsFormatted}} rows",
+        "pending": "Deleting",
+        "blocked": {
+          "title": "Delete is blocked",
+          "rollback": "Rollback readiness is not proven."
+        }
+      },
+      "reason": {
+        "unknown": "Reason is unavailable.",
+        "db_delete_permission_denied": "The configured local DB user does not have DELETE privilege on public.all_metrics.",
+        "audit_write_failed": "Start audit write failed before DB mutation.",
+        "delete_run_state_write_failed": "Delete state could not be recorded before DB mutation.",
+        "db_target_not_local": "The configured DB target is not the expected local Supabase DB.",
+        "db_target_changed": "The DB fingerprint changed after preflight.",
+        "db_key_count_mismatch": "The DB row count changed after preflight.",
+        "db_count_check_failed": "The DB count check failed before delete.",
+        "reconciliation_count_failed": "The DB count check failed during delete reconciliation.",
+        "selection_item_missing": "A selected Preview item is no longer available.",
+        "selection_contains_non_already_in_db": "The delete selection contains rows that are not Already in DB.",
+        "selection_status_changed": "A selected Preview item changed status after preflight.",
+        "file_signature_changed": "A selected source file changed after preflight.",
+        "keyset_mismatch": "The source file signature or exact keyset changed after preflight.",
+        "rollback_not_ready": "Rollback readiness is not proven from the current source files.",
+        "active_delete_job_exists": "A delete job or unresolved delete recovery is already active.",
+        "active_preview_exists": "A Preview run is active.",
+        "active_upload_job_exists": "An upload job is active.",
+        "preflight_expired": "The delete preflight expired.",
+        "typed_delete_keys_mismatch": "The typed row count does not match the preflight count.",
+        "delete_acknowledgement_required": "Both delete acknowledgements are required.",
+        "commit_unknown": "Delete commit outcome is unknown and must be reconciled."
+      }
     }
   },
   "logs": {

@@ -101,6 +101,9 @@ def test_protected_route_groups_block_without_token(tmp_path: Path, monkeypatch)
 
     protected_requests = [
         ("POST", "/api/upload/preview"),
+        ("POST", "/api/upload/delete/preflight"),
+        ("POST", "/api/upload/delete/jobs"),
+        ("POST", "/api/upload/delete/jobs/del_fixture/reconcile"),
         ("POST", "/api/upload/jobs"),
         ("POST", "/api/upload/jobs/job_fixture/retry"),
         ("POST", "/api/upload/jobs/job_fixture/pause"),
@@ -119,6 +122,9 @@ def test_protected_route_groups_block_without_token(tmp_path: Path, monkeypatch)
     actions = {row["action"] for row in audit_repository.list_audit_logs(AuditLogFilters()).rows}
     assert {
         "upload.preview",
+        "upload.delete_preflight",
+        "upload.delete_start",
+        "upload.delete_reconciled",
         "upload.start",
         "upload.retry",
         "upload.pause",

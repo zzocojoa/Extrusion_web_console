@@ -15,6 +15,7 @@ from backend.app.api.audit import router as audit_router
 from backend.app.api.config import router as config_router
 from backend.app.api.health import router as health_router
 from backend.app.api.runtime import router as runtime_router
+from backend.app.api.upload_delete import router as upload_delete_router
 from backend.app.api.upload_jobs import router as upload_jobs_router
 from backend.app.api.upload_preview import router as upload_preview_router
 from backend.app.core.local_token import audit_local_token_failure
@@ -27,6 +28,7 @@ from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.db.runtime_repository import RuntimeRepository
+from backend.app.db.upload_delete_repository import UploadDeleteRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
 
 
@@ -115,6 +117,7 @@ def create_app() -> FastAPI:
     AuditRepository(settings.state_db_path).bootstrap()
     PreviewRepository(settings.state_db_path).mark_interrupted_active_runs()
     UploadJobRepository(settings.state_db_path).mark_interrupted_active_jobs()
+    UploadDeleteRepository(settings.state_db_path).mark_interrupted_active_delete_runs()
     RuntimeRepository(settings.state_db_path).mark_interrupted_active_operations()
     docs_enabled = api_docs_enabled(settings)
     app = FastAPI(
@@ -156,6 +159,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(upload_preview_router)
     app.include_router(upload_jobs_router)
+    app.include_router(upload_delete_router)
     app.include_router(runtime_router)
     configure_frontend_static(app, settings.frontend_dist_path)
     return app

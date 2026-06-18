@@ -36,6 +36,10 @@ that exact count.
 Retry Failed is also an upload action. It needs a separate review and approval
 of the remaining physical rows.
 
+Already-in-DB hard delete is not a normal upload action and not a cleanup
+shortcut. It is a separately approved maintenance flow for selected
+`already_in_db` Preview rows only.
+
 ## Golden Rules
 
 | Rule | Meaning |
@@ -47,6 +51,7 @@ of the remaining physical rows.
 | No target means stop | `target rows = 0` is a normal no-upload outcome. |
 | Failure means investigate | Timeout, failed Preview, risky files, or source mismatch block upload. |
 | Retry is a new gate | Retry Failed requires remaining-row review and separate approval. |
+| Delete is exceptional | Already-in-DB hard delete requires its own preflight, typed exact-key count, rollback acknowledgement, audit evidence, and separate approval. |
 
 ## Preflight Checks
 
@@ -199,6 +204,77 @@ Backend checks before retry job creation:
 
 If any check fails, retry job creation must be blocked and audit logged.
 
+### 7. Already-In-DB Hard Delete Approval
+
+Use this flow only when the operator explicitly needs to remove rows that
+Preview has already proven are fully represented in local Supabase. It is not a
+fallback for failed upload, DB mismatch, broad cleanup, or source uncertainty.
+
+Required preconditions:
+
+- latest Preview is fresh, `succeeded`, and `dbStatus = reachable`;
+- selected rows are `already_in_db` only;
+- no active Preview, Upload Job, or unresolved Delete Job exists;
+- local token guard is active;
+- local runtime API/DB/Studio/Edge are ready;
+- backend can re-read the selected source files and reproduce the exact keyset;
+- rollback readiness is true;
+- DB target guard proves the configured local Supabase DB target;
+- DELETE privilege is proven non-destructively.
+
+Start Delete requires a separate approval message with the exact Preview run,
+selected item count, and selected key count.
+
+Required approval wording:
+
+```text
+Preview run <previewRunId> 기준 already_in_db items <itemCount>, exact keys <keyCount>에 대해 hard delete 정확히 1회 승인합니다.
+```
+
+Backend checks before DB mutation:
+
+- ready preflight exists and is not expired;
+- typed exact key count matches `expectedDeleteKeys`;
+- no-undo acknowledgement is true;
+- rollback-limitation acknowledgement is true;
+- Preview item statuses, Preview freshness, latest run, source signatures,
+  keyset hash, DB fingerprint, DB count, and DELETE privilege are revalidated
+  at start time;
+- any selected item missing or no longer `already_in_db` blocks before DB guard,
+  DB count, audit-start, or destructive transaction;
+- `delete_run` state is created as `preparing`;
+- `upload.delete_start` audit is durably written;
+- `delete_run` transitions to `running` before the destructive transaction opens.
+
+If any check fails, no rows must be deleted.
+
+After delete finishes, record:
+
+- delete run id;
+- status;
+- expected exact keys;
+- deleted exact keys;
+- rollback readiness;
+- recovery required;
+- `upload.delete_start` and final `upload.delete_*` audit evidence;
+- whether a fresh Preview is required for verification or rollback.
+
+If status is `commit_unknown` or `reconciliation_failed`, do not run another
+Delete, Start Upload, Retry Failed, or duplicate Preview workaround. Use the
+explicit reconcile endpoint or stop for maintainer investigation.
+
+Reconcile may mark success only after the backend rebuilds the original keyset,
+verifies the original selection/keyset hashes, verifies the same DB target
+schema/fingerprint, and completes the SELECT-only DB count. It must not issue
+temp-table, insert, delete, update, upsert, or lifecycle statements against
+local Supabase. Reconcile uses the target/schema/fingerprint guard only and must
+not require DELETE privilege; DELETE privilege remains mandatory for Delete
+Preflight and Start Delete.
+
+If source rebuild, status
+revalidation, keyset/hash comparison, DB target check, or DB count fails, the
+delete run must become `reconciliation_failed` with `recoveryRequired = true`.
+
 ## No-Upload Acceptance Template
 
 Use this when Preview succeeds but there is no upload target, or when a gate
@@ -329,6 +405,48 @@ Further action:
 - Next upload requires fresh Preview:
 ```
 
+## Already-In-DB Delete Acceptance Template
+
+Use this only after a separately approved already-in-DB hard delete.
+
+```text
+Already-In-DB Delete Acceptance
+
+Preview run:
+Selected already_in_db items:
+Approved exact keys:
+DB status:
+appliedProfile:
+
+Approval:
+- Exact approval phrase:
+- Approved by:
+- Date/time:
+
+Preflight:
+- preflight id:
+- rollbackReady:
+- rollbackBlockers:
+- dbTargetGuard:
+- selectionHash:
+- keysetHash:
+
+Execution result:
+- delete run:
+- final status:
+- expected exact keys:
+- deleted exact keys:
+- recoveryRequired:
+- error/reason:
+- audit delta:
+
+Further action:
+- Fresh Preview required:
+- Rollback Start Upload required:
+- Reconcile required:
+- Investigation required:
+```
+
 ## Stop Conditions
 
 Stop and investigate when any of these occur:
@@ -353,6 +471,10 @@ Stop and investigate when any of these occur:
 - Start Upload when target rows are zero;
 - Start Upload when risky files exist;
 - Retry Failed without remaining-row review;
+- Already-in-DB hard delete without separate approval, ready preflight, typed exact-key count, and rollback acknowledgement;
+- Already-in-DB hard delete for `target`, `partial_overlap`, `risky`, or `excluded` rows;
+- Already-in-DB hard delete when a selected item changed status after preflight;
+- another Delete, Preview workaround, Start Upload, or Retry Failed while delete recovery is unresolved;
 - duplicate rerun to "see if it works";
 - DB reset, truncate, delete, or manual cleanup as a normal upload fix;
 - Docker/Supabase destructive cleanup as an upload workaround;

@@ -139,6 +139,14 @@ def action_for_request(request: Request, settings: Settings | None = None) -> Pr
         target_id = parts[3] if len(parts) >= 4 and parts[3] != "cancel" else None
         return ProtectedAction("upload.preview", "upload_preview", target_id, "upload.preview")
 
+    if path.startswith("/api/upload/delete"):
+        if path == "/api/upload/delete/preflight":
+            return ProtectedAction("upload.delete_preflight", "delete_preflight", None, "upload.delete")
+        delete_run_id = parts[4] if len(parts) >= 5 and parts[3] == "jobs" else None
+        action_segment = parts[5] if len(parts) >= 6 else ""
+        action_name = "upload.delete_reconciled" if action_segment == "reconcile" else "upload.delete_start"
+        return ProtectedAction(action_name, "delete_run", delete_run_id, "upload.delete")
+
     if path == "/api/upload/jobs":
         return ProtectedAction("upload.start", "upload_job", None, "upload.jobs")
 

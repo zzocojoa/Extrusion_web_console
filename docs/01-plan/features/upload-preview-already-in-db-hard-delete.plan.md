@@ -2,20 +2,24 @@
 
 Date: 2026-06-18
 
-Branch: `codex/already-in-db-delete-plan-hardening`
+Branch: `codex/already-in-db-delete-implementation`
 
-Status: `plan_only_hard_gate`
+Status: `approved_implementation_followup`
 
 ## Hard Gate
 
-This document is a planning artifact only.
+This document started as a planning artifact. The implementation follow-up was
+separately approved on 2026-06-18 and is allowed only on a clean `origin/main`
+implementation branch that reflects this safety contract in code and tests.
 
-Do not implement, migrate, run destructive SQL, delete database rows, reset or
-truncate databases, run Docker cleanup, run Supabase lifecycle operations, or
-start any Upload Job from this plan.
+This approval does not allow operational DB deletion, Upload Preview execution,
+Start Upload, Retry Failed, duplicate rerun, DB reset/truncate/drop/manual
+cleanup, Docker cleanup, Supabase lifecycle work, release, tag, or package
+creation during implementation verification.
 
-Implementation requires a separate approved PR after this plan passes review.
 Destructive smoke is allowed only against a disposable local fixture database.
+Production execution still requires a separate explicit operator approval with
+the exact Preview run, selected item count, and exact key count.
 
 ## Problem
 
@@ -40,7 +44,7 @@ This plan blocks implementation until those risks are explicitly designed.
 
 | Existing behavior | Reuse decision |
 | --- | --- |
-| Preview exact-key reconciliation stages local `(timestamp, device_id)` keys and joins `public.all_metrics`. | Reuse the same key extraction and temp-table join pattern. |
+| Preview exact-key reconciliation rebuilds local `(timestamp, device_id)` keys and joins `public.all_metrics`. | Reuse the same key extraction. Count checks and recovery reconciliation must use SELECT-only DB reads; temp staging is allowed only inside the Start Delete destructive transaction. |
 | Preview item statuses include `already_in_db`, `target`, `partial_overlap`, `risky`, and `excluded`. | Delete eligibility is restricted to selected `already_in_db` items only. |
 | Start Upload backend gate checks latest Preview, freshness, DB reachable, risky count, source snapshot, expected target files, and expected rows. | Mirror the same backend gate shape for Delete Preflight and Start Delete. |
 | Mutating APIs are protected by `X-EWC-Local-Token`. | All delete APIs must be protected by the same local token guard. |
@@ -79,6 +83,9 @@ Start Delete must hard block unless every guard passes.
 
 Preflight and Start Delete must both compute the same DB identity fingerprint.
 If the fingerprint changes, Start Delete blocks with `db_target_changed`.
+Reconcile must verify the same target/schema/fingerprint using a target guard
+that excludes DELETE privilege because reconcile is SELECT-only against local
+Supabase.
 
 The plan must not trust Settings display values alone. The guard must connect to
 the target DB and verify the effective database before any delete statement is
@@ -97,6 +104,11 @@ It must not issue a no-op `DELETE` as a permission test.
 If permission is absent or cannot be proven, block with
 `db_delete_permission_denied`. Audit only the safe reason code and sanitized DB
 target class.
+
+The DELETE privilege guard is not used by reconcile. Reconcile must still prove
+the configured local DB target, expected schema fingerprint, and stored DB
+fingerprint hash before counting exact keys, but it must not block solely
+because DELETE privilege is absent.
 
 ## Start-Time Revalidation
 
@@ -304,10 +316,11 @@ POST /api/upload/delete/jobs/{deleteRunId}/reconcile
 
 The endpoint is protected by the local token because it mutates local state and
 audit rows. It is read-only against local Supabase: it may connect, verify the
-same sanitized DB fingerprint, stage exact keys from the original selected
-Preview evidence, and count whether those keys are present or absent. It must
-not run `DELETE`, `INSERT`, `UPDATE`, `UPSERT`, or any Supabase lifecycle
-operation.
+same sanitized DB target/schema/fingerprint without requiring DELETE privilege,
+rebuild exact keys from the original selected Preview evidence, and count
+whether those keys are present or absent using SELECT-only DB statements. It
+must not run `CREATE TEMP`, `INSERT`, `DELETE`, `UPDATE`, `UPSERT`, or any
+Supabase lifecycle operation against local Supabase.
 
 Reconciliation outcomes:
 
@@ -545,16 +558,17 @@ Safe audit params:
 - `preflightId`
 - `deleteRunId`
 - `selectedItemCount`
-- `selectedKeyCount`
-- `deletedKeyCount`
+- `selectedRowCount`
+- `deletedRowCount`
 - `rollbackReady`
 - `rollbackBlockers`
 - `dbTargetClass`
 - `dbFingerprintHash`
 - `selectionHash`
-- `keysetHash`
+- `selectionDataHash`
 - `startAuditId`
 - `reasonCode`
+- `rawMatchRowsReturned=false`
 
 Forbidden audit params:
 
@@ -608,7 +622,8 @@ Disposable destructive smoke must prove:
 15. stale `preparing` rows from prior process start are marked failed before DB mutation;
 16. stale `running` or `finalizing` rows from prior process start are normalized to `commit_unknown`;
 17. `commit_unknown` recovery can be resolved only through the reconcile endpoint;
-18. reconcile endpoint is read-only against local Supabase and never issues a delete/write statement;
+18. reconcile endpoint is read-only against local Supabase and never issues temp-table, insert, delete, update, upsert, or lifecycle statements;
+18a. reconcile verifies DB target/schema/fingerprint without requiring DELETE privilege, while Preflight and Start Delete still require DELETE privilege;
 19. unresolved `commit_unknown`, `reconciling`, or `reconciliation_failed` states block new Delete Preflight and Start Delete;
 20. Delete Cancel/Pause/Resume controls and APIs are absent in v1;
 21. API responses, audit rows, events, and logs do not expose raw returned keys.

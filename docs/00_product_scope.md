@@ -29,6 +29,7 @@ Include in v1:
 - Upload Preview
 - Start Upload
 - Retry Failed
+- Already-in-DB exact-key hard delete for selected Preview rows only, when separately approved and guarded by local DB target, rollback readiness, typed count, and audit evidence
 - Upload progress and logs
 - Local Supabase status/start/stop
 - Grafana status/link only
