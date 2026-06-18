@@ -231,6 +231,19 @@ Required approval wording:
 Preview run <previewRunId> 기준 already_in_db items <itemCount>, exact keys <keyCount>에 대해 hard delete 정확히 1회 승인합니다.
 ```
 
+Maintainer-only date scope:
+
+Use date-scoped delete only when a selected `already_in_db` item contains rows
+from multiple timestamp dates and whole-item delete would remove rows outside
+the separately approved date. This is not a normal operator UI feature. It must
+be run only by a maintainer who records the exact `timestampStartDate`,
+`timestampEndDate`, preflight key count, delete run id, and post-delete DB or
+Preview evidence.
+
+For date-scoped delete, the approval must name the date scope as well as the
+exact selected key count. If the selected date scope returns zero keys, stop.
+Do not delete the whole mixed-date item as a workaround.
+
 Backend checks before DB mutation:
 
 - ready preflight exists and is not expired;
@@ -415,6 +428,8 @@ Already-In-DB Delete Acceptance
 Preview run:
 Selected already_in_db items:
 Approved exact keys:
+Maintainer-only timestampStartDate:
+Maintainer-only timestampEndDate:
 DB status:
 appliedProfile:
 
@@ -445,6 +460,56 @@ Further action:
 - Rollback Start Upload required:
 - Reconcile required:
 - Investigation required:
+```
+
+## Date-Scoped Delete Execution Evidence Template
+
+Use this only for maintainer-run date-scoped delete evidence. It is not an
+operator UI checklist.
+
+```text
+Date-Scoped Delete Evidence
+
+Purpose:
+Approved timestamp date scope:
+- timestampStartDate:
+- timestampEndDate:
+
+Approval:
+- Approved by:
+- Approval source:
+- Approval owner independently verified: yes/no
+
+Execution:
+- item-level delete rows:
+- date-scoped delete rows:
+- total deleted rows:
+- date-scoped delete run:
+- final status:
+- expected keys:
+- deleted keys:
+- recoveryRequired:
+
+Verification:
+- deleted date DB count:
+- adjacent date DB count:
+- fresh Preview run:
+- fresh Preview status:
+- alreadyInDb:
+- target:
+- partialOverlap:
+- mixed-date caveat:
+
+Forbidden follow-up without separate approval:
+- additional DB delete:
+- reset/truncate:
+- Docker/Supabase lifecycle:
+- Upload Start:
+- Retry Failed:
+
+Rollback:
+- automatic undo available: no
+- recovery path:
 ```
 
 ## Stop Conditions

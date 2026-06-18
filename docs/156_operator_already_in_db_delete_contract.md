@@ -31,6 +31,31 @@ full DB guard, including the non-destructive DELETE privilege probe; reconcile
 uses only the target/schema/fingerprint guard plus SELECT-only exact-key count
 and must not require DELETE privilege.
 
+### Maintainer-Only Date Scope
+
+`POST /api/upload/delete/preflight` may carry optional `timestampStartDate` and
+`timestampEndDate` values. These fields narrow the rebuilt exact keyset by the
+timestamp date before the selection hash, keyset hash, DB count check, and Start
+Delete execution.
+
+This date scope is a maintainer-only control path. It exists for mixed-date
+source items where deleting the whole `already_in_db` Preview item would remove
+rows outside the approved date. It is not a general operator UI feature and must
+not be presented as a normal cleanup option.
+
+Rules for date-scoped delete:
+
+- `timestampStartDate` and `timestampEndDate` must be supplied together;
+- `timestampEndDate` must be on or after `timestampStartDate`;
+- the narrowed keyset must be non-empty or preflight blocks as
+  `delete_selection_empty`;
+- the date scope must be stored on the preflight record and reused by Start
+  Delete and reconcile;
+- audit params may include the two ISO dates, but must not include raw exact
+  keys, source paths, filenames, DB URLs, tokens, or credentials;
+- operator-facing docs must say this path is maintainer-only until frontend
+  controls, copy, i18n, and runbook approval are separately implemented.
+
 ## Required Gates
 
 Start Delete must block before DB mutation unless all conditions are true:

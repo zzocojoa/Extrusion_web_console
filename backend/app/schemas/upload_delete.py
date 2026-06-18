@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from backend.app.schemas.upload_preview import ApiModel
 
@@ -46,6 +46,16 @@ class DeletePreflightRequest(ApiModel):
     preview_run_id: str
     preview_item_ids: list[int] = Field(default_factory=list, min_length=1)
     expected_already_in_db_items: int = Field(ge=1)
+    timestamp_start_date: date | None = None
+    timestamp_end_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_timestamp_date_scope(self) -> "DeletePreflightRequest":
+        if (self.timestamp_start_date is None) != (self.timestamp_end_date is None):
+            raise ValueError("timestampStartDate and timestampEndDate must be supplied together")
+        if self.timestamp_start_date and self.timestamp_end_date and self.timestamp_end_date < self.timestamp_start_date:
+            raise ValueError("timestampEndDate must be on or after timestampStartDate")
+        return self
 
 
 class DeletePreflightResponse(ApiModel):
@@ -60,6 +70,8 @@ class DeletePreflightResponse(ApiModel):
     keyset_hash: str
     expires_at: datetime
     reason_code: str | None = None
+    timestamp_start_date: date | None = None
+    timestamp_end_date: date | None = None
 
 
 class DeleteJobCreateRequest(ApiModel):

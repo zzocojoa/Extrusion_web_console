@@ -41,6 +41,12 @@ Preview requests are audit logged as `upload.preview`. Successful previews write
 
 Already-in-DB hard delete is a production-critical maintenance flow, not a general database cleanup tool. It can target only selected Preview items whose status is `already_in_db`. The backend rebuilds exact keys from current source files, verifies rollback readiness, proves the configured DB is the expected local Supabase target, checks DELETE privilege non-destructively, writes `delete_run` state and `upload.delete_start` audit before DB mutation, then performs an all-or-nothing transaction. API responses and audits expose counts, hashes, status, and safe reason codes only; raw `(timestamp, device_id)` values, source paths, filenames, DB URLs, tokens, Authorization values, JWTs, and secrets are not returned.
 
+Date-scoped delete is a maintainer-only extension of the delete API for
+mixed-date `already_in_db` evidence. It is not a general operator UI feature.
+Maintainers may use `timestampStartDate` and `timestampEndDate` on Delete
+Preflight only after separate approval for that exact timestamp-date scope.
+Whole-item delete must not be used to remove one date from a mixed-date item.
+
 The Dashboard layout has been browser-QA'd at `1440x900`, `1366x768`, `1024x768`, and `720x900`.
 
 ## Repository Layout
@@ -331,12 +337,12 @@ Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/latest
 
 Already-in-DB hard delete API contract:
 
-- `POST /api/upload/delete/preflight` is a protected preflight. It accepts a Preview run id, selected Preview item ids, and an expected selected item count. It returns `ready` or `blocked`, exact selected key count, rollback readiness, sanitized DB target guard, hashes, expiry, and safe reason code.
+- `POST /api/upload/delete/preflight` is a protected preflight. It accepts a Preview run id, selected Preview item ids, an expected selected item count, and optional maintainer-only `timestampStartDate` / `timestampEndDate` values for mixed-date delete scope. It returns `ready` or `blocked`, exact selected key count, rollback readiness, sanitized DB target guard, hashes, expiry, optional date scope, and safe reason code.
 - `POST /api/upload/delete/jobs` is protected and destructive. It requires a ready preflight, typed exact key count, no-undo acknowledgement, and rollback-limit acknowledgement. It must not be used against operational data without separate explicit approval.
 - `GET /api/upload/delete/jobs/latest` is read-only and safe for status checks.
 - `POST /api/upload/delete/jobs/{deleteRunId}/reconcile` is protected but read-only against local Supabase. It updates local delete state/audit for `commit_unknown` or explicitly retried `reconciliation_failed` runs and never issues a delete.
 
-Implementation and destructive smoke for delete must use disposable local fixture DBs unless an operator gives separate production approval. Normal upload troubleshooting must still not use DB reset, truncate, broad manual cleanup, Supabase lifecycle, or Docker cleanup.
+Implementation and destructive smoke for delete must use disposable local fixture DBs unless an operator gives separate production approval. Normal upload troubleshooting must still not use DB reset, truncate, broad manual cleanup, Supabase lifecycle, or Docker cleanup. Date-scoped delete remains maintainer-only until frontend controls, operator copy, i18n, and runbook approval are implemented separately.
 
 Backend tests:
 
@@ -521,6 +527,7 @@ Browser QA has been run against:
 - `docs/09_local_supabase_control_plan.md`
 - `docs/10_audit_logs_plan.md`
 - `docs/156_operator_already_in_db_delete_contract.md`
+- `docs/157_operator_2026-01-19_delete_execution.md`
 
 ## Reference Project
 

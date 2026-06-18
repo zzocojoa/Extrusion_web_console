@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Protocol
 from urllib.parse import urlparse
@@ -40,6 +40,7 @@ from backend.app.services.upload_preview import (
 PREFLIGHT_TTL_SECONDS = 15 * 60
 PREVIEW_FRESHNESS_MAX_AGE_SECONDS = 24 * 60 * 60
 MAX_DELETE_KEYS = 100_000
+POSTGRES_CONTAINER_PORT = 5432
 
 
 class DeleteRejectedError(RuntimeError):
@@ -107,6 +108,8 @@ class KeyEvidence:
     rollback_ready: bool
     rollback_blockers: list[str]
     items: list[sqlite3.Row]
+    timestamp_start_date: date | None = None
+    timestamp_end_date: date | None = None
 
 
 class PsycopgDeleteDbClient:
@@ -138,7 +141,7 @@ class PsycopgDeleteDbClient:
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT inet_server_port(), current_database(), current_user")
                     port, database_name, _user = cursor.fetchone()
-                    if int(port) != int(self.settings.local_supabase_db_port):
+                    if not self._server_port_matches_expected(int(port)):
                         return DbGuardResult(False, classified.target_class, None, "db_port_mismatch")
                     cursor.execute("SELECT to_regclass('public.all_metrics') IS NOT NULL")
                     if cursor.fetchone()[0] is not True:
@@ -172,6 +175,12 @@ class PsycopgDeleteDbClient:
                     return DbGuardResult(True, classified.target_class, fingerprint_hash)
         except Exception:
             return DbGuardResult(False, classified.target_class, None, "db_guard_unreachable")
+
+    def _server_port_matches_expected(self, server_port: int) -> bool:
+        expected_port = int(self.settings.local_supabase_db_port)
+        if server_port == expected_port:
+            return True
+        return server_port == POSTGRES_CONTAINER_PORT and expected_port != POSTGRES_CONTAINER_PORT
 
     def count_existing_keys(self, keys: set[tuple[str, str]]) -> int:
         if not keys:
@@ -315,7 +324,10 @@ class UploadDeleteService:
             return self._blocked_preflight(preflight_id, request, "selection_item_missing")
         if any(str(item["status"]) != "already_in_db" for item in items):
             return self._blocked_preflight(preflight_id, request, "selection_contains_non_already_in_db")
-        evidence = self._build_key_evidence(items)
+        timestamp_scope = timestamp_scope_from_request(request)
+        evidence = self._build_key_evidence(items, timestamp_scope=timestamp_scope)
+        if evidence.selected_key_count <= 0:
+            return self._blocked_preflight(preflight_id, request, "delete_selection_empty", evidence=evidence)
         if evidence.selected_key_count > MAX_DELETE_KEYS:
             return self._blocked_preflight(preflight_id, request, "delete_selection_too_large", evidence=evidence)
         if not evidence.rollback_ready:
@@ -351,6 +363,8 @@ class UploadDeleteService:
             rollback_ready=True,
             rollback_blockers=[],
             expires_at=expires_at.isoformat(),
+            timestamp_start_date=format_date(evidence.timestamp_start_date),
+            timestamp_end_date=format_date(evidence.timestamp_end_date),
         )
         self._audit(
             action="upload.delete_preflight",
@@ -367,6 +381,8 @@ class UploadDeleteService:
                 guard=guard,
                 selection_hash=evidence.selection_hash,
                 keyset_hash=evidence.keyset_hash,
+                timestamp_start_date=evidence.timestamp_start_date,
+                timestamp_end_date=evidence.timestamp_end_date,
             ),
         )
         return DeletePreflightResponse(
@@ -380,6 +396,8 @@ class UploadDeleteService:
             selection_hash=evidence.selection_hash,
             keyset_hash=evidence.keyset_hash,
             expires_at=expires_at,
+            timestamp_start_date=evidence.timestamp_start_date,
+            timestamp_end_date=evidence.timestamp_end_date,
         )
 
     def start_delete(self, request: DeleteJobCreateRequest) -> DeleteJobCreateResponse:
@@ -415,7 +433,8 @@ class UploadDeleteService:
             self._reject_with_blocked_audit("selection_item_missing", str(preflight["preview_run_id"]), request.preflight_id)
         if any(str(item["status"]) != "already_in_db" for item in items):
             self._reject_with_blocked_audit("selection_status_changed", str(preflight["preview_run_id"]), request.preflight_id)
-        evidence = self._build_key_evidence(items)
+        timestamp_scope = timestamp_scope_from_preflight(preflight)
+        evidence = self._build_key_evidence(items, timestamp_scope=timestamp_scope)
         if not evidence.rollback_ready:
             self._reject_with_blocked_audit(self._key_evidence_failure_reason(evidence), str(preflight["preview_run_id"]), request.preflight_id)
         if evidence.selection_hash != str(preflight["selection_hash"]) or evidence.keyset_hash != str(preflight["keyset_hash"]):
@@ -467,6 +486,8 @@ class UploadDeleteService:
                     guard=guard,
                     selection_hash=evidence.selection_hash,
                     keyset_hash=evidence.keyset_hash,
+                    timestamp_start_date=evidence.timestamp_start_date,
+                    timestamp_end_date=evidence.timestamp_end_date,
                 ),
             )
         except Exception as error:
@@ -565,7 +586,8 @@ class UploadDeleteService:
             return self._finish_reconcile(delete_run_id, row, expected_key_count, 0, 0, "reconciliation_failed", "selection_item_missing")
         if any(str(item["status"]) != "already_in_db" for item in items):
             return self._finish_reconcile(delete_run_id, row, expected_key_count, 0, 0, "reconciliation_failed", "selection_status_changed")
-        evidence = self._build_key_evidence(items)
+        timestamp_scope = timestamp_scope_from_preflight(preflight)
+        evidence = self._build_key_evidence(items, timestamp_scope=timestamp_scope)
         if not evidence.rollback_ready:
             return self._finish_reconcile(
                 delete_run_id,
@@ -664,6 +686,8 @@ class UploadDeleteService:
         selected_key_count = evidence.selected_key_count if evidence else 0
         selection_hash = evidence.selection_hash if evidence else safe_hash({"previewRunId": request.preview_run_id, "selectedItemIds": selected_ids})
         keyset_hash = evidence.keyset_hash if evidence else safe_hash({"keys": []})
+        timestamp_start_date = evidence.timestamp_start_date if evidence else request.timestamp_start_date
+        timestamp_end_date = evidence.timestamp_end_date if evidence else request.timestamp_end_date
         blockers = rollback_blockers if rollback_blockers is not None else []
         guard = guard or DbGuardResult(False, "unknown", None, reason)
         expires_at = utc_now() + timedelta(seconds=PREFLIGHT_TTL_SECONDS)
@@ -680,6 +704,8 @@ class UploadDeleteService:
             rollback_ready=False,
             rollback_blockers=blockers,
             expires_at=expires_at.isoformat(),
+            timestamp_start_date=format_date(timestamp_start_date),
+            timestamp_end_date=format_date(timestamp_end_date),
             reason_code=reason,
             error_message=reason,
         )
@@ -698,6 +724,8 @@ class UploadDeleteService:
                 guard=guard,
                 selection_hash=selection_hash,
                 keyset_hash=keyset_hash,
+                timestamp_start_date=timestamp_start_date,
+                timestamp_end_date=timestamp_end_date,
                 reason_code=reason,
             ),
             error_code=reason,
@@ -715,6 +743,8 @@ class UploadDeleteService:
             keyset_hash=keyset_hash,
             expires_at=expires_at,
             reason_code=reason,
+            timestamp_start_date=timestamp_start_date,
+            timestamp_end_date=timestamp_end_date,
         )
 
     def _reject_with_blocked_audit(self, reason: str, preview_run_id: str | None, preflight_id: str | None) -> None:
@@ -776,6 +806,8 @@ class UploadDeleteService:
                 guard=guard,
                 selection_hash=evidence.selection_hash,
                 keyset_hash=evidence.keyset_hash,
+                timestamp_start_date=evidence.timestamp_start_date,
+                timestamp_end_date=evidence.timestamp_end_date,
                 reason_code=reason,
             ),
             error_code=reason,
@@ -808,9 +840,15 @@ class UploadDeleteService:
             return "preview_db_not_reachable"
         return None
 
-    def _build_key_evidence(self, items: list[sqlite3.Row]) -> KeyEvidence:
+    def _build_key_evidence(
+        self,
+        items: list[sqlite3.Row],
+        *,
+        timestamp_scope: tuple[date | None, date | None] = (None, None),
+    ) -> KeyEvidence:
         keys: set[tuple[str, str]] = set()
         blockers: list[str] = []
+        timestamp_start_date, timestamp_end_date = timestamp_scope
         for item in items:
             extraction, blocker = self._extract_item_keys(item)
             if blocker is not None:
@@ -823,7 +861,10 @@ class UploadDeleteService:
             if expected_local_count <= 0 or len(extraction.local_keys) != expected_local_count:
                 blockers.append("keyset_mismatch")
                 continue
-            keys.update(extraction.local_keys)
+            item_keys = extraction.local_keys
+            if timestamp_start_date is not None and timestamp_end_date is not None:
+                item_keys = filter_keys_by_timestamp_date(item_keys, timestamp_start_date, timestamp_end_date)
+            keys.update(item_keys)
         selected_ids = [int(item["preview_item_id"]) for item in items]
         keyset_hash = hash_keys(keys)
         selection_hash = safe_hash(
@@ -839,6 +880,10 @@ class UploadDeleteService:
                     for item in items
                 ],
                 "keysetHash": keyset_hash,
+                "timestampDateScope": {
+                    "startDate": format_date(timestamp_start_date),
+                    "endDate": format_date(timestamp_end_date),
+                },
             }
         )
         unique_blockers = sorted(set(blockers))
@@ -852,6 +897,8 @@ class UploadDeleteService:
             rollback_ready=not unique_blockers,
             rollback_blockers=unique_blockers,
             items=items,
+            timestamp_start_date=timestamp_start_date,
+            timestamp_end_date=timestamp_end_date,
         )
 
     def _extract_item_keys(self, item: sqlite3.Row) -> tuple[KeyExtractionResult | None, str | None]:
@@ -909,6 +956,8 @@ class UploadDeleteService:
         guard: DbGuardResult | None = None,
         selection_hash: str | None = None,
         keyset_hash: str | None = None,
+        timestamp_start_date: date | None = None,
+        timestamp_end_date: date | None = None,
         reason_code: str | None = None,
     ) -> dict[str, object]:
         return {
@@ -924,6 +973,8 @@ class UploadDeleteService:
             "dbFingerprintHash": guard.fingerprint_hash if guard else None,
             "selectionHash": selection_hash,
             "selectionDataHash": keyset_hash,
+            "timestampStartDate": format_date(timestamp_start_date),
+            "timestampEndDate": format_date(timestamp_end_date),
             "reasonCode": reason_code,
             "rawMatchRowsReturned": False,
         }
@@ -936,6 +987,48 @@ def safe_hash(value: object) -> str:
 
 def hash_keys(keys: set[tuple[str, str]]) -> str:
     return safe_hash({"keys": sorted([{"timestamp": ts, "deviceId": device_id} for ts, device_id in keys], key=lambda item: (item["timestamp"], item["deviceId"]))})
+
+
+def format_date(value: date | None) -> str | None:
+    return None if value is None else value.isoformat()
+
+
+def timestamp_scope_from_request(request: DeletePreflightRequest) -> tuple[date | None, date | None]:
+    return request.timestamp_start_date, request.timestamp_end_date
+
+
+def timestamp_scope_from_preflight(preflight: sqlite3.Row) -> tuple[date | None, date | None]:
+    return parse_date_value(preflight["timestamp_start_date"]), parse_date_value(preflight["timestamp_end_date"])
+
+
+def parse_date_value(value: object) -> date | None:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def filter_keys_by_timestamp_date(
+    keys: set[tuple[str, str]],
+    start_date: date,
+    end_date: date,
+) -> set[tuple[str, str]]:
+    return {
+        (timestamp, device_id)
+        for timestamp, device_id in keys
+        if timestamp_date_in_scope(timestamp, start_date, end_date)
+    }
+
+
+def timestamp_date_in_scope(timestamp: str, start_date: date, end_date: date) -> bool:
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    timestamp_date = parsed.date()
+    return start_date <= timestamp_date <= end_date
 
 
 def parse_dt(value: str | None) -> datetime | None:
