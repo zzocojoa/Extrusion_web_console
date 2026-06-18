@@ -30,6 +30,6 @@ The normal run captures 32 screenshots. It must not perform a real upload and mu
 
 Text artifacts are scanned for generic timestamp-style CSV names, Windows absolute paths, credential-like markers, DB URLs, and token markers. Do not add operational CSV filename patterns, raw operational paths, CSV contents, DB URLs, or credentials to mock data or docs.
 
-The default QA Vite port is `5174` so it does not accidentally reuse a developer server on `5173` that may be running in API mode. Override with `EWC_SCREENSHOT_QA_PORT` only when needed.
+The default QA Vite port is `5175`, and the Playwright config does not reuse existing servers. This prevents screenshot QA from silently attaching to a stale app or an API-mode dev server. Override with `EWC_SCREENSHOT_QA_PORT` only when needed.
 
 Artifacts under `.gstack/` are ignored and must not be committed.

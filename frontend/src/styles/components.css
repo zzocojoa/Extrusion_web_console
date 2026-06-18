@@ -664,8 +664,70 @@
   font-family: var(--font-data);
 }
 
+.start-upload-modal__check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.start-upload-modal__check input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
 .start-upload-modal__actions {
   justify-content: flex-end;
+}
+
+.delete-selection-panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.delete-selection-panel__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.delete-selection-panel__summary strong {
+  display: block;
+  margin-top: 2px;
+}
+
+.delete-selection-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.delete-selection-panel__line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.delete-selection-panel__line span {
+  color: var(--color-danger);
+}
+
+.preview-select-cell {
+  width: 48px;
+  text-align: center;
+}
+
+.preview-select-cell input {
+  width: 16px;
+  height: 16px;
 }
 
 .preview-search {
