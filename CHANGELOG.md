@@ -9,6 +9,13 @@ All notable changes to Extrusion Web Console are documented here.
 - Project status summaries and infographics now have a language policy that separates completed evidence, operating restrictions, review gates, conditional caveats, and intentional v1 exclusions instead of grouping them as generic unfinished work.
 - README and the operator upload gate runbook now point future status artifacts to the status language policy so destructive-action restrictions are not mistaken for pending tasks.
 
+### Operational notes
+
+- PR #185 (`[codex] add row attribution ledger sidecar`) was merged to `main` at merge commit `8a391a975819ec46343974959c8d9719eb6b2125` (`8a391a9`). It adds the local state DB sidecar `row_attribution_ledger` implementation and backend tests while leaving the Supabase schema and `all_metrics(timestamp, device_id)` behavior unchanged.
+- The row attribution write gate remains off by default through `v2_row_attribution_enabled=false`. This release note does not approve packaging, deployment, operating DB mutation, LAN exposure, delete UI expansion, or feature-gate enablement.
+- Main-branch validation for PR #185 passed with `.\.venv\Scripts\python -m pytest tests\backend` reporting `314 passed, 14 warnings`. GitHub checks were not reported for the merged PR (`no checks reported`), so local backend tests are the current verification evidence.
+- Known risk: an existing local state DB with an incompatible `row_attribution_ledger` table shape can fail startup closed. Before packaging or deployment, rollback is `git revert 8a391a9`; after any row attribution writes exist, preserve evidence and use feature-gate disablement or fix-forward instead of deleting attribution records.
+
 ## [0.1.0.0] - 2026-06-02
 
 ### Added
