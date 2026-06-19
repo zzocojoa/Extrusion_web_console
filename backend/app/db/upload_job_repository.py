@@ -1193,10 +1193,10 @@ class UploadJobRepository:
         error_code: str | None = None,
         error_message: str | None = None,
         job_id: str | None = None,
-    ) -> None:
+    ) -> int:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            self._append_audit_in_connection(
+            return self._append_audit_in_connection(
                 connection,
                 action=action,
                 target_type=target_type,
@@ -1207,6 +1207,20 @@ class UploadJobRepository:
                 error_message=error_message,
                 job_id=job_id,
             )
+
+    def latest_audit_id(self, job_id: str, action: str) -> int | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT audit_id
+                FROM audit_log
+                WHERE job_id = ? AND action = ?
+                ORDER BY audit_id DESC
+                LIMIT 1
+                """,
+                (job_id, action),
+            ).fetchone()
+        return None if row is None else int(row["audit_id"])
 
     def _append_audit_in_connection(
         self,
@@ -1220,9 +1234,9 @@ class UploadJobRepository:
         error_code: str | None = None,
         error_message: str | None = None,
         job_id: str | None = None,
-    ) -> None:
+    ) -> int:
         now = iso_now()
-        connection.execute(
+        cursor = connection.execute(
             """
             INSERT INTO audit_log(
               ts, actor, action, target_type, target_id, params_json_redacted,
@@ -1232,6 +1246,7 @@ class UploadJobRepository:
             """,
             (now, action, target_type, target_id, _json(redact(params)), result, error_code, error_message, job_id, now),
         )
+        return int(cursor.lastrowid)
 
     def _upsert_file_state_in_connection(
         self,

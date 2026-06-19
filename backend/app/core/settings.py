@@ -85,11 +85,18 @@ class Settings(BaseSettings):
     local_supabase_grafana_container: str = "grafana_local"
     runtime_command_timeout_seconds: int = 20
     runtime_readiness_timeout_seconds: int = 90
+    v2_row_attribution_enabled: bool = False
+    v2_db_delta_evidence_required: bool = True
     row_attribution_writes_enabled: bool = False
+    row_attribution_hmac_key: str = ""
     cors_origins: tuple[str, ...] = (
         "http://127.0.0.1:5173",
         "http://localhost:5173",
     )
+
+    @property
+    def effective_row_attribution_writes_enabled(self) -> bool:
+        return bool(self.v2_row_attribution_enabled or self.row_attribution_writes_enabled)
 
     @property
     def upload_edge_url(self) -> str:

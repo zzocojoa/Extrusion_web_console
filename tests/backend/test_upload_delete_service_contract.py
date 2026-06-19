@@ -7,19 +7,26 @@ import pytest
 
 from backend.app.core.settings import Settings
 from backend.app.db.audit_repository import AuditRepository
+from backend.app.db.db_delta_repository import DbDeltaEvidenceRepository, decode_delta_scope_json
 from backend.app.db.preview_repository import PreviewRepository
+from backend.app.db.row_attribution_repository import RowAttributionRepository
 from backend.app.db.upload_delete_repository import UploadDeleteRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.upload_delete import DeleteJobCreateRequest, DeletePreflightRequest
 from backend.app.services.upload_delete import (
     DbGuardResult,
     DeleteDbBlockedError,
+    DeleteDbFailedError,
     DeleteCommitUnknownError,
     DeleteRejectedError,
     PsycopgDeleteDbClient,
     UploadDeleteService,
 )
 from backend.app.services.upload_preview import build_file_signature
+
+
+DB_HASH = "a" * 64
+HMAC_KEY = "fixture-row-attribution-key"
 
 
 class FakeDeleteDb:
@@ -394,6 +401,67 @@ def service(db_path: Path, db: FakeDeleteDb, audit: AuditRepository | None = Non
     )
 
 
+def service_with_settings(
+    db_path: Path,
+    db: FakeDeleteDb,
+    *,
+    audit: AuditRepository | None = None,
+    row_attribution_repository: RowAttributionRepository | None = None,
+    **settings_overrides,
+) -> UploadDeleteService:
+    settings = Settings(
+        state_db_path=str(db_path),
+        supabase_db_url="",
+        local_supabase_db_port=25433,
+        **settings_overrides,
+    )
+    return UploadDeleteService(
+        settings=settings,
+        repository=UploadDeleteRepository(db_path),
+        audit_repository=audit or AuditRepository(db_path),
+        row_attribution_repository=row_attribution_repository,
+        db_client=db,
+        runtime_ready=lambda: (True, None),
+    )
+
+
+def create_commit_unknown_delete_run(
+    db_path: Path,
+    source_dir: Path,
+    db: FakeDeleteDb,
+    *,
+    delete_service: UploadDeleteService | None = None,
+) -> str:
+    item_id, _source_file = create_preview_for_delete(db_path, source_dir)
+    service_under_test = delete_service or service_with_settings(
+        db_path,
+        db,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+    preflight = service_under_test.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_done",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+        )
+    )
+    with pytest.raises(DeleteRejectedError) as exc:
+        service_under_test.start_delete(
+            DeleteJobCreateRequest(
+                preflight_id=preflight.preflight_id,
+                expected_delete_keys=2,
+                typed_delete_keys="2",
+                acknowledge_no_undo=True,
+                acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+            )
+        )
+    assert exc.value.reason == "commit_unknown"
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs ORDER BY created_at DESC LIMIT 1").fetchone()
+    return str(run["delete_run_id"])
+
+
 def latest_audit(db_path: Path):
     with UploadDeleteRepository(db_path).connect() as connection:
         return connection.execute("SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT 1").fetchone()
@@ -480,6 +548,306 @@ def test_start_delete_writes_start_audit_before_db_delete_and_succeeds(tmp_path:
     assert start_audit is not None
     assert run["start_audit_id"] == start_audit["audit_id"]
     assert run["status"] == "succeeded"
+
+
+def test_default_v2_evidence_gate_does_not_write_delta_or_attribution(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    item_id, _source = create_preview_for_delete(db_path, tmp_path / "source")
+    db = FakeDeleteDb(guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH))
+    delete_service = service(db_path, db)
+    preflight = delete_service.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_done",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+        )
+    )
+
+    delete_service.start_delete(
+        DeleteJobCreateRequest(
+            preflight_id=preflight.preflight_id,
+            expected_delete_keys=2,
+            typed_delete_keys="2",
+            acknowledge_no_undo=True,
+            acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+        )
+    )
+
+    with UploadDeleteRepository(db_path).connect() as connection:
+        delta_count = connection.execute("SELECT COUNT(*) AS count FROM db_delta_evidence").fetchone()["count"]
+        attribution_count = connection.execute("SELECT COUNT(*) AS count FROM row_attribution_ledger").fetchone()["count"]
+    assert delta_count == 0
+    assert attribution_count == 0
+
+
+def test_v2_evidence_gate_links_delete_audit_delta_and_row_attribution(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    item_id, _source = create_preview_for_delete(db_path, tmp_path / "source")
+    db = FakeDeleteDb(guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH))
+    delete_service = service_with_settings(
+        db_path,
+        db,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+    preflight = delete_service.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_done",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+        )
+    )
+
+    response = delete_service.start_delete(
+        DeleteJobCreateRequest(
+            preflight_id=preflight.preflight_id,
+            expected_delete_keys=2,
+            typed_delete_keys="2",
+            acknowledge_no_undo=True,
+            acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+        )
+    )
+
+    deltas = DbDeltaEvidenceRepository(db_path).list_by_operation(response.delete_run_id)
+    attributions = RowAttributionRepository(db_path).list_by_operation(response.delete_run_id)
+    with UploadDeleteRepository(db_path).connect() as connection:
+        start_audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_start' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+        success_audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_succeeded' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+
+    assert len(deltas) == 1
+    assert deltas[0]["audit_id"] == start_audit["audit_id"]
+    assert deltas[0]["before_count"] == 2
+    assert deltas[0]["after_count"] == 0
+    assert deltas[0]["expected_delta"] == -2
+    assert deltas[0]["actual_delta"] == -2
+    assert deltas[0]["result"] == "matched"
+    assert decode_delta_scope_json(deltas[0]["delta_scope_json"])["selectedRowCount"] == 2
+    assert len(attributions) == 2
+    assert {row["audit_id"] for row in attributions} == {start_audit["audit_id"]}
+    assert {row["db_delta_id"] for row in attributions} == {deltas[0]["delta_id"]}
+    assert {row["outcome"] for row in attributions} == {"deleted"}
+    success_params = json.loads(success_audit["params_json_redacted"])
+    assert success_params["dbDeltaId"] == deltas[0]["delta_id"]
+    assert success_params["attributionRowsCreated"] == 2
+    stored_values = "|".join(
+        [
+            *(str(deltas[0][key]) for key in deltas[0].keys()),
+            *(str(row[key]) for row in attributions for key in row.keys()),
+            success_audit["params_json_redacted"],
+        ]
+    )
+    assert "2026-06-18T09:00:00" not in stored_values
+    assert "extruder_integrated" not in stored_values
+
+
+def test_v2_delete_db_failure_marks_failed_and_records_evidence(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    item_id, _source = create_preview_for_delete(db_path, tmp_path / "source")
+    db = FakeDeleteDb(
+        guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH),
+        delete_error=DeleteDbFailedError("deleted_count_mismatch"),
+    )
+    delete_service = service_with_settings(
+        db_path,
+        db,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+    preflight = delete_service.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_done",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+        )
+    )
+
+    with pytest.raises(DeleteRejectedError) as exc:
+        delete_service.start_delete(
+            DeleteJobCreateRequest(
+                preflight_id=preflight.preflight_id,
+                expected_delete_keys=2,
+                typed_delete_keys="2",
+                acknowledge_no_undo=True,
+                acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+            )
+        )
+
+    assert exc.value.reason == "deleted_count_mismatch"
+    assert db.delete_calls == 1
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs ORDER BY created_at DESC LIMIT 1").fetchone()
+        audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_failed' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+        item_rows = connection.execute(
+            "SELECT status, reason_code FROM delete_run_items WHERE delete_run_id = ?",
+            (run["delete_run_id"],),
+        ).fetchall()
+    deltas = DbDeltaEvidenceRepository(db_path).list_by_operation(run["delete_run_id"])
+    attributions = RowAttributionRepository(db_path).list_by_operation(run["delete_run_id"])
+    assert run["status"] == "failed"
+    assert run["recovery_required"] == 0
+    assert run["error_code"] == "deleted_count_mismatch"
+    assert run["finished_at"] is not None
+    assert audit["result"] == "failure"
+    assert audit["error_code"] == "deleted_count_mismatch"
+    assert {row["status"] for row in item_rows} == {"failed"}
+    assert {row["reason_code"] for row in item_rows} == {"deleted_count_mismatch"}
+    assert len(deltas) == 1
+    assert deltas[0]["audit_id"] == audit["audit_id"]
+    assert deltas[0]["before_count"] == 2
+    assert deltas[0]["after_count"] == 2
+    assert deltas[0]["expected_delta"] == 0
+    assert deltas[0]["actual_delta"] == 0
+    assert deltas[0]["result"] == "failed_before_mutation"
+    assert {row["outcome"] for row in attributions} == {"failed_before_mutation"}
+
+
+def test_v2_successful_delete_evidence_write_failure_marks_commit_unknown(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    item_id, _source = create_preview_for_delete(db_path, tmp_path / "source")
+    db = FakeDeleteDb(guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH))
+    disabled_attribution = RowAttributionRepository(db_path, writes_enabled=False)
+    delete_service = service_with_settings(
+        db_path,
+        db,
+        row_attribution_repository=disabled_attribution,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+    preflight = delete_service.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_done",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+        )
+    )
+
+    with pytest.raises(DeleteRejectedError) as exc:
+        delete_service.start_delete(
+            DeleteJobCreateRequest(
+                preflight_id=preflight.preflight_id,
+                expected_delete_keys=2,
+                typed_delete_keys="2",
+                acknowledge_no_undo=True,
+                acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+            )
+        )
+
+    assert exc.value.reason == "evidence_write_failed"
+    assert db.delete_calls == 1
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs ORDER BY created_at DESC LIMIT 1").fetchone()
+        audit = connection.execute("SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT 1").fetchone()
+        item_rows = connection.execute(
+            "SELECT status, reason_code FROM delete_run_items WHERE delete_run_id = ?",
+            (run["delete_run_id"],),
+        ).fetchall()
+    deltas = DbDeltaEvidenceRepository(db_path).list_by_operation(run["delete_run_id"])
+    attributions = RowAttributionRepository(db_path).list_by_operation(run["delete_run_id"])
+    assert run["status"] == "commit_unknown"
+    assert run["deleted_key_count"] == 2
+    assert run["recovery_required"] == 1
+    assert run["error_code"] == "evidence_write_failed"
+    assert audit["action"] == "upload.delete_failed"
+    assert audit["result"] == "failure"
+    assert audit["error_code"] == "evidence_write_failed"
+    assert {row["status"] for row in item_rows} == {"unknown"}
+    assert {row["reason_code"] for row in item_rows} == {"evidence_write_failed"}
+    assert len(deltas) == 1
+    assert deltas[0]["result"] == "matched"
+    assert deltas[0]["before_count"] == 2
+    assert deltas[0]["after_count"] == 0
+    assert attributions == []
+
+
+def test_v2_evidence_gate_blocks_delete_before_mutation_without_hmac_key(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    item_id, _source = create_preview_for_delete(db_path, tmp_path / "source")
+    db = FakeDeleteDb(guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH))
+    delete_service = service_with_settings(db_path, db, v2_row_attribution_enabled=True)
+    preflight = delete_service.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_done",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+        )
+    )
+
+    with pytest.raises(DeleteRejectedError) as exc:
+        delete_service.start_delete(
+            DeleteJobCreateRequest(
+                preflight_id=preflight.preflight_id,
+                expected_delete_keys=2,
+                typed_delete_keys="2",
+                acknowledge_no_undo=True,
+                acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+            )
+        )
+
+    assert exc.value.reason == "row_attribution_hmac_key_missing"
+    assert db.delete_calls == 0
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs ORDER BY created_at DESC LIMIT 1").fetchone()
+    assert run["status"] == "blocked"
+    assert run["error_code"] == "row_attribution_hmac_key_missing"
+
+
+def test_v2_delta_mismatch_prevents_success_attribution(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    item_id, _source = create_preview_for_delete(db_path, tmp_path / "source")
+    db = FakeDeleteDb(
+        guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH),
+        deleted_count=1,
+    )
+    delete_service = service_with_settings(
+        db_path,
+        db,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+    preflight = delete_service.create_preflight(
+        DeletePreflightRequest(
+            preview_run_id="prv_done",
+            preview_item_ids=[item_id],
+            expected_already_in_db_items=1,
+        )
+    )
+
+    with pytest.raises(DeleteRejectedError) as exc:
+        delete_service.start_delete(
+            DeleteJobCreateRequest(
+                preflight_id=preflight.preflight_id,
+                expected_delete_keys=2,
+                typed_delete_keys="2",
+                acknowledge_no_undo=True,
+                acknowledge_rollback_requires_fresh_preview_and_start_upload=True,
+            )
+        )
+
+    assert exc.value.reason == "db_delta_mismatch"
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs ORDER BY created_at DESC LIMIT 1").fetchone()
+        failed_audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_failed' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+    deltas = DbDeltaEvidenceRepository(db_path).list_by_operation(run["delete_run_id"])
+    attributions = RowAttributionRepository(db_path).list_by_operation(run["delete_run_id"])
+    assert run["status"] == "commit_unknown"
+    assert run["recovery_required"] == 1
+    assert run["error_code"] == "db_delta_mismatch"
+    assert len(deltas) == 1
+    assert deltas[0]["result"] == "mismatched"
+    assert deltas[0]["expected_delta"] == -2
+    assert deltas[0]["actual_delta"] == -1
+    assert {row["outcome"] for row in attributions} == {"unknown_requires_reconcile"}
+    failed_params = json.loads(failed_audit["params_json_redacted"])
+    assert failed_params["dbDeltaId"] == deltas[0]["delta_id"]
+    assert failed_params["attributionRowsCreated"] == 2
 
 
 def test_timestamp_date_scope_deletes_only_matching_day_keys(tmp_path: Path) -> None:
@@ -781,6 +1149,161 @@ def test_reconcile_success_clears_previous_error_fields(tmp_path: Path) -> None:
     assert updated["error_code"] is None
     assert updated["error_message"] is None
     assert updated["finished_at"] is not None
+
+
+def test_v2_reconcile_success_links_audit_delta_and_absent_attribution(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    db = FakeDeleteDb(
+        guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH),
+        delete_error=DeleteCommitUnknownError(),
+    )
+    delete_run_id = create_commit_unknown_delete_run(db_path, tmp_path / "source", db)
+    db.delete_error = None
+    db.existing_count = 0
+    delete_service = service_with_settings(
+        db_path,
+        db,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+
+    response = delete_service.reconcile(delete_run_id)
+
+    deltas = [
+        row
+        for row in DbDeltaEvidenceRepository(db_path).list_by_operation(delete_run_id)
+        if row["operation_type"] == "delete_reconcile"
+    ]
+    attributions = [
+        row
+        for row in RowAttributionRepository(db_path).list_by_operation(delete_run_id)
+        if row["operation_type"] == "delete_reconcile"
+    ]
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs WHERE delete_run_id = ?", (delete_run_id,)).fetchone()
+        audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_reconciled' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+
+    assert response.status == "reconciled_succeeded"
+    assert run["status"] == "reconciled_succeeded"
+    assert run["recovery_required"] == 0
+    assert len(deltas) == 1
+    assert deltas[0]["audit_id"] == audit["audit_id"]
+    assert deltas[0]["before_count"] == 2
+    assert deltas[0]["after_count"] == 0
+    assert deltas[0]["expected_delta"] == -2
+    assert deltas[0]["actual_delta"] == -2
+    assert deltas[0]["result"] == "matched"
+    assert decode_delta_scope_json(deltas[0]["delta_scope_json"])["rowsAbsent"] == 2
+    assert len(attributions) == 2
+    assert {row["audit_id"] for row in attributions} == {audit["audit_id"]}
+    assert {row["db_delta_id"] for row in attributions} == {deltas[0]["delta_id"]}
+    assert {row["outcome"] for row in attributions} == {"reconciled_absent"}
+    stored_values = "|".join(
+        [
+            *(str(deltas[0][key]) for key in deltas[0].keys()),
+            *(str(row[key]) for row in attributions for key in row.keys()),
+            audit["params_json_redacted"],
+        ]
+    )
+    assert "2026-06-18T09:00:00" not in stored_values
+    assert "extruder_integrated" not in stored_values
+
+
+def test_v2_reconcile_rollback_links_audit_delta_and_unchanged_attribution(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    db = FakeDeleteDb(
+        guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH),
+        delete_error=DeleteCommitUnknownError(),
+    )
+    delete_run_id = create_commit_unknown_delete_run(db_path, tmp_path / "source", db)
+    db.delete_error = None
+    db.existing_count = 2
+    delete_service = service_with_settings(
+        db_path,
+        db,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+
+    response = delete_service.reconcile(delete_run_id)
+
+    deltas = [
+        row
+        for row in DbDeltaEvidenceRepository(db_path).list_by_operation(delete_run_id)
+        if row["operation_type"] == "delete_reconcile"
+    ]
+    attributions = [
+        row
+        for row in RowAttributionRepository(db_path).list_by_operation(delete_run_id)
+        if row["operation_type"] == "delete_reconcile"
+    ]
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs WHERE delete_run_id = ?", (delete_run_id,)).fetchone()
+        audit = connection.execute(
+            "SELECT * FROM audit_log WHERE action = 'upload.delete_reconciled' ORDER BY audit_id DESC LIMIT 1"
+        ).fetchone()
+
+    assert response.status == "reconciled_rolled_back"
+    assert run["status"] == "reconciled_rolled_back"
+    assert run["recovery_required"] == 0
+    assert len(deltas) == 1
+    assert deltas[0]["audit_id"] == audit["audit_id"]
+    assert deltas[0]["before_count"] == 2
+    assert deltas[0]["after_count"] == 2
+    assert deltas[0]["expected_delta"] == 0
+    assert deltas[0]["actual_delta"] == 0
+    assert deltas[0]["result"] == "matched"
+    assert len(attributions) == 2
+    assert {row["db_delta_id"] for row in attributions} == {deltas[0]["delta_id"]}
+    assert {row["outcome"] for row in attributions} == {"unchanged"}
+
+
+def test_v2_reconcile_evidence_write_failure_does_not_leave_success_state(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    db = FakeDeleteDb(
+        guard_result=DbGuardResult(True, "loopback_expected_db_port", DB_HASH),
+        delete_error=DeleteCommitUnknownError(),
+    )
+    delete_run_id = create_commit_unknown_delete_run(db_path, tmp_path / "source", db)
+    db.delete_error = None
+    db.existing_count = 0
+    disabled_attribution = RowAttributionRepository(db_path, writes_enabled=False)
+    delete_service = service_with_settings(
+        db_path,
+        db,
+        row_attribution_repository=disabled_attribution,
+        v2_row_attribution_enabled=True,
+        row_attribution_hmac_key=HMAC_KEY,
+    )
+
+    response = delete_service.reconcile(delete_run_id)
+
+    deltas = [
+        row
+        for row in DbDeltaEvidenceRepository(db_path).list_by_operation(delete_run_id)
+        if row["operation_type"] == "delete_reconcile"
+    ]
+    attributions = [
+        row
+        for row in RowAttributionRepository(db_path).list_by_operation(delete_run_id)
+        if row["operation_type"] == "delete_reconcile"
+    ]
+    with UploadDeleteRepository(db_path).connect() as connection:
+        run = connection.execute("SELECT * FROM delete_runs WHERE delete_run_id = ?", (delete_run_id,)).fetchone()
+        latest_audit_row = connection.execute("SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT 1").fetchone()
+
+    assert response.status == "reconciliation_failed"
+    assert run["status"] == "reconciliation_failed"
+    assert run["recovery_required"] == 1
+    assert run["error_code"] == "evidence_write_failed"
+    assert latest_audit_row["action"] == "upload.delete_reconciled"
+    assert latest_audit_row["result"] == "failure"
+    assert latest_audit_row["error_code"] == "evidence_write_failed"
+    assert len(deltas) == 1
+    assert deltas[0]["result"] == "matched"
+    assert attributions == []
 
 
 def test_reconcile_does_not_require_delete_privilege(tmp_path: Path) -> None:

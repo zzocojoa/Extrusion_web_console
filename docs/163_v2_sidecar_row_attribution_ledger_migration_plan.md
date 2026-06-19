@@ -2,7 +2,7 @@
 
 Date: 2026-06-19 Asia/Seoul
 
-Status: `design_only_pre_implementation`
+Status: `partial_implementation_evidence_foundation`
 
 ## Purpose
 
@@ -11,10 +11,18 @@ enforcement, and test plan for the local state DB sidecar
 `row_attribution_ledger` designed in
 `docs/162_v2_sidecar_row_attribution_ledger_design.md`.
 
-This document is not a migration approval. It does not approve code changes,
-actual migration execution, Supabase schema changes, operational DB access,
-fixture DB mutation, destructive smoke tests, LAN exposure, delete UI changes,
-release packaging, commit, push, or PR creation.
+This document is not approval for any scope beyond the explicitly implemented
+local evidence foundation. It does not approve enabling the evidence gate,
+Supabase schema changes, operational DB access, fixture DB mutation,
+destructive smoke tests, LAN exposure, delete UI changes, release packaging,
+commit, push, or PR creation.
+
+Implementation note as of 2026-06-19: the row attribution local state DB
+sidecar from this plan has been implemented behind a default-off write gate, and
+the V2 evidence foundation now adds an append-only `db_delta_evidence` sidecar
+plus gate-on upload/delete service wiring. This note does not approve enabling
+the gate, LAN exposure, frontend delete UI expansion, Supabase schema changes,
+or operational DB testing.
 
 ## Source Documents Reviewed
 
@@ -86,6 +94,11 @@ DB must not drop rows, rewrite rows, or change existing ledger evidence.
 The migration must be additive. It may add the ledger table, indexes, and
 triggers. It must not alter existing Preview, Upload Job, Delete, Runtime, or
 Audit table semantics.
+
+The DB delta evidence foundation follows the same additive local state DB
+pattern. It adds `db_delta_evidence`, its indexes, and append-only triggers
+without changing Supabase schema or the `all_metrics(timestamp, device_id)`
+contract.
 
 ## Proposed Local Table Shape
 
@@ -334,6 +347,46 @@ Required test cases:
     fails.
 12. Backup evidence records safe metadata only.
 
+Implemented additional evidence-foundation tests:
+
+13. `db_delta_evidence` bootstrap creates the table, indexes, and append-only
+    triggers.
+14. DB delta rows link to `audit_log.audit_id` and store only safe counts,
+    hashes, ids, class labels, and scope JSON.
+15. Default-off delete evidence gate writes no DB delta or attribution rows.
+16. Gate-on upload/delete success links operation id, audit id, DB delta id, and row
+    attribution rows.
+17. Gate-on missing HMAC blocks before upload Edge calls or delete DB mutation.
+18. Gate-on delete DB delta mismatch prevents success attribution and marks the
+    run `commit_unknown`.
+19. Gate-on upload DB delta mismatch records `unknown_requires_reconcile`
+    attribution evidence and an `upload.evidence_mismatch` event.
+20. Gate-on delete reconcile success and rollback write DB delta and row
+    attribution evidence before the run is marked reconciled.
+21. Gate-on delete reconcile evidence write failure leaves the run
+    `reconciliation_failed` with `evidence_write_failed` instead of a reconciled
+    success state.
+22. Gate-on delete DB failure leaves the run `failed` and records
+    `failed_before_mutation` evidence.
+23. Gate-on delete evidence write failure after DB success leaves the run
+    `commit_unknown` with `evidence_write_failed`.
+
+Targeted evidence-foundation commands passed on 2026-06-19:
+
+```powershell
+.\.venv\Scripts\python -m pytest tests\backend\test_upload_delete_service_contract.py tests\backend\test_db_delta_repository.py tests\backend\test_upload_jobs_service.py
+```
+
+Observed result: `41 passed, 1 warning`.
+
+Full backend regression also passed on 2026-06-19:
+
+```powershell
+.\.venv\Scripts\python -m pytest tests\backend
+```
+
+Observed result: `334 passed, 14 warnings`.
+
 Marker scan after implementation:
 
 - run the repository standard secret marker scan against the implementation
@@ -354,6 +407,14 @@ Implementation may start only after a later approval confirms:
 - bootstrap idempotence is tested;
 - incompatible existing table behavior fails closed;
 - test commands and marker scans are included in the implementation PR plan.
+
+Current rollback for this partial implementation:
+
+- before commit: `git restore backend/app/db/db_delta_repository.py backend/app/core/settings.py backend/app/main.py backend/app/db/upload_job_repository.py backend/app/services/upload_jobs.py backend/app/services/upload_delete.py tests/backend/test_db_delta_repository.py tests/backend/test_upload_jobs_service.py tests/backend/test_upload_delete_service_contract.py docs/160_v2_delete_lan_audit_rollback_technical_design.md docs/162_v2_sidecar_row_attribution_ledger_design.md docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md CHANGELOG.md`;
+- after commit: revert the implementation commit;
+- after any gate-on evidence writes exist: preserve `db_delta_evidence` and
+  `row_attribution_ledger` rows, disable the evidence gate, and fix forward
+  rather than deleting evidence.
 
 ## Rollback Of This Document
 

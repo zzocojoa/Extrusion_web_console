@@ -103,6 +103,14 @@ Gate values must come from the same config precedence model as other operator
 settings, but dangerous gates must not be silently enabled by a stale config.
 The backend startup path must log safe gate state without printing secrets.
 
+Implementation status as of 2026-06-19: the backend has a default-off
+`v2_row_attribution_enabled` gate, keeps the legacy
+`row_attribution_writes_enabled` setting as a compatibility alias, and requires
+an explicit `row_attribution_hmac_key` before gate-on delete evidence can write
+row attribution. The gate is not enabled by default and this document still does
+not approve LAN exposure, delete UI expansion, Supabase schema changes, or
+operational DB mutation.
+
 ## Delete Technical Design
 
 ### Baseline Policy
@@ -385,6 +393,14 @@ db_delta_evidence(
 )
 ```
 
+Implementation status as of 2026-06-19: the local SQLite state DB now includes
+an append-only `db_delta_evidence` sidecar with the logical fields above,
+stored as safe ids, counts, class labels, hashes, and `delta_scope_json`. The
+sidecar is bootstrapped after `audit_log` and is independent of Supabase schema.
+Gate-on upload start/retry, delete start, and delete reconcile paths can link
+`audit_id`, `delta_id`, and row attribution rows. Gate-off behavior writes no DB
+delta or attribution rows.
+
 Forbidden in delta evidence:
 
 - raw SQL;
@@ -411,6 +427,25 @@ If delta cannot be measured, the operation must record why:
 
 For destructive delete, a mismatched delta is a blocker until reconcile or
 manual recovery is explicitly recorded.
+
+Implemented failure mode: when gate-on delete fails before a confirmed DB
+commit, the backend records `failed_before_mutation` evidence and leaves the
+run `failed`; when the DB delete succeeds but V2 evidence write fails, the
+backend leaves the run `commit_unknown` with `evidence_write_failed`. When
+gate-on delete returns a row-count delta that does not match the expected
+destructive delta, the backend records mismatched DB delta evidence, writes
+`unknown_requires_reconcile` attribution evidence, marks the delete run
+`commit_unknown`, and returns `db_delta_mismatch` instead of reporting success.
+Gate-on delete reconcile writes DB delta and row attribution evidence before
+committing a reconciled success state; if that evidence write fails, the run
+remains `reconciliation_failed` with `evidence_write_failed`. Gate-on upload
+evidence measures exact key presence before and after each accepted upload
+batch. If the upload DB delta does not
+match the expected exact-key presence delta, the backend records mismatched DB
+delta evidence, writes `unknown_requires_reconcile` attribution evidence, and
+emits an `upload.evidence_mismatch` event for review. If the gate is on but HMAC
+or required DB fingerprint evidence is missing before mutation, start delete is
+blocked before the DB delete call and upload is blocked before the Edge call.
 
 ## Row-Level Attribution
 
@@ -611,6 +646,8 @@ Required destructive fixture checks before operational testing is discussed:
 
 - wrong DB target blocks before mutation;
 - missing DELETE privilege blocks before mutation;
+- delete DB failure records `failed_before_mutation` and remains `failed`;
+- delete evidence write failure after DB success remains `commit_unknown`;
 - exact count mismatch rolls back;
 - audit-start failure blocks before mutation;
 - commit-unknown recovery requires reconcile;
@@ -619,6 +656,15 @@ Required destructive fixture checks before operational testing is discussed:
 - expected and actual DB delta are recorded safely;
 - row attribution evidence is safe and queryable by run id;
 - marker scan finds no unsafe values.
+
+Implementation test evidence for the local evidence foundation:
+
+- `.\.venv\Scripts\python -m pytest tests\backend\test_upload_delete_service_contract.py tests\backend\test_db_delta_repository.py tests\backend\test_upload_jobs_service.py`
+  reported `41 passed, 1 warning` on 2026-06-19.
+
+Full backend regression also passed on 2026-06-19:
+`.\.venv\Scripts\python -m pytest tests\backend` reported
+`334 passed, 14 warnings`.
 
 Forbidden without separate approval:
 
