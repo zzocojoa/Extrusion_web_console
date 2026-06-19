@@ -70,15 +70,22 @@ def _check_clause(column: str, values: tuple[str, ...]) -> str:
 
 def _existing_ledger_sql(
     *,
+    attribution_id_definition: str | None = None,
     audit_fk: bool = True,
     supersedes_fk: bool = True,
     primary_key: bool = True,
     operation_id_not_null: bool = True,
     checks: bool = True,
+    extra_operation_type_check_value: bool = False,
 ) -> str:
-    attribution_id = "attribution_id INTEGER PRIMARY KEY AUTOINCREMENT" if primary_key else "attribution_id INTEGER"
+    attribution_id = attribution_id_definition
+    if attribution_id is None:
+        attribution_id = "attribution_id INTEGER PRIMARY KEY AUTOINCREMENT" if primary_key else "attribution_id INTEGER"
     operation_id = "operation_id TEXT NOT NULL" if operation_id_not_null else "operation_id TEXT"
-    operation_type_check = _check_clause("operation_type", ALLOWED_OPERATION_TYPES) if checks else ""
+    operation_type_values = ALLOWED_OPERATION_TYPES
+    if extra_operation_type_check_value:
+        operation_type_values = (*operation_type_values, "unexpected_operation")
+    operation_type_check = _check_clause("operation_type", operation_type_values) if checks else ""
     operation_phase_check = _check_clause("operation_phase", ALLOWED_OPERATION_PHASES) if checks else ""
     outcome_check = _check_clause("outcome", ALLOWED_OUTCOMES) if checks else ""
     audit_id = "audit_id INTEGER NOT NULL REFERENCES audit_log(audit_id)" if audit_fk else "audit_id INTEGER NOT NULL"
@@ -223,8 +230,11 @@ def test_incompatible_existing_table_fails_closed_without_rewrite(tmp_path: Path
             "missing_foreign_keys:supersedes_attribution_id->row_attribution_ledger.attribution_id",
         ),
         ({"primary_key": False}, "invalid_primary_key:attribution_id"),
+        ({"attribution_id_definition": "attribution_id TEXT PRIMARY KEY"}, "invalid_primary_key:attribution_id"),
+        ({"attribution_id_definition": "attribution_id INTEGER PRIMARY KEY"}, "invalid_primary_key:attribution_id"),
         ({"operation_id_not_null": False}, "missing_not_null:operation_id"),
         ({"checks": False}, "missing_check_constraints:operation_phase,operation_type,outcome"),
+        ({"extra_operation_type_check_value": True}, "invalid_check_constraints:operation_type"),
     ],
 )
 def test_existing_table_missing_required_schema_contract_fails_closed(

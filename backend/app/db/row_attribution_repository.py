@@ -416,13 +416,19 @@ class RowAttributionRepository:
         missing = sorted(REQUIRED_COLUMNS - set(columns))
         if missing:
             raise RowAttributionSchemaError(f"row_attribution_schema_incompatible:missing_columns:{','.join(missing)}")
-        self._assert_required_primary_key(columns)
+        table_sql = self._table_sql(connection)
+        self._assert_required_primary_key(columns, table_sql)
         self._assert_required_not_null_columns(columns)
         self._assert_required_foreign_keys(connection)
-        self._assert_required_check_constraints(connection)
+        self._assert_required_check_constraints(table_sql)
 
-    def _assert_required_primary_key(self, columns: Mapping[str, sqlite3.Row]) -> None:
-        if int(columns["attribution_id"]["pk"]) != 1:
+    def _assert_required_primary_key(self, columns: Mapping[str, sqlite3.Row], table_sql: str) -> None:
+        attribution_id = columns["attribution_id"]
+        if (
+            int(attribution_id["pk"]) != 1
+            or str(attribution_id["type"]).upper() != "INTEGER"
+            or not self._has_required_attribution_id_definition(table_sql)
+        ):
             raise RowAttributionSchemaError("row_attribution_schema_incompatible:invalid_primary_key:attribution_id")
 
     def _assert_required_not_null_columns(self, columns: Mapping[str, sqlite3.Row]) -> None:
@@ -440,16 +446,22 @@ class RowAttributionRepository:
             serialized = ",".join(f"{column}->{table}.{target}" for column, table, target in missing)
             raise RowAttributionSchemaError(f"row_attribution_schema_incompatible:missing_foreign_keys:{serialized}")
 
-    def _assert_required_check_constraints(self, connection: sqlite3.Connection) -> None:
-        table_sql = self._table_sql(connection)
-        missing = sorted(
-            column
-            for column, required_values in REQUIRED_CHECK_CONSTRAINTS.items()
-            if not self._has_required_check_constraint(table_sql, column, required_values)
-        )
+    def _assert_required_check_constraints(self, table_sql: str) -> None:
+        missing: list[str] = []
+        invalid: list[str] = []
+        for column, required_values in REQUIRED_CHECK_CONSTRAINTS.items():
+            value_sets = self._check_constraint_value_sets(table_sql, column)
+            if not value_sets:
+                missing.append(column)
+            elif not any(values == set(required_values) for values in value_sets):
+                invalid.append(column)
         if missing:
             raise RowAttributionSchemaError(
-                f"row_attribution_schema_incompatible:missing_check_constraints:{','.join(missing)}"
+                f"row_attribution_schema_incompatible:missing_check_constraints:{','.join(sorted(missing))}"
+            )
+        if invalid:
+            raise RowAttributionSchemaError(
+                f"row_attribution_schema_incompatible:invalid_check_constraints:{','.join(sorted(invalid))}"
             )
 
     def _table_sql(self, connection: sqlite3.Connection) -> str:
@@ -465,17 +477,24 @@ class RowAttributionRepository:
         return str(row["sql"])
 
     @staticmethod
-    def _has_required_check_constraint(table_sql: str, column: str, required_values: tuple[str, ...]) -> bool:
+    def _has_required_attribution_id_definition(table_sql: str) -> bool:
+        column_pattern = re.compile(
+            r"(?:^|[(,])\s*attribution_id\s+(?P<definition>[^,]+)",
+            re.IGNORECASE | re.DOTALL,
+        )
+        match = column_pattern.search(table_sql)
+        if match is None:
+            return False
+        definition = re.sub(r"\s+", " ", match.group("definition").strip().upper())
+        return definition == "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+    @staticmethod
+    def _check_constraint_value_sets(table_sql: str, column: str) -> list[set[str]]:
         check_pattern = re.compile(
             rf"CHECK\s*\(\s*{re.escape(column)}\s+IN\s*\((?P<values>[^)]*)\)",
             re.IGNORECASE | re.DOTALL,
         )
-        required = set(required_values)
-        for match in check_pattern.finditer(table_sql):
-            found = set(re.findall(r"'([^']+)'", match.group("values")))
-            if required.issubset(found):
-                return True
-        return False
+        return [set(re.findall(r"'([^']+)'", match.group("values"))) for match in check_pattern.finditer(table_sql)]
 
     def _assert_required_indexes(self, connection: sqlite3.Connection) -> None:
         indexes = {
