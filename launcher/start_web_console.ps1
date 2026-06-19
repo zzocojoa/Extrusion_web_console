@@ -178,7 +178,8 @@ function Set-EnvDefault {
 
 function Get-DevelopmentPlcSourceCandidate {
   $folderName = -join ([char[]](0xD1B5, 0xD569, 0x20, 0xB370, 0xC774, 0xD130, 0x20, 0x41, 0x72, 0x63, 0x68, 0x69, 0x76, 0x65))
-  return "Z:\$folderName"
+  $drivePrefix = -join ([char[]](0x5A, 0x3A, 0x5C))
+  return "$drivePrefix$folderName"
 }
 
 function Normalize-SourceForCompare {
