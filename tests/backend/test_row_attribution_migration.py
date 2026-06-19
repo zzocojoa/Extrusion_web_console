@@ -6,6 +6,9 @@ import pytest
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.db.row_attribution_repository import (
+    ALLOWED_OPERATION_PHASES,
+    ALLOWED_OPERATION_TYPES,
+    ALLOWED_OUTCOMES,
     REQUIRED_INDEXES,
     REQUIRED_TRIGGERS,
     RowAttributionRepository,
@@ -58,6 +61,55 @@ def _payload(audit_id: int) -> dict:
         "db_fingerprint_hash": build_safe_hash("local_operational_db_fingerprint", HMAC_KEY),
         "schema_fingerprint_hash": build_safe_hash("schema_fingerprint_v1", HMAC_KEY),
     }
+
+
+def _check_clause(column: str, values: tuple[str, ...]) -> str:
+    serialized = ", ".join(f"'{value}'" for value in values)
+    return f" CHECK({column} IN ({serialized}))"
+
+
+def _existing_ledger_sql(
+    *,
+    audit_fk: bool = True,
+    supersedes_fk: bool = True,
+    primary_key: bool = True,
+    operation_id_not_null: bool = True,
+    checks: bool = True,
+) -> str:
+    attribution_id = "attribution_id INTEGER PRIMARY KEY AUTOINCREMENT" if primary_key else "attribution_id INTEGER"
+    operation_id = "operation_id TEXT NOT NULL" if operation_id_not_null else "operation_id TEXT"
+    operation_type_check = _check_clause("operation_type", ALLOWED_OPERATION_TYPES) if checks else ""
+    operation_phase_check = _check_clause("operation_phase", ALLOWED_OPERATION_PHASES) if checks else ""
+    outcome_check = _check_clause("outcome", ALLOWED_OUTCOMES) if checks else ""
+    audit_id = "audit_id INTEGER NOT NULL REFERENCES audit_log(audit_id)" if audit_fk else "audit_id INTEGER NOT NULL"
+    supersedes_attribution_id = (
+        "supersedes_attribution_id INTEGER REFERENCES row_attribution_ledger(attribution_id)"
+        if supersedes_fk
+        else "supersedes_attribution_id INTEGER"
+    )
+    return f"""
+        CREATE TABLE row_attribution_ledger (
+          {attribution_id},
+          {operation_id},
+          operation_type TEXT NOT NULL{operation_type_check},
+          operation_phase TEXT NOT NULL{operation_phase_check},
+          {audit_id},
+          db_delta_id TEXT,
+          actor_id TEXT NOT NULL,
+          actor_role TEXT NOT NULL,
+          exact_key_hash TEXT NOT NULL,
+          exact_key_hash_version TEXT NOT NULL,
+          source_evidence_hash TEXT NOT NULL,
+          source_evidence_hash_version TEXT NOT NULL,
+          outcome TEXT NOT NULL{outcome_check},
+          reason_code TEXT,
+          db_target_class TEXT NOT NULL,
+          db_fingerprint_hash TEXT NOT NULL,
+          schema_fingerprint_hash TEXT NOT NULL,
+          {supersedes_attribution_id},
+          created_at TEXT NOT NULL
+        )
+    """
 
 
 def test_bootstrap_creates_table_indexes_and_append_only_triggers(tmp_path: Path) -> None:
@@ -160,3 +212,30 @@ def test_incompatible_existing_table_fails_closed_without_rewrite(tmp_path: Path
     with _connect(db_path) as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(row_attribution_ledger)").fetchall()}
     assert columns == {"attribution_id"}
+
+
+@pytest.mark.parametrize(
+    ("schema_kwargs", "error_fragment"),
+    [
+        ({"audit_fk": False}, "missing_foreign_keys:audit_id->audit_log.audit_id"),
+        (
+            {"supersedes_fk": False},
+            "missing_foreign_keys:supersedes_attribution_id->row_attribution_ledger.attribution_id",
+        ),
+        ({"primary_key": False}, "invalid_primary_key:attribution_id"),
+        ({"operation_id_not_null": False}, "missing_not_null:operation_id"),
+        ({"checks": False}, "missing_check_constraints:operation_phase,operation_type,outcome"),
+    ],
+)
+def test_existing_table_missing_required_schema_contract_fails_closed(
+    tmp_path: Path, schema_kwargs: dict, error_fragment: str
+) -> None:
+    db_path = tmp_path / "state.db"
+    AuditRepository(db_path)
+    with _connect(db_path) as connection:
+        connection.execute(_existing_ledger_sql(**schema_kwargs))
+
+    with pytest.raises(RowAttributionSchemaError, match="row_attribution_schema_incompatible") as exc_info:
+        RowAttributionRepository(db_path)
+
+    assert error_fragment in str(exc_info.value)

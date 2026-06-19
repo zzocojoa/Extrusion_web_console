@@ -49,6 +49,32 @@ REQUIRED_COLUMNS = {
     "supersedes_attribution_id",
     "created_at",
 }
+REQUIRED_NOT_NULL_COLUMNS = {
+    "operation_id",
+    "operation_type",
+    "operation_phase",
+    "audit_id",
+    "actor_id",
+    "actor_role",
+    "exact_key_hash",
+    "exact_key_hash_version",
+    "source_evidence_hash",
+    "source_evidence_hash_version",
+    "outcome",
+    "db_target_class",
+    "db_fingerprint_hash",
+    "schema_fingerprint_hash",
+    "created_at",
+}
+REQUIRED_FOREIGN_KEYS = {
+    ("audit_id", "audit_log", "audit_id"),
+    ("supersedes_attribution_id", "row_attribution_ledger", "attribution_id"),
+}
+REQUIRED_CHECK_CONSTRAINTS = {
+    "operation_type": ALLOWED_OPERATION_TYPES,
+    "operation_phase": ALLOWED_OPERATION_PHASES,
+    "outcome": ALLOWED_OUTCOMES,
+}
 REQUIRED_INDEXES = {
     "idx_row_attr_operation_created",
     "idx_row_attr_exact_key_created",
@@ -385,10 +411,71 @@ class RowAttributionRepository:
         return row is not None
 
     def _assert_compatible_table(self, connection: sqlite3.Connection) -> None:
-        columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(row_attribution_ledger)").fetchall()}
-        missing = sorted(REQUIRED_COLUMNS - columns)
+        column_rows = connection.execute("PRAGMA table_info(row_attribution_ledger)").fetchall()
+        columns = {str(row["name"]): row for row in column_rows}
+        missing = sorted(REQUIRED_COLUMNS - set(columns))
         if missing:
             raise RowAttributionSchemaError(f"row_attribution_schema_incompatible:missing_columns:{','.join(missing)}")
+        self._assert_required_primary_key(columns)
+        self._assert_required_not_null_columns(columns)
+        self._assert_required_foreign_keys(connection)
+        self._assert_required_check_constraints(connection)
+
+    def _assert_required_primary_key(self, columns: Mapping[str, sqlite3.Row]) -> None:
+        if int(columns["attribution_id"]["pk"]) != 1:
+            raise RowAttributionSchemaError("row_attribution_schema_incompatible:invalid_primary_key:attribution_id")
+
+    def _assert_required_not_null_columns(self, columns: Mapping[str, sqlite3.Row]) -> None:
+        missing = sorted(column for column in REQUIRED_NOT_NULL_COLUMNS if int(columns[column]["notnull"]) != 1)
+        if missing:
+            raise RowAttributionSchemaError(f"row_attribution_schema_incompatible:missing_not_null:{','.join(missing)}")
+
+    def _assert_required_foreign_keys(self, connection: sqlite3.Connection) -> None:
+        foreign_keys = {
+            (str(row["from"]), str(row["table"]), str(row["to"]))
+            for row in connection.execute("PRAGMA foreign_key_list(row_attribution_ledger)").fetchall()
+        }
+        missing = sorted(REQUIRED_FOREIGN_KEYS - foreign_keys)
+        if missing:
+            serialized = ",".join(f"{column}->{table}.{target}" for column, table, target in missing)
+            raise RowAttributionSchemaError(f"row_attribution_schema_incompatible:missing_foreign_keys:{serialized}")
+
+    def _assert_required_check_constraints(self, connection: sqlite3.Connection) -> None:
+        table_sql = self._table_sql(connection)
+        missing = sorted(
+            column
+            for column, required_values in REQUIRED_CHECK_CONSTRAINTS.items()
+            if not self._has_required_check_constraint(table_sql, column, required_values)
+        )
+        if missing:
+            raise RowAttributionSchemaError(
+                f"row_attribution_schema_incompatible:missing_check_constraints:{','.join(missing)}"
+            )
+
+    def _table_sql(self, connection: sqlite3.Connection) -> str:
+        row = connection.execute(
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'row_attribution_ledger'
+            """
+        ).fetchone()
+        if row is None or not row["sql"]:
+            raise RowAttributionSchemaError("row_attribution_schema_incompatible:missing_table_sql")
+        return str(row["sql"])
+
+    @staticmethod
+    def _has_required_check_constraint(table_sql: str, column: str, required_values: tuple[str, ...]) -> bool:
+        check_pattern = re.compile(
+            rf"CHECK\s*\(\s*{re.escape(column)}\s+IN\s*\((?P<values>[^)]*)\)",
+            re.IGNORECASE | re.DOTALL,
+        )
+        required = set(required_values)
+        for match in check_pattern.finditer(table_sql):
+            found = set(re.findall(r"'([^']+)'", match.group("values")))
+            if required.issubset(found):
+                return True
+        return False
 
     def _assert_required_indexes(self, connection: sqlite3.Connection) -> None:
         indexes = {
