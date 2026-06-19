@@ -536,6 +536,7 @@ Browser QA has been run against:
 - `docs/158_operator_status_language_policy.md`
 - `docs/159_v2_scope_and_safety_plan.md`
 - `docs/160_v2_delete_lan_audit_rollback_technical_design.md`
+- `docs/161_v2_open_decisions_review.md`
 
 ## Reference Project
 
