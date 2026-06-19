@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -90,6 +91,12 @@ def test_launcher_script_redacts_sensitive_log_markers() -> None:
     assert "anon[_ -]?key" in script
     assert "eyJ" in script
     assert "request or response bodies" not in script
+
+
+def test_launcher_script_does_not_embed_package_redaction_path_markers() -> None:
+    script = LAUNCHER_PS1.read_text(encoding="utf-8")
+
+    assert re.search(r"\b[A-Za-z]:\\[^\r\n`\"'<>)]*", script) is None
 
 
 def test_launcher_passes_local_token_through_environment_only() -> None:
