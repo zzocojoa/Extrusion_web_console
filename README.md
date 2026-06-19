@@ -538,6 +538,7 @@ Browser QA has been run against:
 - `docs/160_v2_delete_lan_audit_rollback_technical_design.md`
 - `docs/161_v2_open_decisions_review.md`
 - `docs/162_v2_sidecar_row_attribution_ledger_design.md`
+- `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
 
 ## Reference Project
 
