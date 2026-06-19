@@ -1,3 +1,5 @@
+import hashlib
+import json
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -7,7 +9,13 @@ from typing import Any
 import httpx
 
 from backend.app.core.settings import Settings
+from backend.app.core.target_class import classify_database_url
 from backend.app.core.transform_core import count_canonical_records, iter_canonical_record_chunks
+from backend.app.db.db_delta_repository import DbDeltaEvidenceRepository
+from backend.app.db.row_attribution_repository import RowAttributionRepository
+from backend.app.db.row_attribution_repository import build_exact_key_hash
+from backend.app.db.row_attribution_repository import build_safe_hash as build_hmac_safe_hash
+from backend.app.db.row_attribution_repository import build_source_evidence_hash
 from backend.app.db.upload_job_repository import UploadJobRepository, decode_json
 from backend.app.schemas.upload_jobs import UploadJobOptions, UploadJobStatus
 from backend.app.services.upload_preview import build_file_signature, is_file_locked
@@ -15,6 +23,12 @@ from backend.app.services.upload_preview import build_file_signature, is_file_lo
 
 class UploadJobCancelled(RuntimeError):
     pass
+
+
+class UploadEvidenceBlockedError(RuntimeError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 @dataclass
@@ -28,6 +42,12 @@ class UploadCounters:
 class DeduplicatedUploadBatch:
     records: list[dict[str, Any]]
     duplicate_rows: int
+
+
+@dataclass(frozen=True)
+class UploadDbEvidenceContext:
+    target_class: str
+    fingerprint_hash: str
 
 
 def _upload_record_key(record: dict[str, Any]) -> tuple[str, str] | None:
@@ -120,6 +140,99 @@ class EdgeUploader:
         return 0
 
 
+class UploadDbEvidenceClient:
+    def prepare(self) -> UploadDbEvidenceContext:
+        raise NotImplementedError
+
+    def count_existing_keys(self, keys: set[tuple[str, str]]) -> int:
+        raise NotImplementedError
+
+
+class PsycopgUploadDbEvidenceClient(UploadDbEvidenceClient):
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def prepare(self) -> UploadDbEvidenceContext:
+        if not self.settings.supabase_db_url:
+            raise UploadEvidenceBlockedError("supabase_db_url_missing")
+        classified = classify_database_url(
+            self.settings.supabase_db_url,
+            expected_db_port=self.settings.local_supabase_db_port,
+            source="supabase_db_url",
+        )
+        if classified.target_class != "loopback_expected_db_port":
+            raise UploadEvidenceBlockedError("db_target_guard_failed")
+        try:
+            import psycopg
+
+            with psycopg.connect(self.settings.supabase_db_url, connect_timeout=5) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT to_regclass('public.all_metrics') IS NOT NULL")
+                    if not bool(cursor.fetchone()[0]):
+                        raise UploadEvidenceBlockedError("all_metrics_missing")
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM pg_indexes
+                        WHERE schemaname = 'public'
+                          AND tablename = 'all_metrics'
+                          AND indexdef ILIKE '%timestamp%'
+                          AND indexdef ILIKE '%device_id%'
+                          AND indexdef ILIKE 'CREATE UNIQUE INDEX%'
+                        LIMIT 1
+                        """
+                    )
+                    if cursor.fetchone() is None:
+                        raise UploadEvidenceBlockedError("all_metrics_unique_key_missing")
+                    cursor.execute("SELECT current_database()")
+                    database_name = str(cursor.fetchone()[0])
+        except UploadEvidenceBlockedError:
+            raise
+        except Exception as error:
+            raise UploadEvidenceBlockedError("db_delta_preflight_failed") from error
+        fingerprint_hash = safe_hash(
+            {
+                "targetClass": classified.target_class,
+                "databaseName": database_name,
+                "schemaSignature": "public.all_metrics.timestamp_device_id_unique",
+            }
+        )
+        return UploadDbEvidenceContext(target_class=classified.target_class, fingerprint_hash=fingerprint_hash)
+
+    def count_existing_keys(self, keys: set[tuple[str, str]]) -> int:
+        if not keys:
+            return 0
+        try:
+            import psycopg
+
+            with psycopg.connect(self.settings.supabase_db_url, connect_timeout=5) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        CREATE TEMP TABLE temp_upload_evidence_keys (
+                          timestamp_text TEXT NOT NULL,
+                          device_id TEXT NOT NULL
+                        ) ON COMMIT DROP
+                        """
+                    )
+                    cursor.executemany(
+                        "INSERT INTO temp_upload_evidence_keys(timestamp_text, device_id) VALUES (%s, %s)",
+                        sorted(keys),
+                    )
+                    cursor.execute(
+                        """
+                        SELECT COUNT(*)
+                        FROM temp_upload_evidence_keys k
+                        JOIN public.all_metrics m
+                          ON m.timestamp = k.timestamp_text::timestamptz
+                         AND m.device_id = k.device_id
+                        """
+                    )
+                    return int(cursor.fetchone()[0])
+        except Exception as error:
+            raise UploadEvidenceBlockedError("db_delta_count_failed") from error
+
+
 class UploadJobService:
     def __init__(
         self,
@@ -127,11 +240,20 @@ class UploadJobService:
         repository: UploadJobRepository,
         reader: CsvUploadRecordReader | None = None,
         uploader: EdgeUploader | None = None,
+        db_delta_repository: DbDeltaEvidenceRepository | None = None,
+        row_attribution_repository: RowAttributionRepository | None = None,
+        evidence_db_client: UploadDbEvidenceClient | None = None,
     ) -> None:
         self.settings = settings
         self.repository = repository
         self.reader = reader or CsvUploadRecordReader()
         self._uploader = uploader
+        self.db_delta_repository = db_delta_repository or DbDeltaEvidenceRepository(repository.db_path)
+        self.row_attribution_repository = row_attribution_repository or RowAttributionRepository(
+            repository.db_path,
+            writes_enabled=settings.effective_row_attribution_writes_enabled,
+        )
+        self.evidence_db_client = evidence_db_client or PsycopgUploadDbEvidenceClient(settings)
 
     def run_job(self, job_id: str) -> None:
         options = self._load_options(job_id)
@@ -143,6 +265,9 @@ class UploadJobService:
                 error_code="upload_config_missing",
                 error_message="Supabase Edge URL or anon key is not configured.",
             )
+            return
+        evidence_context = self._prepare_upload_evidence(job_id)
+        if evidence_context is False:
             return
         self.repository.start_job(job_id)
         try:
@@ -158,7 +283,7 @@ class UploadJobService:
 
             for file_row in files:
                 self._control_checkpoint(job_id)
-                self._upload_file(job_id, file_row["job_file_id"], options, uploader)
+                self._upload_file(job_id, file_row["job_file_id"], options, uploader, evidence_context)
 
             self._control_checkpoint(job_id)
             current_files = self.repository.list_job_files(job_id)
@@ -185,7 +310,14 @@ class UploadJobService:
             )
             self.repository.finish_job(job_id, UploadJobStatus.failed, "upload_job_failed", str(error))
 
-    def _upload_file(self, job_id: str, job_file_id: int, options: UploadJobOptions, uploader: EdgeUploader) -> None:
+    def _upload_file(
+        self,
+        job_id: str,
+        job_file_id: int,
+        options: UploadJobOptions,
+        uploader: EdgeUploader,
+        evidence_context: UploadDbEvidenceContext | None,
+    ) -> None:
         row = self.repository.get_job_file(job_file_id)
         if row is None or row["status"] not in {"queued", "running"}:
             return
@@ -249,7 +381,24 @@ class UploadJobService:
                             resume_offset=counters.processed_rows,
                         )
                         continue
+                    evidence_keys = self._evidence_keys(deduplicated_batch.records) if evidence_context else set()
+                    before_count = (
+                        self.evidence_db_client.count_existing_keys(evidence_keys)
+                        if evidence_context and evidence_keys
+                        else None
+                    )
                     accepted = uploader.upload_batch(deduplicated_batch.records)
+                    if evidence_context and evidence_keys and before_count is not None:
+                        after_count = self.evidence_db_client.count_existing_keys(evidence_keys)
+                        self._record_upload_batch_evidence(
+                            job_id=job_id,
+                            job_file_id=job_file_id,
+                            context=evidence_context,
+                            keys=evidence_keys,
+                            before_count=before_count,
+                            after_count=after_count,
+                            accepted_rows=accepted,
+                        )
                     counters.uploaded_rows += len(deduplicated_batch.records)
                     counters.inserted_rows += accepted
                     counters.processed_rows += len(source_batch)
@@ -276,6 +425,142 @@ class UploadJobService:
             latest = self.repository.get_job_file(job_file_id)
             resume_offset = int(latest["resume_offset"] if latest is not None else row["resume_offset"] or 0)
             self.repository.mark_file_failed(job_file_id, "upload_failed", str(error), resume_offset)
+
+    def _prepare_upload_evidence(self, job_id: str) -> UploadDbEvidenceContext | None | bool:
+        if not self._v2_evidence_enabled():
+            return None
+        if not self.settings.row_attribution_hmac_key:
+            self.repository.finish_job(
+                job_id,
+                UploadJobStatus.failed,
+                error_code="row_attribution_hmac_key_missing",
+                error_message="V2 upload evidence requires row attribution HMAC configuration.",
+            )
+            return False
+        try:
+            return self.evidence_db_client.prepare()
+        except UploadEvidenceBlockedError as error:
+            self.repository.finish_job(
+                job_id,
+                UploadJobStatus.failed,
+                error_code=error.reason,
+                error_message="V2 upload evidence preflight failed.",
+            )
+            return False
+
+    def _record_upload_batch_evidence(
+        self,
+        *,
+        job_id: str,
+        job_file_id: int,
+        context: UploadDbEvidenceContext,
+        keys: set[tuple[str, str]],
+        before_count: int,
+        after_count: int,
+        accepted_rows: int,
+    ) -> None:
+        operation_type = self._upload_operation_type(job_id)
+        audit_action = "upload.retry" if operation_type == "upload_retry" else "upload.start"
+        audit_id = self.repository.latest_audit_id(job_id, audit_action)
+        if audit_id is None:
+            raise RuntimeError("upload_start_audit_missing")
+        actual_delta = after_count - before_count
+        expected_delta = len(keys) - before_count if accepted_rows == len(keys) else None
+        reason_code: str | None = None
+        if expected_delta is None:
+            result = "not_measured"
+            reason_code = "upload_acceptance_count_mismatch"
+        elif actual_delta == expected_delta:
+            result = "matched"
+        else:
+            result = "mismatched"
+            reason_code = "upload_db_delta_mismatch"
+        delta = self.db_delta_repository.append_delta(
+            operation_id=job_id,
+            operation_type=operation_type,
+            audit_id=audit_id,
+            actor_id="local_operator",
+            actor_role="operator",
+            delta_scope={
+                "operationId": job_id,
+                "jobFileId": int(job_file_id),
+                "batchKeyCount": len(keys),
+                "acceptedRows": accepted_rows,
+                "reasonCode": reason_code,
+            },
+            delta_query_class="exact_key_count",
+            before_count=before_count,
+            after_count=after_count,
+            expected_delta=expected_delta,
+            actual_delta=actual_delta,
+            result=result,
+            reason_code=reason_code,
+            db_target_class=context.target_class,
+            db_fingerprint_hash=context.fingerprint_hash,
+        )
+        outcome = "upsert_accepted" if result == "matched" else "unknown_requires_reconcile"
+        source_evidence_hash = build_source_evidence_hash(
+            {
+                "operationId": job_id,
+                "operationType": operation_type,
+                "operationPhase": "after_mutation",
+                "dbDeltaId": delta.delta_id,
+                "batchKeyCount": len(keys),
+                "acceptedRows": accepted_rows,
+                "outcome": outcome,
+                "reasonCode": reason_code,
+            },
+            self.settings.row_attribution_hmac_key,
+        )
+        schema_fingerprint_hash = build_hmac_safe_hash(
+            "public.all_metrics.timestamp_device_id_unique",
+            self.settings.row_attribution_hmac_key,
+        )
+        for timestamp, device_id in sorted(keys):
+            attribution = self.row_attribution_repository.append_attribution(
+                operation_id=job_id,
+                operation_type=operation_type,
+                operation_phase="after_mutation",
+                audit_id=audit_id,
+                actor_id="local_operator",
+                actor_role="operator",
+                exact_key_hash=build_exact_key_hash(timestamp, device_id, self.settings.row_attribution_hmac_key),
+                source_evidence_hash=source_evidence_hash,
+                outcome=outcome,
+                db_target_class=context.target_class,
+                db_fingerprint_hash=context.fingerprint_hash,
+                schema_fingerprint_hash=schema_fingerprint_hash,
+                db_delta_id=delta.delta_id,
+                reason_code=reason_code,
+            )
+            if not attribution.created:
+                raise RuntimeError(attribution.rejection_reason or "row_attribution_write_rejected")
+        if result != "matched":
+            self.repository.append_event(
+                job_id,
+                event_type="upload.evidence_mismatch",
+                level="warning",
+                message="Upload DB delta evidence requires reconcile review.",
+                job_file_id=job_file_id,
+                data={
+                    "dbDeltaId": delta.delta_id,
+                    "reasonCode": reason_code,
+                    "batchKeyCount": len(keys),
+                    "acceptedRows": accepted_rows,
+                },
+            )
+
+    def _upload_operation_type(self, job_id: str) -> str:
+        row = self.repository.get_job(job_id)
+        if row is not None and row["retry_of_job_id"]:
+            return "upload_retry"
+        return "upload_start"
+
+    def _evidence_keys(self, records: list[dict[str, Any]]) -> set[tuple[str, str]]:
+        return {key for record in records if (key := _upload_record_key(record)) is not None}
+
+    def _v2_evidence_enabled(self) -> bool:
+        return self.settings.effective_row_attribution_writes_enabled
 
     def _control_checkpoint(self, job_id: str) -> None:
         while True:
@@ -311,3 +596,8 @@ def validate_upload_path(path: Path, folder_path: Path) -> tuple[str, str] | Non
     if is_file_locked(path):
         return "file_locked", "Upload target is locked by another process."
     return None
+
+
+def safe_hash(value: object) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()

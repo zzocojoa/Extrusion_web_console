@@ -26,6 +26,7 @@ from backend.app.core.local_token import validate_local_token
 from backend.app.core.settings import Settings
 from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditRepository
+from backend.app.db.db_delta_repository import DbDeltaEvidenceRepository
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.db.runtime_repository import RuntimeRepository
 from backend.app.db.row_attribution_repository import RowAttributionRepository
@@ -116,9 +117,10 @@ def create_app() -> FastAPI:
     if not local_token_enforcement_enabled(settings):
         _LOGGER.warning("Local token enforcement is disabled by explicit mode or missing runtime token.")
     AuditRepository(settings.state_db_path).bootstrap()
+    DbDeltaEvidenceRepository(settings.state_db_path).bootstrap()
     RowAttributionRepository(
         settings.state_db_path,
-        writes_enabled=settings.row_attribution_writes_enabled,
+        writes_enabled=settings.effective_row_attribution_writes_enabled,
     ).bootstrap()
     PreviewRepository(settings.state_db_path).mark_interrupted_active_runs()
     UploadJobRepository(settings.state_db_path).mark_interrupted_active_jobs()

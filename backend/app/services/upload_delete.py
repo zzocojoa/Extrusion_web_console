@@ -15,7 +15,12 @@ import sqlite3
 from backend.app.core.settings import Settings
 from backend.app.core.target_class import classify_database_url
 from backend.app.db.audit_repository import AuditRepository
+from backend.app.db.db_delta_repository import DbDeltaEvidenceRepository
 from backend.app.db.preview_repository import iso_now
+from backend.app.db.row_attribution_repository import RowAttributionRepository
+from backend.app.db.row_attribution_repository import build_exact_key_hash
+from backend.app.db.row_attribution_repository import build_safe_hash as build_hmac_safe_hash
+from backend.app.db.row_attribution_repository import build_source_evidence_hash
 from backend.app.db.upload_delete_repository import UploadDeleteRepository
 from backend.app.schemas.audit import AuditResult
 from backend.app.schemas.upload_delete import (
@@ -291,12 +296,19 @@ class UploadDeleteService:
         settings: Settings,
         repository: UploadDeleteRepository,
         audit_repository: AuditRepository,
+        db_delta_repository: DbDeltaEvidenceRepository | None = None,
+        row_attribution_repository: RowAttributionRepository | None = None,
         db_client: DeleteDbClient | None = None,
         runtime_ready: Callable[[], tuple[bool, str | None]] | None = None,
     ) -> None:
         self.settings = settings
         self.repository = repository
         self.audit_repository = audit_repository
+        self.db_delta_repository = db_delta_repository or DbDeltaEvidenceRepository(settings.state_db_path)
+        self.row_attribution_repository = row_attribution_repository or RowAttributionRepository(
+            settings.state_db_path,
+            writes_enabled=settings.effective_row_attribution_writes_enabled,
+        )
         self.db_client = db_client or PsycopgDeleteDbClient(settings)
         self.extractor = CsvKeyExtractor()
         self.runtime_ready = runtime_ready or (lambda: default_runtime_ready(settings))
@@ -502,6 +514,9 @@ class UploadDeleteService:
             raise DeleteRejectedError("audit_write_failed", status_code=500) from error
         if not self.repository.set_start_audit_id(delete_run_id, start_audit_id):
             self._block_created_run(delete_run_id, "delete_run_state_write_failed")
+        evidence_start_blocker = self._v2_evidence_start_blocker(guard)
+        if evidence_start_blocker is not None:
+            self._block_created_run(delete_run_id, evidence_start_blocker)
         if not self.repository.mark_running(delete_run_id):
             self._block_created_run(delete_run_id, "delete_run_state_write_failed")
         try:
@@ -515,7 +530,32 @@ class UploadDeleteService:
                 finish=True,
             )
             self.repository.mark_items(delete_run_id, "blocked", error.reason)
-            self._audit_delete_outcome(delete_run_id, preflight, evidence, guard, "upload.delete_blocked", AuditResult.blocked, error.reason)
+            audit_id = self._audit_delete_outcome(
+                delete_run_id,
+                preflight,
+                evidence,
+                guard,
+                "upload.delete_blocked",
+                AuditResult.blocked,
+                error.reason,
+            )
+            try:
+                self._record_delete_evidence(
+                    delete_run_id=delete_run_id,
+                    audit_id=audit_id,
+                    operation_type="delete_start",
+                    operation_phase="blocked",
+                    evidence=evidence,
+                    guard=guard,
+                    before_count=evidence.selected_key_count,
+                    after_count=evidence.selected_key_count,
+                    expected_delta=0,
+                    result="blocked",
+                    attribution_outcome="blocked",
+                    reason_code=error.reason,
+                )
+            except Exception as evidence_error:
+                raise DeleteRejectedError("evidence_write_failed", status_code=500) from evidence_error
             raise DeleteRejectedError(error.reason, status_code=422) from error
         except DeleteCommitUnknownError as error:
             self.repository.mark_status(
@@ -526,7 +566,7 @@ class UploadDeleteService:
                 error_message="Delete outcome must be reconciled before retry.",
             )
             self.repository.mark_items(delete_run_id, "unknown", "commit_unknown")
-            self._audit_delete_outcome(
+            audit_id = self._audit_delete_outcome(
                 delete_run_id,
                 preflight,
                 evidence,
@@ -535,6 +575,23 @@ class UploadDeleteService:
                 AuditResult.failure,
                 "commit_unknown",
             )
+            try:
+                self._record_delete_evidence(
+                    delete_run_id=delete_run_id,
+                    audit_id=audit_id,
+                    operation_type="delete_start",
+                    operation_phase="after_mutation",
+                    evidence=evidence,
+                    guard=guard,
+                    before_count=evidence.selected_key_count,
+                    after_count=None,
+                    expected_delta=-evidence.selected_key_count,
+                    result="unknown_requires_reconcile",
+                    attribution_outcome="unknown_requires_reconcile",
+                    reason_code="commit_unknown",
+                )
+            except Exception as evidence_error:
+                raise DeleteRejectedError("evidence_write_failed", status_code=500) from evidence_error
             raise DeleteRejectedError("commit_unknown", status_code=500) from error
         except Exception as error:
             reason = error.reason if isinstance(error, DeleteDbFailedError) else "delete_transaction_failed"
@@ -546,7 +603,129 @@ class UploadDeleteService:
                 finish=True,
             )
             self.repository.mark_items(delete_run_id, "failed", reason)
-            self._audit_delete_outcome(delete_run_id, preflight, evidence, guard, "upload.delete_failed", AuditResult.failure, reason)
+            audit_id = self._audit_delete_outcome(
+                delete_run_id,
+                preflight,
+                evidence,
+                guard,
+                "upload.delete_failed",
+                AuditResult.failure,
+                reason,
+            )
+            try:
+                self._record_delete_evidence(
+                    delete_run_id=delete_run_id,
+                    audit_id=audit_id,
+                    operation_type="delete_start",
+                    operation_phase="after_mutation",
+                    evidence=evidence,
+                    guard=guard,
+                    before_count=evidence.selected_key_count,
+                    after_count=evidence.selected_key_count,
+                    expected_delta=0,
+                    result="failed_before_mutation",
+                    attribution_outcome="failed_before_mutation",
+                    reason_code=reason,
+                )
+            except Exception as evidence_error:
+                raise DeleteRejectedError("evidence_write_failed", status_code=500) from evidence_error
+            raise DeleteRejectedError(reason, status_code=500) from error
+        if self._v2_evidence_enabled() and deleted != evidence.selected_key_count:
+            try:
+                db_delta_id, attribution_rows_created = self._record_delete_evidence(
+                    delete_run_id=delete_run_id,
+                    audit_id=start_audit_id,
+                    operation_type="delete_start",
+                    operation_phase="after_mutation",
+                    evidence=evidence,
+                    guard=guard,
+                    before_count=evidence.selected_key_count,
+                    after_count=max(0, evidence.selected_key_count - deleted),
+                    expected_delta=-evidence.selected_key_count,
+                    result="mismatched",
+                    attribution_outcome="unknown_requires_reconcile",
+                    reason_code="db_delta_mismatch",
+                )
+            except Exception as error:
+                reason = "evidence_write_failed"
+                self.repository.mark_status(
+                    delete_run_id,
+                    DeleteRunStatus.commit_unknown.value,
+                    deleted_key_count=deleted,
+                    recovery_required=True,
+                    error_code=reason,
+                    error_message="Delete completed but V2 evidence write failed.",
+                )
+                self.repository.mark_items(delete_run_id, "unknown", reason)
+                self._audit_delete_outcome(
+                    delete_run_id,
+                    preflight,
+                    evidence,
+                    guard,
+                    "upload.delete_failed",
+                    AuditResult.failure,
+                    reason,
+                    deleted,
+                )
+                raise DeleteRejectedError(reason, status_code=500) from error
+            self.repository.mark_status(
+                delete_run_id,
+                DeleteRunStatus.commit_unknown.value,
+                deleted_key_count=deleted,
+                recovery_required=True,
+                error_code="db_delta_mismatch",
+                error_message="Delete DB delta did not match the expected row count.",
+            )
+            self.repository.mark_items(delete_run_id, "unknown", "db_delta_mismatch")
+            self._audit_delete_outcome(
+                delete_run_id,
+                preflight,
+                evidence,
+                guard,
+                "upload.delete_failed",
+                AuditResult.failure,
+                "db_delta_mismatch",
+                deleted,
+                db_delta_id=db_delta_id,
+                attribution_rows_created=attribution_rows_created,
+            )
+            raise DeleteRejectedError("db_delta_mismatch", status_code=500)
+        try:
+            db_delta_id, attribution_rows_created = self._record_delete_evidence(
+                delete_run_id=delete_run_id,
+                audit_id=start_audit_id,
+                operation_type="delete_start",
+                operation_phase="after_mutation",
+                evidence=evidence,
+                guard=guard,
+                before_count=evidence.selected_key_count,
+                after_count=max(0, evidence.selected_key_count - deleted),
+                expected_delta=-evidence.selected_key_count,
+                result="matched",
+                attribution_outcome="deleted",
+                reason_code=None,
+            )
+        except Exception as error:
+            reason = "evidence_write_failed"
+            self.repository.mark_status(
+                delete_run_id,
+                DeleteRunStatus.commit_unknown.value,
+                deleted_key_count=deleted,
+                recovery_required=True,
+                error_code=reason,
+                error_message="Delete completed but V2 evidence write failed.",
+            )
+            self.repository.mark_items(delete_run_id, "unknown", reason)
+            self._audit_delete_outcome(
+                delete_run_id,
+                preflight,
+                evidence,
+                guard,
+                "upload.delete_failed",
+                AuditResult.failure,
+                reason,
+                deleted,
+            )
             raise DeleteRejectedError(reason, status_code=500) from error
         self.repository.mark_status(delete_run_id, DeleteRunStatus.finalizing.value, deleted_key_count=deleted)
         self.repository.mark_items(delete_run_id, "deleted")
@@ -557,7 +736,18 @@ class UploadDeleteService:
             recovery_required=False,
             finish=True,
         )
-        self._audit_delete_outcome(delete_run_id, preflight, evidence, guard, "upload.delete_succeeded", AuditResult.success, None, deleted)
+        self._audit_delete_outcome(
+            delete_run_id,
+            preflight,
+            evidence,
+            guard,
+            "upload.delete_succeeded",
+            AuditResult.success,
+            None,
+            deleted,
+            db_delta_id=db_delta_id,
+            attribution_rows_created=attribution_rows_created,
+        )
         return DeleteJobCreateResponse(
             delete_run_id=delete_run_id,
             status=DeleteRunStatus.succeeded,
@@ -607,9 +797,29 @@ class UploadDeleteService:
         try:
             present = self.db_client.count_existing_keys(evidence.keys)
         except DeleteDbBlockedError as error:
-            return self._finish_reconcile(delete_run_id, row, expected_key_count, 0, 0, "reconciliation_failed", error.reason)
+            return self._finish_reconcile(
+                delete_run_id,
+                row,
+                expected_key_count,
+                0,
+                0,
+                "reconciliation_failed",
+                error.reason,
+                evidence=evidence,
+                guard=guard,
+            )
         except Exception:
-            return self._finish_reconcile(delete_run_id, row, expected_key_count, 0, 0, "reconciliation_failed", "reconciliation_count_failed")
+            return self._finish_reconcile(
+                delete_run_id,
+                row,
+                expected_key_count,
+                0,
+                0,
+                "reconciliation_failed",
+                "reconciliation_count_failed",
+                evidence=evidence,
+                guard=guard,
+            )
         absent = max(0, expected_key_count - present)
         if present == 0:
             status_value = DeleteRunStatus.reconciled_succeeded.value
@@ -620,7 +830,17 @@ class UploadDeleteService:
         else:
             status_value = DeleteRunStatus.reconciliation_failed.value
             reason = "mixed_key_presence"
-        return self._finish_reconcile(delete_run_id, row, expected_key_count, present, absent, status_value, reason)
+        return self._finish_reconcile(
+            delete_run_id,
+            row,
+            expected_key_count,
+            present,
+            absent,
+            status_value,
+            reason,
+            evidence=evidence,
+            guard=guard,
+        )
 
     def _finish_reconcile(
         self,
@@ -631,21 +851,14 @@ class UploadDeleteService:
         absent: int,
         status_value: str,
         reason: str | None,
+        evidence: KeyEvidence | None = None,
+        guard: DbGuardResult | None = None,
     ) -> DeleteReconcileResponse:
         success = status_value in {
             DeleteRunStatus.reconciled_succeeded.value,
             DeleteRunStatus.reconciled_rolled_back.value,
         }
-        self.repository.mark_status(
-            delete_run_id,
-            status_value,
-            recovery_required=not success,
-            error_code=reason,
-            error_message=reason,
-            clear_error=success,
-            finish=success,
-        )
-        self._audit(
+        audit_id = self._audit(
             action="upload.delete_reconciled",
             target_type="delete_run",
             target_id=delete_run_id,
@@ -662,6 +875,65 @@ class UploadDeleteService:
                 "rawMatchRowsReturned": False,
             },
             error_code=reason,
+        )
+        try:
+            self._record_reconcile_evidence(
+                delete_run_id=delete_run_id,
+                audit_id=audit_id,
+                row=row,
+                evidence=evidence,
+                guard=guard,
+                expected=expected,
+                present=present,
+                absent=absent,
+                status_value=status_value,
+                reason_code=reason,
+            )
+        except Exception:
+            failure_reason = "evidence_write_failed"
+            self.repository.mark_status(
+                delete_run_id,
+                DeleteRunStatus.reconciliation_failed.value,
+                recovery_required=True,
+                error_code=failure_reason,
+                error_message="Delete reconcile completed but V2 evidence write failed.",
+            )
+            self._audit(
+                action="upload.delete_reconciled",
+                target_type="delete_run",
+                target_id=delete_run_id,
+                result=AuditResult.failure,
+                params={
+                    "deleteRunId": delete_run_id,
+                    "preflightId": str(row["preflight_id"]),
+                    "previewRunId": str(row["preview_run_id"]),
+                    "selectedRowCount": expected,
+                    "rowsPresent": present,
+                    "rowsAbsent": absent,
+                    "recoveryRequired": True,
+                    "reasonCode": failure_reason,
+                    "evidenceWriteFailedForStatus": status_value,
+                    "rawMatchRowsReturned": False,
+                },
+                error_code=failure_reason,
+                error_message=failure_reason,
+            )
+            return DeleteReconcileResponse(
+                delete_run_id=delete_run_id,
+                status=DeleteRunStatus.reconciliation_failed,
+                expected_delete_keys=expected,
+                keys_present=present,
+                keys_absent=absent,
+                recovery_required=True,
+            )
+        self.repository.mark_status(
+            delete_run_id,
+            status_value,
+            recovery_required=not success,
+            error_code=reason,
+            error_message=reason,
+            clear_error=success,
+            finish=success,
         )
         return DeleteReconcileResponse(
             delete_run_id=delete_run_id,
@@ -788,8 +1060,10 @@ class UploadDeleteService:
         result: AuditResult,
         reason: str | None,
         deleted_count: int = 0,
-    ) -> None:
-        self._audit(
+        db_delta_id: str | None = None,
+        attribution_rows_created: int = 0,
+    ) -> int:
+        return self._audit(
             action=action,
             target_type="delete_run",
             target_id=delete_run_id,
@@ -809,10 +1083,219 @@ class UploadDeleteService:
                 timestamp_start_date=evidence.timestamp_start_date,
                 timestamp_end_date=evidence.timestamp_end_date,
                 reason_code=reason,
+                db_delta_id=db_delta_id,
+                attribution_rows_created=attribution_rows_created,
             ),
             error_code=reason,
             error_message=reason,
         )
+
+    def _v2_evidence_enabled(self) -> bool:
+        return self.settings.effective_row_attribution_writes_enabled
+
+    def _v2_evidence_start_blocker(self, guard: DbGuardResult) -> str | None:
+        if not self._v2_evidence_enabled():
+            return None
+        if not self.settings.row_attribution_hmac_key:
+            return "row_attribution_hmac_key_missing"
+        if not is_sha256_hex(guard.fingerprint_hash):
+            return "db_fingerprint_hash_missing"
+        return None
+
+    def _record_delete_evidence(
+        self,
+        *,
+        delete_run_id: str,
+        audit_id: int,
+        operation_type: str,
+        operation_phase: str,
+        evidence: KeyEvidence,
+        guard: DbGuardResult,
+        before_count: int | None,
+        after_count: int | None,
+        expected_delta: int | None,
+        result: str,
+        attribution_outcome: str,
+        reason_code: str | None,
+    ) -> tuple[str | None, int]:
+        if not self._v2_evidence_enabled():
+            return None, 0
+        actual_delta = after_count - before_count if before_count is not None and after_count is not None else None
+        delta_query_class = "exact_key_count" if before_count is not None and after_count is not None else "not_measured"
+        delta = self.db_delta_repository.append_delta(
+            operation_id=delete_run_id,
+            operation_type=operation_type,
+            audit_id=audit_id,
+            actor_id="local_operator",
+            actor_role="operator",
+            delta_scope=self._delete_delta_scope(delete_run_id, evidence, reason_code),
+            delta_query_class=delta_query_class,
+            before_count=before_count,
+            after_count=after_count,
+            expected_delta=expected_delta,
+            actual_delta=actual_delta,
+            result=result,
+            reason_code=reason_code,
+            db_target_class=guard.target_class,
+            db_fingerprint_hash=guard.fingerprint_hash,
+        )
+        attribution_count = self._append_row_attributions(
+            operation_id=delete_run_id,
+            operation_type=operation_type,
+            operation_phase=operation_phase,
+            audit_id=audit_id,
+            db_delta_id=delta.delta_id,
+            evidence=evidence,
+            guard=guard,
+            outcome=attribution_outcome,
+            reason_code=reason_code,
+        )
+        return delta.delta_id, attribution_count
+
+    def _record_reconcile_evidence(
+        self,
+        *,
+        delete_run_id: str,
+        audit_id: int,
+        row: sqlite3.Row,
+        evidence: KeyEvidence | None,
+        guard: DbGuardResult | None,
+        expected: int,
+        present: int,
+        absent: int,
+        status_value: str,
+        reason_code: str | None,
+    ) -> tuple[str | None, int]:
+        if not self._v2_evidence_enabled():
+            return None, 0
+        target_class = guard.target_class if guard else "unknown"
+        fingerprint_hash = guard.fingerprint_hash if guard else row["db_fingerprint_hash"]
+        before_count: int | None = expected if evidence is not None else None
+        after_count: int | None = present if evidence is not None and reason_code != "reconciliation_count_failed" else None
+        if status_value == DeleteRunStatus.reconciled_rolled_back.value:
+            expected_delta = 0
+            delta_result = "matched"
+            outcome = "unchanged"
+        elif status_value == DeleteRunStatus.reconciled_succeeded.value:
+            expected_delta = -expected
+            delta_result = "matched"
+            outcome = "reconciled_absent"
+        elif before_count is not None and after_count is not None:
+            expected_delta = -expected
+            delta_result = "mismatched"
+            outcome = "unknown_requires_reconcile"
+        else:
+            expected_delta = None
+            delta_result = "not_measured"
+            outcome = "unknown_requires_reconcile"
+        delta = self.db_delta_repository.append_delta(
+            operation_id=delete_run_id,
+            operation_type="delete_reconcile",
+            audit_id=audit_id,
+            actor_id="local_operator",
+            actor_role="operator",
+            delta_scope={
+                "operationId": delete_run_id,
+                "preflightId": str(row["preflight_id"]),
+                "selectedRowCount": expected,
+                "rowsPresent": present,
+                "rowsAbsent": absent,
+                "sourceEvidenceAvailable": evidence is not None,
+                "reasonCode": reason_code,
+            },
+            delta_query_class="exact_key_count" if before_count is not None and after_count is not None else "not_measured",
+            before_count=before_count,
+            after_count=after_count,
+            expected_delta=expected_delta,
+            result=delta_result,
+            reason_code=reason_code,
+            db_target_class=target_class,
+            db_fingerprint_hash=fingerprint_hash,
+        )
+        if evidence is None or guard is None or not self.settings.row_attribution_hmac_key or not is_sha256_hex(fingerprint_hash):
+            return delta.delta_id, 0
+        attribution_count = self._append_row_attributions(
+            operation_id=delete_run_id,
+            operation_type="delete_reconcile",
+            operation_phase="reconcile",
+            audit_id=audit_id,
+            db_delta_id=delta.delta_id,
+            evidence=evidence,
+            guard=guard,
+            outcome=outcome,
+            reason_code=reason_code,
+        )
+        return delta.delta_id, attribution_count
+
+    def _append_row_attributions(
+        self,
+        *,
+        operation_id: str,
+        operation_type: str,
+        operation_phase: str,
+        audit_id: int,
+        db_delta_id: str,
+        evidence: KeyEvidence,
+        guard: DbGuardResult,
+        outcome: str,
+        reason_code: str | None,
+    ) -> int:
+        hmac_key = self.settings.row_attribution_hmac_key
+        source_evidence_hash = build_source_evidence_hash(
+            {
+                "operationId": operation_id,
+                "operationType": operation_type,
+                "operationPhase": operation_phase,
+                "dbDeltaId": db_delta_id,
+                "selectionDigest": evidence.selection_hash,
+                "keysetDigest": evidence.keyset_hash,
+                "selectedItemCount": evidence.selected_item_count,
+                "selectedRowCount": evidence.selected_key_count,
+                "outcome": outcome,
+                "reasonCode": reason_code,
+            },
+            hmac_key,
+        )
+        schema_fingerprint_hash = build_hmac_safe_hash("public.all_metrics.timestamp_device_id_unique", hmac_key)
+        count = 0
+        for timestamp, device_id in sorted(evidence.keys):
+            result = self.row_attribution_repository.append_attribution(
+                operation_id=operation_id,
+                operation_type=operation_type,
+                operation_phase=operation_phase,
+                audit_id=audit_id,
+                actor_id="local_operator",
+                actor_role="operator",
+                exact_key_hash=build_exact_key_hash(timestamp, device_id, hmac_key),
+                source_evidence_hash=source_evidence_hash,
+                outcome=outcome,
+                db_target_class=guard.target_class,
+                db_fingerprint_hash=guard.fingerprint_hash or "",
+                schema_fingerprint_hash=schema_fingerprint_hash,
+                db_delta_id=db_delta_id,
+                reason_code=reason_code,
+            )
+            if not result.created:
+                raise RuntimeError(result.rejection_reason or "row_attribution_write_rejected")
+            count += 1
+        return count
+
+    def _delete_delta_scope(
+        self,
+        delete_run_id: str,
+        evidence: KeyEvidence,
+        reason_code: str | None,
+    ) -> dict[str, object]:
+        return {
+            "operationId": delete_run_id,
+            "selectedItemCount": evidence.selected_item_count,
+            "selectedRowCount": evidence.selected_key_count,
+            "selectionDigest": evidence.selection_hash,
+            "keysetDigest": evidence.keyset_hash,
+            "timestampStartDate": format_date(evidence.timestamp_start_date),
+            "timestampEndDate": format_date(evidence.timestamp_end_date),
+            "reasonCode": reason_code,
+        }
 
     def _common_start_blocker(self) -> str | None:
         if self.repository.has_active_preview_run() is not None:
@@ -959,6 +1442,8 @@ class UploadDeleteService:
         timestamp_start_date: date | None = None,
         timestamp_end_date: date | None = None,
         reason_code: str | None = None,
+        db_delta_id: str | None = None,
+        attribution_rows_created: int = 0,
     ) -> dict[str, object]:
         return {
             "previewRunId": preview_run_id,
@@ -976,6 +1461,8 @@ class UploadDeleteService:
             "timestampStartDate": format_date(timestamp_start_date),
             "timestampEndDate": format_date(timestamp_end_date),
             "reasonCode": reason_code,
+            "dbDeltaId": db_delta_id,
+            "attributionRowsCreated": attribution_rows_created,
             "rawMatchRowsReturned": False,
         }
 
@@ -983,6 +1470,10 @@ class UploadDeleteService:
 def safe_hash(value: object) -> str:
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def is_sha256_hex(value: str | None) -> bool:
+    return value is not None and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
 
 def hash_keys(keys: set[tuple[str, str]]) -> str:

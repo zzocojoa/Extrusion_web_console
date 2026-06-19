@@ -176,6 +176,18 @@ row should also link to `db_delta_id`. If DB delta cannot be measured, the
 operation must record the safe reason in DB delta evidence and the attribution
 row must use a safe `reason_code`.
 
+Implementation status as of 2026-06-19: the backend now has a local
+`db_delta_evidence` sidecar and gate-on upload/delete service wiring that
+appends DB delta evidence before success attribution. The default gate remains
+off, so normal V1 upload/delete behavior does not write attribution or DB delta
+rows. When the gate is on, upload and delete success attribution links to an
+existing audit row and to the created `db_delta_id`; delete DB failure records
+`failed_before_mutation`; delete evidence write failure after DB success leaves
+the run `commit_unknown` with `evidence_write_failed`; delta mismatch records
+`unknown_requires_reconcile` instead of a success attribution outcome. Gate-on
+delete reconcile writes evidence before marking a run reconciled; evidence write
+failure leaves the run `reconciliation_failed` with `evidence_write_failed`.
+
 Write order constraints:
 
 - destructive mutation must not start unless the required audit-start row has
@@ -255,6 +267,22 @@ Required non-destructive tests:
     `all_metrics(timestamp, device_id)` uniqueness, upsert, or de-dup behavior.
 11. Marker-scan tests run against diffs and generated artifacts to detect unsafe
     sensitive markers before merge.
+
+Current implementation evidence:
+
+- `tests/backend/test_db_delta_repository.py` covers sidecar bootstrap,
+  append-only triggers, audit foreign-key linkage, safe scope validation, and
+  mismatched-delta validation.
+- `tests/backend/test_upload_delete_service_contract.py` covers default-off
+  no-write behavior, gate-on delete audit/delta/attribution linkage, missing
+  HMAC pre-mutation blocking, delete DB failure evidence, delete evidence write
+  failure after DB success, delta mismatch preventing success attribution,
+  gate-on reconcile success and rollback evidence, and reconcile evidence write
+  failure not leaving a reconciled success state.
+- `tests/backend/test_upload_jobs_service.py` covers default-off upload
+  no-write behavior, gate-on upload audit/delta/attribution linkage, missing
+  HMAC blocking before Edge upload, and upload DB delta mismatch writing
+  `unknown_requires_reconcile` attribution with an evidence mismatch event.
 
 ## Acceptance Criteria Before Implementation
 

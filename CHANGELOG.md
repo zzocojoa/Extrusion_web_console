@@ -6,11 +6,14 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Added
 
+- V2 evidence foundation now adds an append-only local SQLite `db_delta_evidence` sidecar plus default-off upload/delete service wiring that can link operation id, audit id, DB delta id, and row attribution evidence when the V2 row attribution gate is explicitly enabled.
 - Project status summaries and infographics now have a language policy that separates completed evidence, operating restrictions, review gates, conditional caveats, and intentional v1 exclusions instead of grouping them as generic unfinished work.
 - README and the operator upload gate runbook now point future status artifacts to the status language policy so destructive-action restrictions are not mistaken for pending tasks.
 
 ### Operational notes
 
+- The V2 evidence foundation leaves `v2_row_attribution_enabled=false` by default and keeps legacy `row_attribution_writes_enabled` compatibility. Gate-on upload/delete evidence requires an explicit `row_attribution_hmac_key`; missing HMAC blocks before upload Edge calls or delete DB mutation. Delete DB failure records `failed_before_mutation` evidence and remains `failed`; delete evidence write failure after DB success remains `commit_unknown` with `evidence_write_failed`; delete delta mismatch records `unknown_requires_reconcile` evidence and blocks success; delete reconcile evidence write failure leaves the run `reconciliation_failed` instead of a reconciled success state; upload delta mismatch records `unknown_requires_reconcile` evidence plus an `upload.evidence_mismatch` event without exposing raw keys.
+- Local evidence foundation validation passed targeted backend tests: `.\.venv\Scripts\python -m pytest tests\backend\test_upload_delete_service_contract.py tests\backend\test_db_delta_repository.py tests\backend\test_upload_jobs_service.py` reported `41 passed, 1 warning`. Full backend regression also passed with `.\.venv\Scripts\python -m pytest tests\backend` reporting `334 passed, 14 warnings`.
 - PR #185 (`[codex] add row attribution ledger sidecar`) was merged to `main` at merge commit `8a391a975819ec46343974959c8d9719eb6b2125` (`8a391a9`). It adds the local state DB sidecar `row_attribution_ledger` implementation and backend tests while leaving the Supabase schema and `all_metrics(timestamp, device_id)` behavior unchanged.
 - PR #186 (`[codex] record pr 185 release notes`) was merged to `main` at merge commit `99edecc4bde94d6f8af016d8c054144e9f6538c3` (`99edecc`) and records the PR #185 safety and rollback evidence in this changelog.
 - The row attribution write gate remains off by default through `v2_row_attribution_enabled=false`. This release note does not approve packaging, deployment, operating DB mutation, LAN exposure, delete UI expansion, or feature-gate enablement.
