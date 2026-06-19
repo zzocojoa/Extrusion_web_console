@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     local_supabase_grafana_container: str = "grafana_local"
     runtime_command_timeout_seconds: int = 20
     runtime_readiness_timeout_seconds: int = 90
+    row_attribution_writes_enabled: bool = False
     cors_origins: tuple[str, ...] = (
         "http://127.0.0.1:5173",
         "http://localhost:5173",
