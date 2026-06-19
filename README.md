@@ -534,6 +534,7 @@ Browser QA has been run against:
 - `docs/156_operator_already_in_db_delete_contract.md`
 - `docs/157_operator_2026-01-19_delete_execution.md`
 - `docs/158_operator_status_language_policy.md`
+- `docs/159_v2_scope_and_safety_plan.md`
 
 ## Reference Project
 
