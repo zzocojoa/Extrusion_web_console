@@ -77,6 +77,7 @@ def _existing_ledger_sql(
     operation_id_not_null: bool = True,
     checks: bool = True,
     extra_operation_type_check_value: bool = False,
+    restrictive_check_column: str | None = None,
 ) -> str:
     attribution_id = attribution_id_definition
     if attribution_id is None:
@@ -88,6 +89,16 @@ def _existing_ledger_sql(
     operation_type_check = _check_clause("operation_type", operation_type_values) if checks else ""
     operation_phase_check = _check_clause("operation_phase", ALLOWED_OPERATION_PHASES) if checks else ""
     outcome_check = _check_clause("outcome", ALLOWED_OUTCOMES) if checks else ""
+    restrictive_check_values = {
+        "operation_type": ALLOWED_OPERATION_TYPES,
+        "operation_phase": ALLOWED_OPERATION_PHASES,
+        "outcome": ALLOWED_OUTCOMES,
+    }
+    restrictive_check = ""
+    if restrictive_check_column is not None:
+        restrictive_check = ",\n          " + _check_clause(
+            restrictive_check_column, restrictive_check_values[restrictive_check_column][:1]
+        ).strip()
     audit_id = "audit_id INTEGER NOT NULL REFERENCES audit_log(audit_id)" if audit_fk else "audit_id INTEGER NOT NULL"
     supersedes_attribution_id = (
         "supersedes_attribution_id INTEGER REFERENCES row_attribution_ledger(attribution_id)"
@@ -114,7 +125,7 @@ def _existing_ledger_sql(
           db_fingerprint_hash TEXT NOT NULL,
           schema_fingerprint_hash TEXT NOT NULL,
           {supersedes_attribution_id},
-          created_at TEXT NOT NULL
+          created_at TEXT NOT NULL{restrictive_check}
         )
     """
 
@@ -235,6 +246,9 @@ def test_incompatible_existing_table_fails_closed_without_rewrite(tmp_path: Path
         ({"operation_id_not_null": False}, "missing_not_null:operation_id"),
         ({"checks": False}, "missing_check_constraints:operation_phase,operation_type,outcome"),
         ({"extra_operation_type_check_value": True}, "invalid_check_constraints:operation_type"),
+        ({"restrictive_check_column": "operation_type"}, "invalid_check_constraints:operation_type"),
+        ({"restrictive_check_column": "operation_phase"}, "invalid_check_constraints:operation_phase"),
+        ({"restrictive_check_column": "outcome"}, "invalid_check_constraints:outcome"),
     ],
 )
 def test_existing_table_missing_required_schema_contract_fails_closed(

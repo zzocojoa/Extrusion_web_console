@@ -451,9 +451,10 @@ class RowAttributionRepository:
         invalid: list[str] = []
         for column, required_values in REQUIRED_CHECK_CONSTRAINTS.items():
             value_sets = self._check_constraint_value_sets(table_sql, column)
+            required_set = set(required_values)
             if not value_sets:
                 missing.append(column)
-            elif not any(values == set(required_values) for values in value_sets):
+            elif any(values != required_set for values in value_sets):
                 invalid.append(column)
         if missing:
             raise RowAttributionSchemaError(
