@@ -72,9 +72,37 @@ Preview-only may be considered only after all of these are true:
 - source path is confirmed outside chat by the operator or maintainer;
 - local Supabase DB reachability is understood before interpreting DB-dependent
   preview states;
-- expected file count and expected physical row ceiling are recorded;
+- a fresh read-only inventory precheck produced the observed file count and
+  approved physical row ceiling for the intended approval scope;
 - no Start Upload, Retry Failed, Delete, Settings save, or feature-gate change is
   bundled into the approval.
+
+## Read-only Inventory Precheck
+
+Before requesting Preview-only approval, run a read-only inventory precheck for
+the same source class and intended approval scope.
+
+This precheck is not Upload Preview. It must not create a Preview run, call the
+Upload Preview API, write to the DB, write audit or local state, mutate source
+files, or run Start Upload, Retry Failed, Delete, Settings save, feature-gate
+changes, Supabase cleanup, Docker cleanup, LAN enablement, or deployment.
+
+The precheck may record only safe inventory evidence:
+
+- source class such as `drive_letter`, `network`, or `mounted`, not raw path;
+- observed files count for the intended scope;
+- physical data-line count or a conservative approved physical row ceiling;
+- source eligibility or go/no-go reason classes.
+
+The approval `<fileCount>` and `<rowLimit>` must come from a fresh read-only
+inventory precheck completed immediately before that approval. They must not be
+user guesses, copied from an earlier run, reused as long-term defaults, or used
+as blanket approval for future folder growth.
+
+If inventory cannot establish observed files and an approved physical row
+ceiling, do not request or run Preview-only. If the operational folder grows
+later, repeat read-only inventory and issue a new Preview-only approval for the
+new observed scope.
 
 Required approval wording:
 
@@ -83,6 +111,10 @@ I approve exactly one Upload Preview-only run from package sourceCommit ebd0db5.
 The approved source class is <sourceClass>, expected files is <fileCount>, and expected physical rows is <= <rowLimit>.
 This approval does not approve Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, or Docker cleanup.
 ```
+
+In this wording, `expected files` means observed files from the fresh read-only
+inventory, and `expected physical rows` means the approved physical row ceiling
+from that same inventory.
 
 Evidence to record after Preview-only:
 
@@ -256,6 +288,10 @@ Stop before any mutation when any of these are true:
 - package checksum or metadata differs from this document;
 - `main` and `origin/main` do not match the recorded source commit;
 - active source class is unexpected;
+- fresh read-only inventory was not run, is stale, or did not produce observed
+  file count and approved physical row ceiling;
+- file count or row limit is a user guess, an earlier-run value, a long-term
+  default, or blanket approval for future folder growth;
 - row counts differ between UI, API, and approval text;
 - audit logs cannot be read;
 - local token protection is not active for protected writes;
