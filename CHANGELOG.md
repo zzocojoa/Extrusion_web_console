@@ -34,6 +34,10 @@ All notable changes to Extrusion Web Console are documented here.
   Preview-only, Start Upload, and Retry Failed deferred until fresh inventory,
   exact approvals, safe evidence records, and rollback/failure handling are
   available.
+- Added a V2 completion-candidate rollup in
+  `docs/174_v2_completion_candidate_rollup.md`, mapping the open PR stack for
+  items 1 through 8 without approving any operational action; see that document
+  for explicit exclusions.
 - Added an explicit V2 completion-track item table to `docs/165`, so the eight
   remaining V2 items are each classified as `Completed` or `Deferred` without
   implying broad V2 completion.
