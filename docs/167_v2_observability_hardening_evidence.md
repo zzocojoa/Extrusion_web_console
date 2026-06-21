@@ -85,12 +85,12 @@ Full validation:
 
 Candidate package metadata:
 
-- `packageLabel`: `ExtrusionWebConsole-40c94c7-20260621-173100-945`
-- `sourceCommit`: `40c94c7`
+- `packageLabel`: `ExtrusionWebConsole-609729d-20260621-174724-239`
+- `sourceCommit`: `609729d`
 - `frontendMode`: `api`
 - `runtimeMode`: `operator-ready`
 - `zipCreated`: `true`
-- `zipSha256`: `afebf9fba6a4aeae87cfbddcf7a13d6f0f9212906268cf3a85bea4e4bae90b5a`
+- `zipSha256`: `67352bc155d294a42bb3a4ab910d936d573637803ab4e73a7ef35cbb429f938f`
 - `packageAgentEntries`: `0`
 - `zipAgentEntries`: `0`
 
