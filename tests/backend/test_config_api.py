@@ -28,6 +28,9 @@ CONFIG_ENV_KEYS = (
     "EWC_LOCAL_SUPABASE_STUDIO_PORT",
     "EWC_RUNTIME_COMMAND_TIMEOUT_SECONDS",
     "EWC_RUNTIME_READINESS_TIMEOUT_SECONDS",
+    "EWC_V2_DELETE_EXPANSION_ENABLED",
+    "EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED",
+    "EWC_V2_LAN_ACCESS_ENABLED",
 )
 
 
@@ -336,6 +339,103 @@ def test_config_get_hides_secret_values_and_reports_sources(tmp_path: Path, monk
     assert items["supabaseAnonKey"]["value"] is None
     assert items["grafanaUrl"]["source"] == "env"
     assert items["grafanaUrl"]["overridden"] is True
+
+
+def test_config_get_exposes_v2_feature_gates_default_off_and_read_only(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    client, _, _ = _client(tmp_path)
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    body = response.json()
+    date_gate = body["featureGates"]["v2DateScopedDeleteUi"]
+    assert date_gate == {
+        "key": "v2_date_scoped_delete_ui_enabled",
+        "enabled": False,
+        "reviewShellVisible": False,
+        "source": "default",
+        "mutable": False,
+        "requiredRole": "maintainer",
+        "status": "hidden",
+        "reason": "date_scoped_delete_ui_gate_default_off",
+    }
+    assert body["featureGates"]["v2DeleteExpansion"]["enabled"] is False
+    assert body["featureGates"]["v2LanAccess"]["enabled"] is False
+    assert "v2DateScopedDeleteUiEnabled" not in {item["key"] for item in body["items"]}
+
+
+def test_config_get_reports_env_enabled_date_scoped_delete_review_shell_without_settings_item(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED", "true")
+    client, _, _ = _client(tmp_path)
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    body = response.json()
+    gate = body["featureGates"]["v2DateScopedDeleteUi"]
+    assert gate["enabled"] is False
+    assert gate["reviewShellVisible"] is True
+    assert gate["source"] == "env"
+    assert gate["mutable"] is False
+    assert gate["requiredRole"] == "maintainer"
+    assert gate["status"] == "review_shell_visible"
+    assert gate["reason"] == "date_scoped_delete_ui_review_shell_visible"
+    assert "v2DateScopedDeleteUiEnabled" not in {item["key"] for item in body["items"]}
+
+
+def test_config_get_reports_env_requested_lan_gate_as_blocked_until_lan_is_implemented(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EWC_V2_LAN_ACCESS_ENABLED", "true")
+    client, _, _ = _client(tmp_path)
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    gate = response.json()["featureGates"]["v2LanAccess"]
+    assert gate["enabled"] is False
+    assert gate["reviewShellVisible"] is False
+    assert gate["source"] == "env"
+    assert gate["mutable"] is False
+    assert gate["requiredRole"] == "admin"
+    assert gate["status"] == "blocked_not_implemented"
+    assert gate["reason"] == "lan_access_not_implemented"
+
+
+def test_config_save_cannot_enable_date_scoped_delete_gate(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    client, audit_repository, config_path = _client(tmp_path)
+
+    try:
+        response = client.put("/api/config", json={"values": {"v2DateScopedDeleteUiEnabled": True}})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "config_unknown_key"
+    assert response.json()["detail"]["keys"] == ["v2DateScopedDeleteUiEnabled"]
+    assert not config_path.exists()
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
+    assert row["result"] == AuditResult.failure.value
+    assert row["error_code"] == "config_unknown_key"
+    assert decode_params_json(row["params_json_redacted"])["rejectedSettings"] == ["v2DateScopedDeleteUiEnabled"]
 
 
 def test_config_get_uses_independent_local_supabase_defaults(tmp_path: Path, monkeypatch) -> None:

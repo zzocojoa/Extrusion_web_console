@@ -85,6 +85,28 @@ function Wait-ForHealth {
   return $false
 }
 
+function Test-LanSafeHealth {
+  param($Health)
+  if (-not $Health) {
+    return $false
+  }
+  $localhostOnly = ($Health.localhost_only -eq $true -or $Health.localhostOnly -eq $true)
+  if (-not $localhostOnly) {
+    return $false
+  }
+
+  $lanSecurity = $null
+  if ($Health.PSObject.Properties.Name -contains "lan_security") {
+    $lanSecurity = $Health.lan_security
+  } elseif ($Health.PSObject.Properties.Name -contains "lanSecurity") {
+    $lanSecurity = $Health.lanSecurity
+  }
+  if ($null -eq $lanSecurity) {
+    return $false
+  }
+  return ($lanSecurity.status -eq "localhost_only" -and $lanSecurity.shared_local_token_allowed -eq $false)
+}
+
 function New-LocalApiToken {
   $bytes = New-Object byte[] 32
   $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -431,6 +453,10 @@ if (Test-PortOpen -Port $BackendPort) {
   }
   $health = Get-Health -Port $BackendPort
   if ($health -and $health.status -eq "ok" -and $health.service -eq "extrusion-web-console-api") {
+    if (-not (Test-LanSafeHealth -Health $health)) {
+      Write-LauncherLog "Existing backend is healthy but does not report localhost-only LAN-safe status. Close it and restart from this launcher." "ERROR"
+      exit 1
+    }
     if (-not (Test-FrontendBootstrap -Port $BackendPort)) {
       Write-LauncherLog "Existing backend is healthy but does not expose the local token bootstrap page. Close it and restart from this launcher." "ERROR"
       exit 1

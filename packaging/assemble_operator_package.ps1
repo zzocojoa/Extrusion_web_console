@@ -572,4 +572,4 @@ if ($zipPath) {
 Write-AssemblyInfo "smoke guidance:"
 Write-AssemblyInfo "  1. Run launcher/start_web_console.ps1 -CheckOnly from the package root."
 Write-AssemblyInfo "  2. Run launcher/install_shortcuts.ps1 -CheckOnly from the package root."
-Write-AssemblyInfo "  3. Start the package with launcher/start_web_console.ps1 -NoBrowser and smoke /, /upload, /logs, /settings, /api/health, /api/config, and /api/audit?limit=1."
+Write-AssemblyInfo "  3. Start the package with launcher/start_web_console.ps1 -NoBrowser and smoke /, /upload, /logs, /settings, /api/health, /api/config, /api/audit?limit=1, and /api/runtime/local-supabase recording only overallStatus, grafana.status, vector.status, and vector.detail."

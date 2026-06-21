@@ -1,4 +1,3 @@
-from ipaddress import ip_address
 import logging
 from pathlib import Path
 
@@ -23,6 +22,9 @@ from backend.app.core.local_token import bootstrap_script_for_settings
 from backend.app.core.local_token import local_token_enforcement_enabled
 from backend.app.core.local_token import local_token_error_response
 from backend.app.core.local_token import validate_local_token
+from backend.app.core.lan_security import assert_lan_security_gate
+from backend.app.core.lan_security import is_loopback_host
+from backend.app.core.lan_security import server_host_from_scope_server
 from backend.app.core.settings import Settings
 from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditRepository
@@ -45,15 +47,6 @@ def api_docs_enabled(settings: Settings) -> bool:
     if mode == "disabled":
         return False
     return settings.local_token_mode.strip().lower() != "required"
-
-
-def is_loopback_host(host: str | None) -> bool:
-    if host in {None, "", "localhost", "testclient"}:
-        return True
-    try:
-        return ip_address(host).is_loopback
-    except ValueError:
-        return False
 
 
 def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
@@ -112,10 +105,33 @@ def _frontend_index_response(index_path: Path):
     )
 
 
+def log_v2_feature_gate_snapshot(settings: Settings) -> None:
+    _LOGGER.info(
+        "V2 feature gate snapshot: "
+        "delete_expansion_requested_enabled=%s "
+        "delete_expansion_effective_enabled=False "
+        "date_scoped_delete_ui_requested_enabled=%s "
+        "date_scoped_delete_ui_effective_enabled=False "
+        "date_scoped_delete_ui_review_shell_visible=%s "
+        "lan_access_requested_enabled=%s "
+        "lan_access_effective_enabled=False "
+        "row_attribution_enabled=%s "
+        "db_delta_evidence_required=%s",
+        settings.v2_delete_expansion_enabled,
+        settings.v2_date_scoped_delete_ui_enabled,
+        settings.v2_date_scoped_delete_ui_enabled,
+        settings.v2_lan_access_enabled,
+        settings.v2_row_attribution_enabled,
+        settings.v2_db_delta_evidence_required,
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
+    assert_lan_security_gate(settings)
     if not local_token_enforcement_enabled(settings):
         _LOGGER.warning("Local token enforcement is disabled by explicit mode or missing runtime token.")
+    log_v2_feature_gate_snapshot(settings)
     AuditRepository(settings.state_db_path).bootstrap()
     DbDeltaEvidenceRepository(settings.state_db_path).bootstrap()
     RowAttributionRepository(
@@ -144,10 +160,16 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def enforce_loopback_client(request: Request, call_next):
+        server_host = server_host_from_scope_server(request.scope.get("server"))
+        if not is_loopback_host(server_host):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Extrusion Web Console LAN bind is blocked until the LAN security gate is approved."},
+            )
         if not is_loopback_host(request.client.host if request.client else None):
             return JSONResponse(
                 status_code=403,
-                content={"detail": "Extrusion Web Console only accepts localhost clients."},
+                content={"detail": "Extrusion Web Console LAN access is blocked until the LAN security gate is approved."},
             )
         return await call_next(request)
 

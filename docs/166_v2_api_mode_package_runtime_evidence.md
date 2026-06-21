@@ -89,6 +89,16 @@ The smoke did not run Upload Preview, Start Upload, Retry Failed, Delete,
 Settings save, feature-gate enablement, Supabase reset/cleanup, Docker cleanup,
 LAN exposure, or deployment.
 
+## Review
+
+Codex read-only review of this document and `docs/165_v2_status_matrix.md`
+reported `No actionable findings.` The review scope was limited to item 2
+API-mode package evidence: overclaim risk, raw path or secret leakage,
+rollback coverage, and safety boundaries.
+
+The PR-diff command was unavailable inside the read-only review subprocess, so
+this review used the current checkout copies of `docs/166` and `docs/165`.
+
 ## Rollback
 
 Before merge, rollback this evidence by reverting the documentation commit that

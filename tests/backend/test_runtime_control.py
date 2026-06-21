@@ -9,6 +9,7 @@ from backend.app.db.preview_repository import PreviewRepository, iso_now
 from backend.app.db.runtime_repository import RuntimeRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.runtime import (
+    RuntimeContainerStatus,
     RuntimeOperationKind,
     RuntimeOverallStatus,
     RuntimePortStatus,
@@ -365,6 +366,103 @@ def test_status_keeps_grafana_unreachable_as_non_core_attention(
     assert status.reason_code == "non_core_runtime_attention"
 
 
+def test_status_exposes_vector_container_as_non_core_observability_attention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings(tmp_path)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="test"),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.runtime_readiness.probe_edge_route",
+        lambda url, *, timeout_seconds=2.0: RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url),
+    )
+    docker_ps_output = all_containers_output(
+        running=True,
+        status_overrides={"supabase_vector_Extrusion_web_console": "Exited (0)"},
+    )
+    service = RuntimeReadinessService(app_settings, FakeRunner(docker_ps_output=docker_ps_output))
+
+    status = service.check_status()
+
+    assert status.overall_status == RuntimeOverallStatus.attention
+    assert status.reason_code == "non_core_runtime_attention"
+    assert status.vector.status == RuntimeServiceStatus.stopped
+    assert status.vector.detail == "Vector container status class is stopped."
+    vector_container = next(container for container in status.containers if container.name == "supabase_vector_Extrusion_web_console")
+    assert vector_container.required is False
+    assert vector_container.exists is True
+
+
+def test_status_maps_restarting_vector_container_to_unhealthy_attention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings(tmp_path)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="test"),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.runtime_readiness.probe_edge_route",
+        lambda url, *, timeout_seconds=2.0: RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url),
+    )
+    docker_ps_output = all_containers_output(
+        running=True,
+        status_overrides={"supabase_vector_Extrusion_web_console": "Restarting (1) 3 seconds ago"},
+    )
+    service = RuntimeReadinessService(app_settings, FakeRunner(docker_ps_output=docker_ps_output))
+
+    status = service.check_status()
+
+    assert status.overall_status == RuntimeOverallStatus.attention
+    assert status.reason_code == "non_core_runtime_attention"
+    assert status.vector.status == RuntimeServiceStatus.unhealthy
+    assert status.vector.detail == "Vector container status class is unhealthy."
+    vector_container = next(container for container in status.containers if container.name == "supabase_vector_Extrusion_web_console")
+    assert vector_container.required is False
+    assert vector_container.exists is True
+    assert vector_container.running is False
+    assert vector_container.status == RuntimeServiceStatus.unhealthy
+
+
+def test_status_keeps_missing_vector_as_non_core_observability_attention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings(tmp_path)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="test"),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.runtime_readiness.probe_edge_route",
+        lambda url, *, timeout_seconds=2.0: RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url),
+    )
+    docker_ps_output = all_containers_output(
+        running=True,
+        omitted={"supabase_vector_Extrusion_web_console"},
+    )
+    service = RuntimeReadinessService(app_settings, FakeRunner(docker_ps_output=docker_ps_output))
+
+    status = service.check_status()
+    ready, missing, _containers = service.required_containers_exist()
+
+    assert status.overall_status == RuntimeOverallStatus.attention
+    assert status.reason_code == "non_core_runtime_attention"
+    assert status.vector.status == RuntimeServiceStatus.missing
+    vector_container = next(container for container in status.containers if container.name == "supabase_vector_Extrusion_web_console")
+    assert vector_container.required is False
+    assert vector_container.exists is False
+    assert "supabase_vector_Extrusion_web_console" not in missing
+    assert ready is True
+
+
 def test_stop_with_docker_unavailable_fails_instead_of_noop_success(tmp_path: Path) -> None:
     app_settings = settings(tmp_path)
     runtime = RuntimeRepository(app_settings.state_db_path)
@@ -418,6 +516,61 @@ def test_start_noops_when_runtime_core_is_already_ready(tmp_path: Path) -> None:
     assert row["status"] == "succeeded"
     assert ("supabase", "start") not in service.runner.commands  # type: ignore[attr-defined]
     assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
+
+
+def test_start_blocks_non_core_attention_without_noop_success(tmp_path: Path) -> None:
+    app_settings = settings(tmp_path)
+    vector_name = f"supabase_vector_{app_settings.local_supabase_project_id}"
+    status = runtime_status(
+        api=RuntimeServiceStatus.ready,
+        db=RuntimeServiceStatus.ready,
+        studio=RuntimeServiceStatus.ready,
+        edge=RuntimeServiceStatus.ready,
+    )
+    status.overall_status = RuntimeOverallStatus.attention
+    status.reason_code = "non_core_runtime_attention"
+    status.reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+    status.vector = RuntimeProbeStatus(
+        name="Vector",
+        status=RuntimeServiceStatus.stopped,
+        detail="Vector container status class is stopped.",
+    )
+    status.containers = [
+        RuntimeContainerStatus(
+            name=container.name,
+            required=False,
+            exists=True,
+            running=False,
+            status=RuntimeServiceStatus.stopped,
+            status_text="Exited (0)",
+        )
+        if container.name == vector_name
+        else container
+        for container in status.containers
+    ]
+    runtime = RuntimeRepository(app_settings.state_db_path)
+    service = RuntimeControlService(
+        settings=app_settings,
+        runtime_repository=runtime,
+        preview_repository=PreviewRepository(app_settings.state_db_path),
+        upload_repository=UploadJobRepository(app_settings.state_db_path),
+        runner=FakeRunner(docker_ps_output=all_containers_output(running=True)),
+    )
+    service.readiness = StaticReadiness(status, required_ready=True)  # type: ignore[assignment]
+    operation_id = service.queue_operation(RuntimeOperationKind.start)
+
+    service.run_operation(operation_id)
+
+    row = runtime.get_operation(operation_id)
+    assert row is not None
+    assert row["status"] == "blocked"
+    assert row["error_code"] == "non_core_runtime_attention"
+    assert ("docker", "start", vector_name) not in service.runner.commands  # type: ignore[attr-defined]
+    assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
+    audit = latest_audit(runtime)
+    assert audit["action"] == "runtime.start"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "non_core_runtime_attention"
 
 
 @pytest.mark.parametrize("failed_probe", ["api", "db", "studio", "edge"])
@@ -588,6 +741,7 @@ def runtime_status(
         studio=RuntimePortStatus(name="Supabase Studio", port=55323, status=studio, detail="test"),
         edge_runtime=RuntimeProbeStatus(name="Edge Function", status=edge, detail="test"),
         grafana=RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.unreachable, detail="test"),
+        vector=RuntimeProbeStatus(name="Vector", status=RuntimeServiceStatus.ready, detail="test"),
         containers=[
             container_status(name, running=docker == RuntimeServiceStatus.ready)
             for name in required_supabase_containers("Extrusion_web_console")
@@ -609,6 +763,17 @@ def container_status(name: str, *, running: bool):
     )
 
 
-def all_containers_output(*, running: bool) -> str:
+def all_containers_output(
+    *,
+    running: bool,
+    status_overrides: dict[str, str] | None = None,
+    omitted: set[str] | None = None,
+) -> str:
     status = "Up 10 seconds" if running else "Exited (0)"
-    return "\n".join(f'{{"Names":"{name}","Status":"{status}"}}' for name in required_supabase_containers("Extrusion_web_console"))
+    overrides = status_overrides or {}
+    omitted_names = omitted or set()
+    return "\n".join(
+        f'{{"Names":"{name}","Status":"{overrides.get(name, status)}"}}'
+        for name in required_supabase_containers("Extrusion_web_console")
+        if name not in omitted_names
+    )

@@ -14,6 +14,14 @@ def test_health_endpoint() -> None:
     assert body["version"] == "0.1.0"
     assert body["environment"] == "dev"
     assert body["localhost_only"] is True
+    assert body["lan_security"] == {
+        "enabled": False,
+        "status": "localhost_only",
+        "bind_host_class": "loopback",
+        "cors_origin_classes": ["loopback_origin"],
+        "shared_local_token_allowed": False,
+        "reasons": [],
+    }
     assert body["startup_id"].startswith("api_")
     assert body["started_at"]
     assert isinstance(body["process_id"], int)
