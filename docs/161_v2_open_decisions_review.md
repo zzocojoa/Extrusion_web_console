@@ -91,6 +91,12 @@ The following work is blocked until later written approval:
 - Numeric delete limit implementation.
 - Production approval record implementation.
 
+Implementation note as of 2026-06-22: `docs/168` permits only a default-off,
+non-mutating date-scoped delete UI shell for copy, i18n, and runbook review.
+The block above still applies to any enabled operator-facing executable UI,
+date-scoped delete preflight, delete job start, policy expansion, or
+operational destructive verification.
+
 ## Required Follow-Up Records
 
 Before implementation starts, write and approve these records:

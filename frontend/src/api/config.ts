@@ -31,9 +31,27 @@ export interface TargetClassPreflight {
   reason: string;
 }
 
+export interface FeatureGate {
+  key: string;
+  enabled: boolean;
+  reviewShellVisible?: boolean;
+  source: ConfigSource;
+  mutable: boolean;
+  requiredRole: string | null;
+  status: "enabled" | "hidden" | "review_shell_visible" | string;
+  reason: string;
+}
+
+export interface FeatureGates {
+  v2DeleteExpansion: FeatureGate;
+  v2DateScopedDeleteUi: FeatureGate;
+  v2LanAccess: FeatureGate;
+}
+
 export interface ConfigResponse {
   configFilePath: string;
   items: ConfigItem[];
+  featureGates?: FeatureGates;
   targetClasses?: TargetClassPreflight;
   stateContext: StateContext;
 }

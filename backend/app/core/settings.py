@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     local_supabase_grafana_container: str = "grafana_local"
     runtime_command_timeout_seconds: int = 20
     runtime_readiness_timeout_seconds: int = 90
+    v2_delete_expansion_enabled: bool = False
+    v2_date_scoped_delete_ui_enabled: bool = False
+    v2_lan_access_enabled: bool = False
     v2_row_attribution_enabled: bool = False
     v2_db_delta_evidence_required: bool = True
     row_attribution_writes_enabled: bool = False

@@ -597,6 +597,19 @@
         "reconcile": "Reconcile delete",
         "reconciling": "Reconciling"
       },
+      "dateScoped": {
+        "title": "Date-scoped delete review",
+        "eyebrow": "Feature-gated review shell",
+        "badge": "Mutation unavailable",
+        "range": "Current screen range: {{range}}",
+        "customRange": "{{startDate}} to {{endDate}}",
+        "dateNotSet": "not set",
+        "gate": "Gate source: {{source}}. Future execution role: {{role}}.",
+        "blockedTitle": "Date-scoped delete cannot start from this UI.",
+        "blockedDetail": "This panel only verifies copy, i18n, runbook, and confirmation placement. It does not create a delete preflight, start a delete job, retry, save settings, or enable a feature gate.",
+        "disabledTitle": "Date-scoped delete requires a separate policy, preflight, approval record, rollback evidence, and gate enablement.",
+        "disabledAction": "Date-scoped delete unavailable"
+      },
       "table": {
         "select": "Delete",
         "selectRow": "Select {{filename}} for already-in-DB delete"

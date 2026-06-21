@@ -597,6 +597,19 @@
         "reconcile": "Reconcile delete",
         "reconciling": "Reconciling"
       },
+      "dateScoped": {
+        "title": "기간 지정 삭제 검토",
+        "eyebrow": "게이트된 검토 UI",
+        "badge": "실행 불가",
+        "range": "현재 화면 기간: {{range}}",
+        "customRange": "{{startDate}} ~ {{endDate}}",
+        "dateNotSet": "미지정",
+        "gate": "게이트 출처: {{source}}. 향후 실행 필요 역할: {{role}}.",
+        "blockedTitle": "이 화면에서는 기간 지정 삭제를 시작할 수 없습니다.",
+        "blockedDetail": "이 패널은 문구, 다국어, runbook, 확인 절차 배치만 검증합니다. delete preflight 생성, delete job 시작, retry, settings save, feature gate enablement를 수행하지 않습니다.",
+        "disabledTitle": "기간 지정 삭제에는 별도 정책, preflight, 승인 기록, rollback 증거, feature gate enablement가 필요합니다.",
+        "disabledAction": "기간 지정 삭제 사용 불가"
+      },
       "table": {
         "select": "Delete",
         "selectRow": "Select {{filename}} for already-in-DB delete"
