@@ -124,6 +124,11 @@ Validation from `codex/v2-completion-stack-rehearsal` at commit `a4d55e4`:
 - `.\packaging\assemble_operator_package.ps1 -FrontendMode api`: passed.
 - `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`:
   passed.
+- Generated package launcher `.\launcher\start_web_console.ps1 -CheckOnly`:
+  passed; no backend process was started.
+- Generated package shortcut installer
+  `.\launcher\install_shortcuts.ps1 -CheckOnly`: passed; no shortcuts were
+  written.
 - Package metadata:
   - `packageLabel`: `ExtrusionWebConsole-a4d55e4-20260621-222940-214`
   - `sourceCommit`: `a4d55e4`
@@ -135,9 +140,9 @@ Validation from `codex/v2-completion-stack-rehearsal` at commit `a4d55e4`:
 - Codex read-only adversarial review against
   `origin/codex/v2-completion-track`: no actionable findings.
 
-Package launcher `-CheckOnly`, shortcut `-CheckOnly`, and read-only HTTP smoke
-from the generated package were not run in this rehearsal update and remain a
-separate validation step before describing the stack as ready to land.
+Read-only HTTP smoke from the generated package was not run in this rehearsal
+update and remains a separate validation step before describing the stack as
+ready to land.
 
 ## Landing Interpretation
 
