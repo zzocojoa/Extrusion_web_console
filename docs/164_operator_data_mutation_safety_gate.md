@@ -2,7 +2,7 @@
 
 Status: `mutation_deferred_until_separate_approval`
 
-Date: 2026-06-20
+Date: 2026-06-22
 
 ## Decision
 
@@ -14,22 +14,35 @@ approval names the exact scope below.
 
 The accepted handoff artifact is the main-based API-mode operator package:
 
-- source commit: `ebd0db5`
-- full commit: `ebd0db5333b06c10c28741fd09b6dd610b08fc33`
-- artifact label: `ExtrusionWebConsole-ebd0db5-main-validation-20260619-211807`
-- zip SHA-256: `6dc297afd075e5bdb5cb9ac09396bed1d4132475c3dcf8b455e42eb0bd0d7cb5`
-- handoff memo: `ExtrusionWebConsole-ebd0db5-main-validation-20260619-211807-handoff-memo.md`
-- first-launch smoke: passed, read-only routes only
+- source commit: `cb8a3c8`
+- full commit: `cb8a3c83de7437f127da71f013224e42a9a46219`
+- artifact label: `ExtrusionWebConsole-cb8a3c8-20260621-160038-290`
+- frontend mode: `api`
+- runtime mode: `operator-ready`
+- zip created: `false`
+- zip SHA-256: not applicable because this accepted artifact is an unpacked
+  package directory, not a zip handoff
+- launcher `-CheckOnly`: passed, no backend process started
+- shortcut installer `-CheckOnly`: passed, no shortcuts written
+
+For a future package, do not reuse the source commit or artifact label above.
+Update this package metadata block from that package's `package-build-info.json`
+before requesting any mutation approval.
 
 This document is not approval that the full V2 scope is complete. It is only a
 mutation safety gate for the accepted operator package.
+
+Current V2 implementation status is tracked separately in
+`docs/165_v2_status_matrix.md`. That matrix is the current status reference;
+this document is only the mutation approval gate.
 
 ## Current Boundary
 
 Allowed without a new mutation approval:
 
-- checksum verification;
 - package metadata inspection;
+- zip checksum verification only when the accepted package was created as a
+  zip artifact;
 - launcher `-CheckOnly`;
 - shortcut installer `-CheckOnly`;
 - read-only HTTP checks such as `/`, `/upload`, `/logs`, `/settings`,
@@ -54,7 +67,7 @@ Not allowed without a new mutation approval:
 
 | Candidate | Class | Default decision | Required approval |
 | --- | --- | --- | --- |
-| Package checksum, metadata, launcher `-CheckOnly`, read-only routes | read-only | allowed | none beyond task request |
+| Package metadata, zip checksum when applicable, launcher `-CheckOnly`, read-only routes | read-only | allowed | none beyond task request |
 | Upload Preview-only against configured operational source | local-state write plus DB read/reconcile | hold | exact Preview-only approval |
 | Fixture mutation against disposable DB | fixture mutation | hold | exact fixture approval |
 | Start Upload against real local Supabase | limited real mutation | hold | fresh Preview plus exact Start Upload approval |
@@ -66,7 +79,8 @@ Not allowed without a new mutation approval:
 
 Preview-only may be considered only after all of these are true:
 
-- package checksum and metadata still match this document;
+- package metadata, and zip checksum when `zipCreated=true`, still match this
+  document;
 - launcher first-launch smoke remains passed or is rerun successfully;
 - `/api/config` confirms the active source class and target class are expected;
 - source path is confirmed outside chat by the operator or maintainer;
@@ -107,7 +121,7 @@ new observed scope.
 Required approval wording:
 
 ```text
-I approve exactly one Upload Preview-only run from package sourceCommit ebd0db5.
+I approve exactly one Upload Preview-only run from package sourceCommit cb8a3c8.
 The approved source class is <sourceClass>, expected files is <fileCount>, and expected physical rows is <= <rowLimit>.
 This approval does not approve Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, or Docker cleanup.
 ```
@@ -183,14 +197,15 @@ Required preconditions:
 - partial-overlap rows are reviewed separately and are not included in the
   Start Upload approval row count unless a later explicitly approved flow says
   otherwise;
-- package source commit and checksum still match this document;
+- package source commit, and zip checksum when `zipCreated=true`, still match
+  this document;
 - no feature gate is enabled as part of the upload approval.
 
 Required approval wording:
 
 ```text
 I approve exactly one Start Upload for preview run <previewRunId> with target rows <targetRows>.
-This approval is for package sourceCommit ebd0db5 and source class <sourceClass>.
+This approval is for package sourceCommit cb8a3c8 and source class <sourceClass>.
 This approval does not approve Retry Failed, Delete, Settings save, or feature gate enablement.
 ```
 
@@ -224,7 +239,7 @@ Required approval wording:
 
 ```text
 I approve exactly one Retry Failed for upload job <jobId> with remaining physical rows <remainingRows>.
-This approval is for package sourceCommit ebd0db5.
+This approval is for package sourceCommit cb8a3c8.
 This approval does not approve Start Upload, Delete, Settings save, or feature gate enablement.
 ```
 
@@ -259,14 +274,15 @@ Required preconditions:
 - local DB target guard is ready;
 - DELETE privilege preflight is ready;
 - no mixed-date whole-item workaround is used;
-- package source commit and checksum still match this document.
+- package source commit, and zip checksum when `zipCreated=true`, still match
+  this document.
 
 Required approval wording:
 
 ```text
 I approve exactly one hard delete for preview run <previewRunId>, already_in_db items <itemCount>, and exact keys <keyCount>.
 I understand the no-undo and rollback limitation boundaries.
-This approval is for package sourceCommit ebd0db5.
+This approval is for package sourceCommit cb8a3c8.
 This approval does not approve Start Upload, Retry Failed, Settings save, or feature gate enablement.
 ```
 
@@ -295,7 +311,8 @@ Rollback:
 
 Stop before any mutation when any of these are true:
 
-- package checksum or metadata differs from this document;
+- package metadata, or zip checksum when `zipCreated=true`, differs from this
+  document;
 - `main` and `origin/main` do not match the recorded source commit;
 - active source class is unexpected;
 - fresh read-only inventory was not run, is stale, or did not produce observed
