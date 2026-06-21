@@ -32,6 +32,7 @@ commit, push, or PR creation.
   - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
   - `docs/164_operator_data_mutation_safety_gate.md`
   - `docs/166_v2_api_mode_package_runtime_evidence.md`
+  - `docs/172_v2_lan_security_gate.md`
 - Current code evidence in `backend/`, `frontend/`, and `tests/backend/`.
 
 ## Status Definitions
@@ -52,7 +53,7 @@ commit, push, or PR creation.
 | 3 | Operator-facing date-scoped delete UI | `Deferred` | `docs/161` keeps operator-facing date-scoped delete UI unapproved. | Copy, Korean/English i18n, runbook, role matrix, feature gate, and explicit UI approval. |
 | 4 | Delete expansion | `Deferred` | `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Fixture DB evidence, limits, preflight/reconcile/audit/rollback proof, and separate approval. |
 | 5 | Operational DB delete verification | `Deferred` | `docs/164` defines exact destructive approval wording and evidence requirements. | Exact row/key scope, no-undo acknowledgement, approval record, and operational evidence plan. |
-| 6 | Multi-user LAN | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep LAN and non-loopback bind blocked. | Auth/authz/session/actor audit/concurrency/CORS/bind design and explicit rescope. |
+| 6 | Multi-user LAN | `Deferred` | `docs/172` adds a default-off startup guard and sanitized health state; `docs/159`, `docs/160`, and `docs/161` still block LAN exposure. | Auth/authz/session/actor audit/concurrency/CORS/bind implementation, tests, and explicit rescope. |
 | 7 | Grafana/Vector observability hardening | `Deferred` | `docs/159` and `docs/160` require sanitized logs/metrics and keep Grafana linked, not embedded. | Separate implementation, alerts/runbook/package checks, and validation evidence. |
 | 8 | Supabase schema attribution | `Deferred` | `docs/161` approves only sidecar phase 1 and defers Supabase schema changes. | Migration, backfill, rollback, and test design that preserves `all_metrics(timestamp, device_id)` upsert safety. |
 
@@ -71,7 +72,7 @@ commit, push, or PR creation.
 | Operator-facing date-scoped delete UI | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep date-scoped delete maintainer-only and defer operator-facing UI. | Copy, i18n, runbook, role matrix, and explicit UI approval. |
 | Delete expansion beyond current selected `already_in_db` path | `Deferred` | V2 design permits future policy work, but no broader delete policy is approved for operators. | Fixture evidence, production approval format, limits, and separate approval. |
 | Operational DB delete verification | `Deferred` | Documents require separate operational approval; no current evidence approves production destructive smoke. | Exact DB target class, row/key scope, no-undo acknowledgement, and audit evidence plan. |
-| Multi-user LAN access | `Deferred` | `docs/159`, `docs/160`, and `docs/161` block LAN, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout. | LAN security gate, auth design, role matrix, concurrency model, and explicit rescope. |
+| Multi-user LAN access | `Deferred` | Backend code now has a default-off `v2_lan_access_enabled` startup guard and sanitized health status. `docs/159`, `docs/160`, `docs/161`, and `docs/172` still block LAN exposure, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout. | LAN authentication, authorization, role matrix, actor sessions, concurrency model, and explicit rescope. |
 | Grafana/Vector observability hardening | `Deferred` | V2 requirements are documented, but no current implementation evidence shows the hardened observability release is complete. | Separate design and implementation approval; Grafana remains linked, not embedded. |
 | Supabase schema attribution | `Deferred` | Current approved path is local sidecar only; Supabase schema changes are not approved. | Separate migration, backfill, rollback, and test design. |
 | Full V2 release | `Partial` | Several foundations are complete, but LAN, date-scoped delete UI, production delete verification, observability hardening, and release gates are incomplete. | Do not describe V2 as complete until every deferred item is explicitly resolved or excluded. |

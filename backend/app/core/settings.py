@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     v2_db_delta_evidence_required: bool = True
     row_attribution_writes_enabled: bool = False
     row_attribution_hmac_key: str = ""
+    v2_lan_access_enabled: bool = False
     cors_origins: tuple[str, ...] = (
         "http://127.0.0.1:5173",
         "http://localhost:5173",
