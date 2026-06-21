@@ -24,9 +24,12 @@ def test_create_app_logs_safe_v2_feature_gate_snapshot(tmp_path: Path, monkeypat
 
     messages = "\n".join(record.getMessage() for record in caplog.records if record.name == app_main.__name__)
     assert "V2 feature gate snapshot:" in messages
-    assert "delete_expansion_enabled=False" in messages
-    assert "date_scoped_delete_ui_enabled=True" in messages
-    assert "lan_access_enabled=False" in messages
+    assert "delete_expansion_requested_enabled=False" in messages
+    assert "delete_expansion_effective_enabled=False" in messages
+    assert "date_scoped_delete_ui_requested_enabled=True" in messages
+    assert "date_scoped_delete_ui_effective_enabled=False" in messages
+    assert "lan_access_requested_enabled=False" in messages
+    assert "lan_access_effective_enabled=False" in messages
     assert "row_attribution_enabled=True" in messages
     assert "db_delta_evidence_required=True" in messages
     assert "secret-value" not in messages

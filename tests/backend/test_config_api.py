@@ -368,7 +368,10 @@ def test_config_get_exposes_v2_feature_gates_default_off_and_read_only(tmp_path:
     assert "v2DateScopedDeleteUiEnabled" not in {item["key"] for item in body["items"]}
 
 
-def test_config_get_reports_env_enabled_date_scoped_delete_gate_without_settings_item(tmp_path: Path, monkeypatch) -> None:
+def test_config_get_reports_env_requested_date_scoped_delete_gate_as_blocked_without_settings_item(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     _clear_config_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED", "true")
@@ -382,13 +385,34 @@ def test_config_get_reports_env_enabled_date_scoped_delete_gate_without_settings
     assert response.status_code == 200
     body = response.json()
     gate = body["featureGates"]["v2DateScopedDeleteUi"]
-    assert gate["enabled"] is True
+    assert gate["enabled"] is False
     assert gate["source"] == "env"
     assert gate["mutable"] is False
     assert gate["requiredRole"] == "maintainer"
-    assert gate["status"] == "enabled"
-    assert gate["reason"] == "date_scoped_delete_ui_gate_enabled"
+    assert gate["status"] == "blocked_not_implemented"
+    assert gate["reason"] == "date_scoped_delete_ui_role_model_missing"
     assert "v2DateScopedDeleteUiEnabled" not in {item["key"] for item in body["items"]}
+
+
+def test_config_get_reports_env_requested_lan_gate_as_blocked_until_lan_is_implemented(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EWC_V2_LAN_ACCESS_ENABLED", "true")
+    client, _, _ = _client(tmp_path)
+
+    try:
+        response = client.get("/api/config")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    gate = response.json()["featureGates"]["v2LanAccess"]
+    assert gate["enabled"] is False
+    assert gate["source"] == "env"
+    assert gate["mutable"] is False
+    assert gate["requiredRole"] == "admin"
+    assert gate["status"] == "blocked_not_implemented"
+    assert gate["reason"] == "lan_access_not_implemented"
 
 
 def test_config_save_cannot_enable_date_scoped_delete_gate(tmp_path: Path, monkeypatch) -> None:

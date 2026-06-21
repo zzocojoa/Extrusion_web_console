@@ -115,9 +115,12 @@ def _frontend_index_response(index_path: Path):
 def log_v2_feature_gate_snapshot(settings: Settings) -> None:
     _LOGGER.info(
         "V2 feature gate snapshot: "
-        "delete_expansion_enabled=%s "
-        "date_scoped_delete_ui_enabled=%s "
-        "lan_access_enabled=%s "
+        "delete_expansion_requested_enabled=%s "
+        "delete_expansion_effective_enabled=False "
+        "date_scoped_delete_ui_requested_enabled=%s "
+        "date_scoped_delete_ui_effective_enabled=False "
+        "lan_access_requested_enabled=%s "
+        "lan_access_effective_enabled=False "
         "row_attribution_enabled=%s "
         "db_delta_evidence_required=%s",
         settings.v2_delete_expansion_enabled,

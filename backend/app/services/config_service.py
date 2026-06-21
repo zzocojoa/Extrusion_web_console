@@ -85,20 +85,25 @@ def _feature_gate_source(env_key: str) -> str:
 def _build_feature_gate(
     *,
     key: str,
-    enabled: bool,
+    requested_enabled: bool,
+    implemented: bool,
     env_key: str,
     required_role: str | None,
     hidden_reason: str,
     enabled_reason: str,
+    blocked_reason: str,
 ) -> FeatureGateDto:
+    enabled = bool(requested_enabled and implemented)
+    status = "enabled" if enabled else "blocked_not_implemented" if requested_enabled else "hidden"
+    reason = enabled_reason if enabled else blocked_reason if requested_enabled else hidden_reason
     return FeatureGateDto(
         key=key,
         enabled=enabled,
         source=_feature_gate_source(env_key),
         mutable=False,
         required_role=required_role,
-        status="enabled" if enabled else "hidden",
-        reason=enabled_reason if enabled else hidden_reason,
+        status=status,
+        reason=reason,
     )
 
 
@@ -106,27 +111,33 @@ def _build_feature_gates(settings: Settings) -> FeatureGatesDto:
     return FeatureGatesDto(
         v2_delete_expansion=_build_feature_gate(
             key="v2_delete_expansion_enabled",
-            enabled=settings.v2_delete_expansion_enabled,
+            requested_enabled=settings.v2_delete_expansion_enabled,
+            implemented=False,
             env_key="EWC_V2_DELETE_EXPANSION_ENABLED",
             required_role="maintainer",
             hidden_reason="delete_expansion_gate_default_off",
             enabled_reason="delete_expansion_gate_enabled",
+            blocked_reason="delete_expansion_not_implemented",
         ),
         v2_date_scoped_delete_ui=_build_feature_gate(
             key="v2_date_scoped_delete_ui_enabled",
-            enabled=settings.v2_date_scoped_delete_ui_enabled,
+            requested_enabled=settings.v2_date_scoped_delete_ui_enabled,
+            implemented=False,
             env_key="EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED",
             required_role="maintainer",
             hidden_reason="date_scoped_delete_ui_gate_default_off",
             enabled_reason="date_scoped_delete_ui_gate_enabled",
+            blocked_reason="date_scoped_delete_ui_role_model_missing",
         ),
         v2_lan_access=_build_feature_gate(
             key="v2_lan_access_enabled",
-            enabled=settings.v2_lan_access_enabled,
+            requested_enabled=settings.v2_lan_access_enabled,
+            implemented=False,
             env_key="EWC_V2_LAN_ACCESS_ENABLED",
             required_role="admin",
             hidden_reason="lan_access_gate_default_off",
             enabled_reason="lan_access_gate_enabled",
+            blocked_reason="lan_access_not_implemented",
         ),
     )
 

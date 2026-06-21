@@ -115,9 +115,12 @@ operational DB mutation.
 Implementation status as of 2026-06-22: the backend exposes default-off
 read-only gate state for `v2_delete_expansion_enabled`,
 `v2_date_scoped_delete_ui_enabled`, and `v2_lan_access_enabled` through
-`GET /api/config`. These gates are intentionally not writable through ordinary
-Settings save or config JSON keys. Feature-gate enablement still requires a
-separate approval and reviewed startup/runtime configuration change.
+`GET /api/config`. Until the matching capability is implemented, env-requested
+gate enablement is reported as `enabled=false` with
+`status=blocked_not_implemented`. These gates are intentionally not writable
+through ordinary Settings save or config JSON keys. Feature-gate enablement
+still requires a separate approval, reviewed startup/runtime configuration
+change, and implemented capability wiring.
 
 ## Delete Technical Design
 

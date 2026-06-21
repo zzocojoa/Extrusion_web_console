@@ -31,6 +31,9 @@ reset/cleanup, Docker cleanup, deployment, or operational DB mutation.
   - `mutable=false`;
   - required role;
   - status and reason code.
+- Env-requested enablement for delete expansion, date-scoped delete UI, or LAN
+  remains `enabled=false` with `status=blocked_not_implemented` until the
+  matching executable capability and role model are implemented.
 - The date-scoped delete UI gate is intentionally absent from the Settings save
   allowlist and config JSON key map.
 - Settings save with `v2DateScopedDeleteUiEnabled` is rejected as an unknown
@@ -38,8 +41,9 @@ reset/cleanup, Docker cleanup, deployment, or operational DB mutation.
 - The Upload page reads `featureGates.v2DateScopedDeleteUi`.
 - When the gate is absent or disabled, the date-scoped delete panel is not
   rendered.
-- When the gate is enabled by an explicitly approved startup configuration, the
-  panel is visible only as a non-mutating review shell.
+- The Upload page renders the panel only when the effective gate is `enabled`.
+  In the current implementation, env-requested enablement is blocked before it
+  reaches the frontend, so normal operators still do not see the panel.
 - English and Korean i18n copy is present for the gated panel.
 
 ## Not Implemented
@@ -70,9 +74,10 @@ The gated date-scoped panel is deliberately non-mutating:
 - it does not enable a feature gate;
 - its only action is a disabled button with blocked-state copy.
 
-Default behavior remains normal-operator hidden because
-`v2_date_scoped_delete_ui_enabled=false`. The current shell does not perform
-role enforcement; `requiredRole` is metadata for the future executable policy.
+Default behavior remains normal-operator hidden because the effective
+`v2DateScopedDeleteUi` gate is `enabled=false`. The current shell does not
+perform role enforcement; `requiredRole` is metadata for the future executable
+policy, and env-requested enablement stays blocked until that role model exists.
 
 ## Runbook
 
