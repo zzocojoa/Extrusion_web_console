@@ -6,6 +6,12 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Added V2 Grafana/Vector observability hardening: runtime readiness now exposes
+  a sanitized Vector status class, Dashboard runtime checks show Vector
+  separately, package smoke guidance includes `/api/runtime/local-supabase`, and
+  `docs/167` records alert/runbook and rollback boundaries while keeping raw
+  log/metric/trace export, Grafana iframe embedding, LAN exposure, and cleanup
+  out of scope.
 - Added an explicit V2 completion-track item table to `docs/165`, so the eight
   remaining V2 items are each classified as `Completed` or `Deferred` without
   implying broad V2 completion.

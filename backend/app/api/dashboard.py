@@ -310,6 +310,7 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
             RuntimeCheckRow(id="supabase", label="Local Supabase", tone="muted", detail="Runtime status is not available.", last_checked_at=now),
             RuntimeCheckRow(id="edge_function", label="Edge Function", tone="muted", detail="Runtime status is not available.", last_checked_at=now),
             RuntimeCheckRow(id="grafana", label="Grafana", tone="muted", detail=settings.grafana_url, last_checked_at=now, href=settings.grafana_url),
+            RuntimeCheckRow(id="vector", label="Vector", tone="muted", detail="Runtime status is not available.", last_checked_at=now),
             RuntimeCheckRow(id="state_context", label="State Context", tone="ready" if state_context.storage_status == "present" else "muted", detail=_state_context_detail(state_context), last_checked_at=now),
         ]
     checked_at = runtime_status.checked_at.isoformat()
@@ -342,6 +343,13 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
             detail=runtime_status.grafana.detail,
             last_checked_at=checked_at,
             href=settings.grafana_url,
+        ),
+        RuntimeCheckRow(
+            id="vector",
+            label="Vector",
+            tone=_runtime_tone(runtime_status.vector.status),
+            detail=runtime_status.vector.detail,
+            last_checked_at=checked_at,
         ),
         RuntimeCheckRow(
             id="state_context",

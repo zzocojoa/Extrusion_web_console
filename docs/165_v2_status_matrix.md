@@ -32,6 +32,7 @@ commit, push, or PR creation.
   - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
   - `docs/164_operator_data_mutation_safety_gate.md`
   - `docs/166_v2_api_mode_package_runtime_evidence.md`
+  - `docs/167_v2_observability_hardening_evidence.md`
 - Current code evidence in `backend/`, `frontend/`, and `tests/backend/`.
 
 ## Status Definitions
@@ -53,7 +54,7 @@ commit, push, or PR creation.
 | 4 | Delete expansion | `Deferred` | `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Fixture DB evidence, limits, preflight/reconcile/audit/rollback proof, and separate approval. |
 | 5 | Operational DB delete verification | `Deferred` | `docs/164` defines exact destructive approval wording and evidence requirements. | Exact row/key scope, no-undo acknowledgement, approval record, and operational evidence plan. |
 | 6 | Multi-user LAN | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep LAN and non-loopback bind blocked. | Auth/authz/session/actor audit/concurrency/CORS/bind design and explicit rescope. |
-| 7 | Grafana/Vector observability hardening | `Deferred` | `docs/159` and `docs/160` require sanitized logs/metrics and keep Grafana linked, not embedded. | Separate implementation, alerts/runbook/package checks, and validation evidence. |
+| 7 | Grafana/Vector observability hardening | `Completed` | `docs/167` records sanitized Grafana/Vector status classes, Vector runtime row implementation, alert/runbook classes, package/runtime checks, and explicit raw log/metric/trace export exclusions. | Does not approve Grafana iframe embedding, raw observability payload export, LAN exposure, reset/cleanup, or operator mutation. |
 | 8 | Supabase schema attribution | `Deferred` | `docs/161` approves only sidecar phase 1 and defers Supabase schema changes. | Migration, backfill, rollback, and test design that preserves `all_metrics(timestamp, device_id)` upsert safety. |
 
 ## Matrix
@@ -72,9 +73,9 @@ commit, push, or PR creation.
 | Delete expansion beyond current selected `already_in_db` path | `Deferred` | V2 design permits future policy work, but no broader delete policy is approved for operators. | Fixture evidence, production approval format, limits, and separate approval. |
 | Operational DB delete verification | `Deferred` | Documents require separate operational approval; no current evidence approves production destructive smoke. | Exact DB target class, row/key scope, no-undo acknowledgement, and audit evidence plan. |
 | Multi-user LAN access | `Deferred` | `docs/159`, `docs/160`, and `docs/161` block LAN, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout. | LAN security gate, auth design, role matrix, concurrency model, and explicit rescope. |
-| Grafana/Vector observability hardening | `Deferred` | V2 requirements are documented, but no current implementation evidence shows the hardened observability release is complete. | Separate design and implementation approval; Grafana remains linked, not embedded. |
+| Grafana/Vector observability hardening | `Completed` | Runtime readiness exposes sanitized Grafana and Vector status classes; Dashboard and package smoke guidance include Vector; `docs/167` records alert/runbook and rollback boundaries. | Raw log/metric/trace export, Grafana iframe embedding, LAN exposure, and cleanup/reset remain excluded. |
 | Supabase schema attribution | `Deferred` | Current approved path is local sidecar only; Supabase schema changes are not approved. | Separate migration, backfill, rollback, and test design. |
-| Full V2 release | `Partial` | Several foundations are complete, but LAN, date-scoped delete UI, production delete verification, observability hardening, and release gates are incomplete. | Do not describe V2 as complete until every deferred item is explicitly resolved or excluded. |
+| Full V2 release | `Partial` | Several foundations are complete, but LAN, date-scoped delete UI, production delete verification, and release gates are incomplete. | Do not describe V2 as complete until every deferred item is explicitly resolved or excluded. |
 | Cloud Supabase migration | `Excluded` | `docs/159` and README keep Cloud Supabase out of scope. | Later approved rescope only. |
 | Default legacy upload state import | `Excluded` | `docs/159` and README keep default legacy state import out of scope. | Later approved rescope only. |
 | Grafana iframe embedding | `Excluded` | `docs/159`, `docs/160`, and README keep Grafana separate and linked. | Later approved rescope only. |
@@ -86,9 +87,11 @@ The current safe statement is:
 ```text
 V2 is not complete. Current main has completed the local evidence foundation,
 upload readiness hardening, and API-mode package runtime smoke for a candidate
-handoff package. LAN, operator-facing date-scoped delete UI, operational DB
-delete verification, Grafana/Vector hardening, and the overall V2 release remain
-deferred or excluded until separate approvals resolve them.
+handoff package. Current V2 completion-track work also includes sanitized
+Grafana/Vector observability status classes and runbook evidence. LAN,
+operator-facing date-scoped delete UI, operational DB delete verification, and
+the overall V2 release remain deferred or excluded until separate approvals
+resolve them.
 ```
 
 Do not say:
@@ -108,6 +111,7 @@ This is a document-only status matrix. Before commit, rollback is:
 ```powershell
 git restore CHANGELOG.md docs\165_v2_status_matrix.md
 Remove-Item -LiteralPath docs\166_v2_api_mode_package_runtime_evidence.md
+Remove-Item -LiteralPath docs\167_v2_observability_hardening_evidence.md
 ```
 
 After commit, revert the document commit. No operational evidence, local state

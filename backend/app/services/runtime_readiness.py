@@ -80,6 +80,7 @@ class RuntimeReadinessService:
         studio = port_status("Supabase Studio", self.settings.local_supabase_studio_port)
         edge = probe_edge_route(self.settings.local_runtime_edge_url, timeout_seconds=2.0)
         grafana = self._probe_grafana()
+        vector = self._probe_vector(containers)
 
         missing_required = [container.name for container in containers if container.required and not container.exists]
         if active_operation is not None:
@@ -111,10 +112,10 @@ class RuntimeReadinessService:
             overall = RuntimeOverallStatus.blocked
             reason_code = "core_runtime_unreachable"
             reason_text = "Supabase API, DB, Studio, or Edge is not reachable."
-        elif grafana.status != RuntimeServiceStatus.ready:
+        elif grafana.status != RuntimeServiceStatus.ready or vector.status != RuntimeServiceStatus.ready:
             overall = RuntimeOverallStatus.attention
             reason_code = "non_core_runtime_attention"
-            reason_text = "Core runtime is reachable, but non-core Grafana needs attention."
+            reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
         else:
             overall = RuntimeOverallStatus.ready
             reason_code = "runtime_ready"
@@ -135,6 +136,7 @@ class RuntimeReadinessService:
             studio=studio,
             edge_runtime=edge,
             grafana=grafana,
+            vector=vector,
             containers=containers,
             config=self._config_items(),
             state_context=build_state_context(self.settings).to_api(),
@@ -219,6 +221,23 @@ class RuntimeReadinessService:
             return RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.unreachable, detail=str(exc), url=url)
         status = RuntimeServiceStatus.ready if response.status_code < 500 else RuntimeServiceStatus.unhealthy
         return RuntimeProbeStatus(name="Grafana", status=status, detail=f"HTTP {response.status_code}", url=url)
+
+    def _probe_vector(self, containers: list[RuntimeContainerStatus]) -> RuntimeProbeStatus:
+        suffix = f"_vector_{self.settings.local_supabase_project_id}"
+        vector = next((container for container in containers if container.name.endswith(suffix)), None)
+        if vector is None:
+            return RuntimeProbeStatus(name="Vector", status=RuntimeServiceStatus.unknown, detail="Vector container status class is unknown.")
+        detail_by_status = {
+            RuntimeServiceStatus.ready: "Vector container is running.",
+            RuntimeServiceStatus.stopped: "Vector container status class is stopped.",
+            RuntimeServiceStatus.unhealthy: "Vector container status class is unhealthy.",
+            RuntimeServiceStatus.missing: "Vector container status class is missing.",
+        }
+        return RuntimeProbeStatus(
+            name="Vector",
+            status=vector.status,
+            detail=detail_by_status.get(vector.status, f"Vector container status class is {vector.status.value}."),
+        )
 
     def _config_items(self) -> list[RuntimeConfigItem]:
         return [

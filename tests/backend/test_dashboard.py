@@ -33,6 +33,7 @@ def ready_runtime(
     studio: RuntimeServiceStatus = RuntimeServiceStatus.ready,
     edge: RuntimeServiceStatus = RuntimeServiceStatus.ready,
     grafana: RuntimeServiceStatus = RuntimeServiceStatus.ready,
+    vector: RuntimeServiceStatus = RuntimeServiceStatus.ready,
 ) -> RuntimeStatusResponse:
     checked_at = datetime(2026, 6, 13, 9, 0, tzinfo=timezone.utc)
     core_ready = (
@@ -42,8 +43,8 @@ def ready_runtime(
         and edge == RuntimeServiceStatus.ready
     )
     return RuntimeStatusResponse(
-        overall_status=RuntimeOverallStatus.ready if core_ready and grafana == RuntimeServiceStatus.ready else RuntimeOverallStatus.blocked if not core_ready else RuntimeOverallStatus.attention,
-        reason_code="runtime_ready" if core_ready and grafana == RuntimeServiceStatus.ready else "core_runtime_unreachable" if not core_ready else "non_core_runtime_attention",
+        overall_status=RuntimeOverallStatus.ready if core_ready and grafana == RuntimeServiceStatus.ready and vector == RuntimeServiceStatus.ready else RuntimeOverallStatus.blocked if not core_ready else RuntimeOverallStatus.attention,
+        reason_code="runtime_ready" if core_ready and grafana == RuntimeServiceStatus.ready and vector == RuntimeServiceStatus.ready else "core_runtime_unreachable" if not core_ready else "non_core_runtime_attention",
         reason_text="Runtime ready." if core_ready else "Core runtime unreachable.",
         checked_at=checked_at,
         project_path=str(tmp_path / "runtime"),
@@ -56,6 +57,11 @@ def ready_runtime(
         studio=RuntimePortStatus(name="Supabase Studio", port=55323, status=studio, detail="ready"),
         edge_runtime=RuntimeProbeStatus(name="Edge Function", status=edge, detail="ready"),
         grafana=RuntimeProbeStatus(name="Grafana", status=grafana, detail="HTTP 200"),
+        vector=RuntimeProbeStatus(
+            name="Vector",
+            status=vector,
+            detail="Vector container is running." if vector == RuntimeServiceStatus.ready else f"Vector container status class is {vector.value}.",
+        ),
         containers=[],
         config=[],
         active_operation=None,
@@ -201,6 +207,26 @@ def test_dashboard_keeps_grafana_failure_as_non_core_caveat(tmp_path: Path) -> N
     assert grafana_chip["tone"] == "blocked"
     assert runtime_warning["tone"] == "ready"
     assert runtime_warning["count"] == 0
+
+
+def test_dashboard_exposes_vector_as_non_core_observability_check(tmp_path: Path) -> None:
+    state_path = tmp_path / "missing-state.db"
+    app.dependency_overrides[get_settings] = lambda: Settings(state_db_path=str(state_path))
+    app.dependency_overrides[get_dashboard_runtime_status] = lambda: ready_runtime(tmp_path, vector=RuntimeServiceStatus.stopped)
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/dashboard")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    vector_row = next(item for item in data["runtimeChecks"] if item["id"] == "vector")
+    runtime_warning = next(item for item in data["warningQueue"] if item["id"] == "supabase_unreachable")
+    assert vector_row["tone"] == "muted"
+    assert vector_row["detail"] == "Vector container status class is stopped."
+    assert runtime_warning["tone"] == "ready"
 
 
 def test_dashboard_summary_endpoint_uses_same_real_state_contract(tmp_path: Path) -> None:

@@ -149,6 +149,13 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
       lastCheckedAt: checkedAt,
     },
     {
+      id: "vector",
+      label: t("runtime.services.vector"),
+      tone: toneForService(runtimeStatus.vector.status),
+      detail: runtimeServiceDetail(runtimeStatus.vector, t),
+      lastCheckedAt: checkedAt,
+    },
+    {
       id: "containers",
       label: t("runtime.services.containers"),
       tone: toneForContainers(runtimeStatus.containers),

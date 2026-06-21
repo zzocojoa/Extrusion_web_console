@@ -98,7 +98,7 @@ export interface RecentJobRow {
 }
 
 export interface RuntimeCheckRow {
-  id: "supabase" | "database" | "edge_function" | "wsl_storage" | "grafana" | "state_store" | "state_context" | "containers";
+  id: "supabase" | "database" | "edge_function" | "wsl_storage" | "grafana" | "vector" | "state_store" | "state_context" | "containers";
   label: string;
   tone: StatusTone;
   detail: string;

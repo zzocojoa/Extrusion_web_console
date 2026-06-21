@@ -365,6 +365,34 @@ def test_status_keeps_grafana_unreachable_as_non_core_attention(
     assert status.reason_code == "non_core_runtime_attention"
 
 
+def test_status_exposes_vector_container_as_non_core_observability_attention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings(tmp_path)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="test"),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.runtime_readiness.probe_edge_route",
+        lambda url, *, timeout_seconds=2.0: RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url),
+    )
+    docker_ps_output = all_containers_output(
+        running=True,
+        status_overrides={"supabase_vector_Extrusion_web_console": "Exited (0)"},
+    )
+    service = RuntimeReadinessService(app_settings, FakeRunner(docker_ps_output=docker_ps_output))
+
+    status = service.check_status()
+
+    assert status.overall_status == RuntimeOverallStatus.attention
+    assert status.reason_code == "non_core_runtime_attention"
+    assert status.vector.status == RuntimeServiceStatus.stopped
+    assert status.vector.detail == "Vector container status class is stopped."
+
+
 def test_stop_with_docker_unavailable_fails_instead_of_noop_success(tmp_path: Path) -> None:
     app_settings = settings(tmp_path)
     runtime = RuntimeRepository(app_settings.state_db_path)
@@ -588,6 +616,7 @@ def runtime_status(
         studio=RuntimePortStatus(name="Supabase Studio", port=55323, status=studio, detail="test"),
         edge_runtime=RuntimeProbeStatus(name="Edge Function", status=edge, detail="test"),
         grafana=RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.unreachable, detail="test"),
+        vector=RuntimeProbeStatus(name="Vector", status=RuntimeServiceStatus.ready, detail="test"),
         containers=[
             container_status(name, running=docker == RuntimeServiceStatus.ready)
             for name in required_supabase_containers("Extrusion_web_console")
@@ -609,6 +638,10 @@ def container_status(name: str, *, running: bool):
     )
 
 
-def all_containers_output(*, running: bool) -> str:
+def all_containers_output(*, running: bool, status_overrides: dict[str, str] | None = None) -> str:
     status = "Up 10 seconds" if running else "Exited (0)"
-    return "\n".join(f'{{"Names":"{name}","Status":"{status}"}}' for name in required_supabase_containers("Extrusion_web_console"))
+    overrides = status_overrides or {}
+    return "\n".join(
+        f'{{"Names":"{name}","Status":"{overrides.get(name, status)}"}}'
+        for name in required_supabase_containers("Extrusion_web_console")
+    )
