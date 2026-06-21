@@ -54,7 +54,7 @@ commit, push, or PR creation.
 | 5 | Operational DB delete verification | `Deferred` | `docs/164` defines exact destructive approval wording and evidence requirements. | Exact row/key scope, no-undo acknowledgement, approval record, and operational evidence plan. |
 | 6 | Multi-user LAN | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep LAN and non-loopback bind blocked. | Auth/authz/session/actor audit/concurrency/CORS/bind design and explicit rescope. |
 | 7 | Grafana/Vector observability hardening | `Deferred` | `docs/159` and `docs/160` require sanitized logs/metrics and keep Grafana linked, not embedded. | Separate implementation, alerts/runbook/package checks, and validation evidence. |
-| 8 | Supabase schema attribution | `Deferred` | `docs/161` approves only sidecar phase 1 and defers Supabase schema changes. | Migration, backfill, rollback, and test design that preserves `all_metrics(timestamp, device_id)` upsert safety. |
+| 8 | Supabase schema attribution | `Deferred` | `docs/169` defines the required migration, backfill, rollback, and test design gate; `docs/161` still approves only sidecar phase 1. | Later written approval is required before any Supabase migration, backfill, fixture mutation, or operational DB access. |
 
 ## Matrix
 
@@ -73,7 +73,7 @@ commit, push, or PR creation.
 | Operational DB delete verification | `Deferred` | Documents require separate operational approval; no current evidence approves production destructive smoke. | Exact DB target class, row/key scope, no-undo acknowledgement, and audit evidence plan. |
 | Multi-user LAN access | `Deferred` | `docs/159`, `docs/160`, and `docs/161` block LAN, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout. | LAN security gate, auth design, role matrix, concurrency model, and explicit rescope. |
 | Grafana/Vector observability hardening | `Deferred` | V2 requirements are documented, but no current implementation evidence shows the hardened observability release is complete. | Separate design and implementation approval; Grafana remains linked, not embedded. |
-| Supabase schema attribution | `Deferred` | Current approved path is local sidecar only; Supabase schema changes are not approved. | Separate migration, backfill, rollback, and test design. |
+| Supabase schema attribution | `Deferred` | Current approved path is local sidecar only; `docs/169` defines the minimum design gate for a future Supabase attribution table without changing `all_metrics(timestamp, device_id)`. | Later written approval before migration/backfill/fixture mutation/operational DB access. |
 | Full V2 release | `Partial` | Several foundations are complete, but LAN, date-scoped delete UI, production delete verification, observability hardening, and release gates are incomplete. | Do not describe V2 as complete until every deferred item is explicitly resolved or excluded. |
 | Cloud Supabase migration | `Excluded` | `docs/159` and README keep Cloud Supabase out of scope. | Later approved rescope only. |
 | Default legacy upload state import | `Excluded` | `docs/159` and README keep default legacy state import out of scope. | Later approved rescope only. |
