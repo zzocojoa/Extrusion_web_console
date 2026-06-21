@@ -40,7 +40,7 @@ the target branch after the corresponding PR merge.
 | Item | Candidate status | PR | Evidence | Merge note |
 | ---: | --- | --- | --- | --- |
 | 1 | `Deferred` | #200 `docs: define v2 operational upload verification gate` | `docs/173_v2_operational_upload_verification_gate.md` defines fresh inventory, Preview-only, Start Upload, Retry Failed, safe evidence, stop conditions, and rollback boundaries. `$review` clean. | Does not run or approve operational upload. |
-| 2 | `Completed` | #193 `docs: record v2 package runtime evidence` | `docs/166_v2_api_mode_package_runtime_evidence.md` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke. | Does not replace the accepted mutation package in `docs/164_operator_data_mutation_safety_gate.md`. |
+| 2 | `Completed` | #193 `docs: record v2 package runtime evidence` | `docs/166_v2_api_mode_package_runtime_evidence.md` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, read-only HTTP smoke, and item 2 `$review` result. | Does not replace the accepted mutation package in `docs/164_operator_data_mutation_safety_gate.md`. |
 | 3 | `Deferred` | #195 `[codex] add v2 date-scoped delete review gate` | `docs/168_v2_date_scoped_delete_ui_gate.md` records the default-off, non-mutating review shell and evidence; executable operator-facing date-scoped delete remains blocked. `$review` clean. | Gate enablement, preflight/start, role enforcement, fixture evidence, and rollback remain separate. |
 | 4 | `Deferred` | #197 `docs: define v2 delete expansion fixture gate` | `docs/170_v2_delete_expansion_fixture_gate.md` defines fixture-first delete expansion gate, limits, reconcile, audit, rollback, and production block boundaries. `$review` clean. | No fixture or production mutation approved. |
 | 5 | `Deferred` | #198 `docs: define v2 operational delete verification gate` | `docs/171_v2_operational_delete_verification_gate.md` defines immutable or append-only approval storage, exact scope, no-undo acknowledgement, safe evidence report, and blocked rollback semantics. `$review` clean. | No operational DB delete approved. |
@@ -170,6 +170,9 @@ Validation from `codex/v2-completion-stack-rehearsal` at commit `f98524e`:
   `uvicorn ... --host 0.0.0.0` starts remain out of scope.
 - Final Codex read-only adversarial review after the LAN boundary correction:
   no actionable findings.
+- Follow-up Codex read-only review for item 2 package evidence in `docs/166`
+  and `docs/165`: no actionable findings. The review checked overclaim risk,
+  raw path or secret leakage, rollback coverage, and safety boundaries.
 
 This read-only smoke does not approve Upload Preview, Start Upload, Retry
 Failed, Delete, Settings save, feature-gate enablement, LAN exposure, deploy,
