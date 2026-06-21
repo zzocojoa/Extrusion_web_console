@@ -32,6 +32,7 @@ commit, push, or PR creation.
   - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
   - `docs/164_operator_data_mutation_safety_gate.md`
   - `docs/166_v2_api_mode_package_runtime_evidence.md`
+  - `docs/173_v2_operational_upload_verification_gate.md`
 - Current code evidence in `backend/`, `frontend/`, and `tests/backend/`.
 
 ## Status Definitions
@@ -47,7 +48,7 @@ commit, push, or PR creation.
 
 | # | Item | Current status | Evidence | Remaining gate |
 | ---: | --- | --- | --- | --- |
-| 1 | Operational upload verification | `Deferred` | `docs/164` defines fresh inventory, Preview-only, Start Upload, and Retry Failed approval gates. | Exact operational approval and fresh evidence are required before any Preview-only, Start Upload, or Retry Failed run. |
+| 1 | Operational upload verification | `Deferred` | `docs/173` defines the V2 evidence record and completion interpretation; `docs/164` keeps the exact approval wording for fresh inventory, Preview-only, Start Upload, and Retry Failed. | Exact operational approval and fresh evidence are required before any Preview-only, Start Upload, or Retry Failed run. |
 | 2 | API-mode package full runtime smoke and zip handoff | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke. | Does not approve operator mutation or replace the accepted mutation package in `docs/164`. |
 | 3 | Operator-facing date-scoped delete UI | `Deferred` | `docs/161` keeps operator-facing date-scoped delete UI unapproved. | Copy, Korean/English i18n, runbook, role matrix, feature gate, and explicit UI approval. |
 | 4 | Delete expansion | `Deferred` | `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Fixture DB evidence, limits, preflight/reconcile/audit/rollback proof, and separate approval. |
@@ -106,8 +107,9 @@ mutation from the accepted `cb8a3c8` package unless
 This is a document-only status matrix. Before commit, rollback is:
 
 ```powershell
-git restore CHANGELOG.md docs\165_v2_status_matrix.md
-Remove-Item -LiteralPath docs\166_v2_api_mode_package_runtime_evidence.md
+git restore --staged --worktree CHANGELOG.md docs\165_v2_status_matrix.md
+git rm --cached --ignore-unmatch docs\173_v2_operational_upload_verification_gate.md
+Remove-Item -LiteralPath docs\173_v2_operational_upload_verification_gate.md
 ```
 
 After commit, revert the document commit. No operational evidence, local state
