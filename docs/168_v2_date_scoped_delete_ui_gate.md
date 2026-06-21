@@ -130,26 +130,26 @@ Results:
 - `tests\backend\test_config_api.py`: `22 passed, 2 warnings`
 - i18n JSON parse: `i18n json ok`
 - frontend typecheck: passed
-- full backend tests: `346 passed, 18 warnings`
+- full backend tests: `347 passed, 18 warnings`
 - frontend API build: passed
 - package assembly without zip: passed
 - package assembly with zip: passed
 
 Package metadata:
 
-- `packageLabel`: `ExtrusionWebConsole-f6e051e-20260621-182738-697`
-- `sourceCommit`: `f6e051e`
+- `packageLabel`: `ExtrusionWebConsole-df0f5fe-20260621-183850-869`
+- `sourceCommit`: `df0f5fe`
 - `frontendMode`: `api`
 - `runtimeMode`: `operator-ready`
 - `zipCreated`: `true`
 - SHA-256:
-  `ab8916e6aef2c6b5d8b39cc86a7263421bad21c5b9e9a691a1c39528253f81d4`
+  `48e715a7cdf1c48bfd87c2a9395c2c467858bf6546777eb92672470f388433d6`
 
 Package smoke:
 
 - `launcher\start_web_console.ps1 -CheckOnly`: passed
 - `launcher\install_shortcuts.ps1 -CheckOnly`: passed
-- read-only HTTP smoke on isolated loopback port `18080`: `/`, `/upload`,
+- read-only HTTP smoke on isolated loopback port `18081`: `/`, `/upload`,
   `/logs`, `/settings`, `/api/health`, `/api/config`, and
   `/api/audit?limit=1` all returned HTTP `200`
 - The smoke command discarded response bodies and stopped the launcher-owned
