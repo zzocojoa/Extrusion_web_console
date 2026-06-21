@@ -129,6 +129,18 @@ Validation from `codex/v2-completion-stack-rehearsal` at commit `a4d55e4`:
 - Generated package shortcut installer
   `.\launcher\install_shortcuts.ps1 -CheckOnly`: passed; no shortcuts were
   written.
+- Generated package read-only HTTP smoke with
+  `.\launcher\start_web_console.ps1 -NoBrowser -RequireFreshBackend -BackendPort 8010`:
+  passed. The smoke called `/`, `/upload`, `/logs`, `/settings`,
+  `/api/health`, `/api/config`, `/api/audit?limit=1`, and
+  `/api/runtime/local-supabase`. Every route returned HTTP 200.
+- Sanitized runtime smoke fields from `/api/runtime/local-supabase`:
+  - `overallStatus`: `attention`
+  - `grafana.status`: `unreachable`
+  - `vector.status`: `stopped`
+  - `vector.detail`: `Vector container status class is stopped.`
+- The smoke backend was stopped after the run and port 8010 was confirmed
+  closed.
 - Package metadata:
   - `packageLabel`: `ExtrusionWebConsole-a4d55e4-20260621-222940-214`
   - `sourceCommit`: `a4d55e4`
@@ -140,9 +152,9 @@ Validation from `codex/v2-completion-stack-rehearsal` at commit `a4d55e4`:
 - Codex read-only adversarial review against
   `origin/codex/v2-completion-track`: no actionable findings.
 
-Read-only HTTP smoke from the generated package was not run in this rehearsal
-update and remains a separate validation step before describing the stack as
-ready to land.
+This read-only smoke does not approve Upload Preview, Start Upload, Retry
+Failed, Delete, Settings save, feature-gate enablement, LAN exposure, deploy,
+Supabase reset/cleanup, Docker cleanup, or any operational DB mutation.
 
 ## Landing Interpretation
 
