@@ -135,6 +135,13 @@ export const mockDashboardData: DashboardResponse = {
       href: "http://localhost:3001",
     },
     {
+      id: "vector",
+      label: "Vector",
+      tone: "ready",
+      detail: "Vector container is running.",
+      lastCheckedAt: "2026-06-01T09:18:00+09:00",
+    },
+    {
       id: "state_store",
       label: "State Store",
       tone: "ready",

@@ -64,6 +64,7 @@ export interface RuntimeStatusResponse {
   studio: RuntimePortStatus;
   edgeRuntime: RuntimeProbeStatus;
   grafana: RuntimeProbeStatus;
+  vector: RuntimeProbeStatus;
   containers: RuntimeContainerStatus[];
   config: RuntimeConfigItem[];
   stateContext: StateContext;

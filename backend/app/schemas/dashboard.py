@@ -89,7 +89,7 @@ class RecentJobRow(ApiModel):
 
 
 class RuntimeCheckRow(ApiModel):
-    id: Literal["supabase", "database", "edge_function", "wsl_storage", "grafana", "state_store", "state_context"]
+    id: Literal["supabase", "database", "edge_function", "wsl_storage", "grafana", "vector", "state_store", "state_context"]
     label: str
     tone: StatusTone
     detail: str

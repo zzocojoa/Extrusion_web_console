@@ -223,6 +223,10 @@ def test_manifest_json_contract_is_valid() -> None:
     assert "*.csv" in manifest["excludeDenylist"]
     assert "*.dump" in manifest["excludeDenylist"]
     assert "*.zip" in manifest["excludeDenylist"]
+    assert (
+        "GET /api/runtime/local-supabase and record only overallStatus, grafana.status, vector.status, and vector.detail"
+        in manifest["smokeChecks"]
+    )
     assert "*.sha256" in manifest["excludeDenylist"]
     assert "windows-absolute-path-marker" in manifest["redactionChecks"]
     assert "operational-filename-family-marker" in manifest["redactionChecks"]
