@@ -13,7 +13,15 @@ from backend.app.core.state_context import build_state_context
 from backend.app.core.target_class import build_upload_target_preflight
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.schemas.audit import AuditResult
-from backend.app.schemas.config import ConfigItemDto, ConfigResponse, ConfigSaveRequest, ConfigSaveResponse, TargetClassPreflightDto
+from backend.app.schemas.config import (
+    ConfigItemDto,
+    ConfigResponse,
+    ConfigSaveRequest,
+    ConfigSaveResponse,
+    FeatureGateDto,
+    FeatureGatesDto,
+    TargetClassPreflightDto,
+)
 
 
 @dataclass(frozen=True)
@@ -68,6 +76,59 @@ def _dotenv_env_keys() -> set[str]:
 
 def _has_env_override(env_key: str) -> bool:
     return env_key in os.environ or env_key in _dotenv_env_keys()
+
+
+def _feature_gate_source(env_key: str) -> str:
+    return "env" if _has_env_override(env_key) else "default"
+
+
+def _build_feature_gate(
+    *,
+    key: str,
+    enabled: bool,
+    env_key: str,
+    required_role: str | None,
+    hidden_reason: str,
+    enabled_reason: str,
+) -> FeatureGateDto:
+    return FeatureGateDto(
+        key=key,
+        enabled=enabled,
+        source=_feature_gate_source(env_key),
+        mutable=False,
+        required_role=required_role,
+        status="enabled" if enabled else "hidden",
+        reason=enabled_reason if enabled else hidden_reason,
+    )
+
+
+def _build_feature_gates(settings: Settings) -> FeatureGatesDto:
+    return FeatureGatesDto(
+        v2_delete_expansion=_build_feature_gate(
+            key="v2_delete_expansion_enabled",
+            enabled=settings.v2_delete_expansion_enabled,
+            env_key="EWC_V2_DELETE_EXPANSION_ENABLED",
+            required_role="maintainer",
+            hidden_reason="delete_expansion_gate_default_off",
+            enabled_reason="delete_expansion_gate_enabled",
+        ),
+        v2_date_scoped_delete_ui=_build_feature_gate(
+            key="v2_date_scoped_delete_ui_enabled",
+            enabled=settings.v2_date_scoped_delete_ui_enabled,
+            env_key="EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED",
+            required_role="maintainer",
+            hidden_reason="date_scoped_delete_ui_gate_default_off",
+            enabled_reason="date_scoped_delete_ui_gate_enabled",
+        ),
+        v2_lan_access=_build_feature_gate(
+            key="v2_lan_access_enabled",
+            enabled=settings.v2_lan_access_enabled,
+            env_key="EWC_V2_LAN_ACCESS_ENABLED",
+            required_role="admin",
+            hidden_reason="lan_access_gate_default_off",
+            enabled_reason="lan_access_gate_enabled",
+        ),
+    )
 
 
 class ConfigSaveError(Exception):
@@ -133,6 +194,7 @@ class ConfigService:
         return ConfigResponse(
             config_file_path=str(self.config_path),
             items=items,
+            feature_gates=_build_feature_gates(self.settings),
             target_classes=TargetClassPreflightDto.model_validate(build_upload_target_preflight(self.settings).to_api()),
             state_context=build_state_context(self.settings).to_api(),
         )

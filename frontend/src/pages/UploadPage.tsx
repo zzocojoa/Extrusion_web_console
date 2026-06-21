@@ -4,7 +4,7 @@ import { AlertTriangle, Ban, Database, FileSearch, Pause, Play, RotateCcw, Searc
 import { useTranslation } from "react-i18next";
 
 import { isLocalTokenApiError } from "../api/client";
-import { fetchConfig, type ConfigResponse } from "../api/config";
+import { fetchConfig, type ConfigResponse, type FeatureGate } from "../api/config";
 import {
   createDeletePreflight,
   fetchLatestDeleteJob,
@@ -370,6 +370,7 @@ export function UploadPage() {
     },
     [configQuery.data, endDate, rangeMode, startDate],
   );
+  const dateScopedDeleteGate = configQuery.data?.featureGates?.v2DateScopedDeleteUi ?? null;
 
   const latestQuery = useQuery({
     queryKey: ["upload-preview", "latest", queryParams],
@@ -752,6 +753,7 @@ export function UploadPage() {
           cancelling={cancelMutation.isPending}
           approvalScope={previewApprovalScope}
           approvalScopeReady={!API_MODE || Boolean(configQuery.data)}
+          dateScopedDeleteGate={dateScopedDeleteGate}
           onRangeModeChange={setRangeMode}
           onStartDateChange={setStartDate}
           onEndDateChange={setEndDate}
@@ -819,6 +821,7 @@ interface PreviewTabProps {
   cancelling: boolean;
   approvalScope: PreviewApprovalScope;
   approvalScopeReady: boolean;
+  dateScopedDeleteGate: FeatureGate | null;
   canStartUpload: boolean;
   startUploadPending: boolean;
   startUploadError: Error | null;
@@ -1052,6 +1055,14 @@ function PreviewTab(props: PreviewTabProps) {
         onClear={props.onClearDeleteSelection}
         onReconcile={props.onReconcileDelete}
       />
+      {props.dateScopedDeleteGate?.enabled ? (
+        <DateScopedDeleteGatePanel
+          gate={props.dateScopedDeleteGate}
+          rangeMode={props.rangeMode}
+          startDate={props.startDate}
+          endDate={props.endDate}
+        />
+      ) : null}
 
       <div className="panel">
         <div className="preview-table-toolbar">
@@ -1112,6 +1123,55 @@ function PreviewTab(props: PreviewTabProps) {
           onConfirm={props.onStartDelete}
         />
       ) : null}
+    </section>
+  );
+}
+
+function DateScopedDeleteGatePanel({
+  gate,
+  rangeMode,
+  startDate,
+  endDate,
+}: {
+  gate: FeatureGate;
+  rangeMode: PreviewRangeMode;
+  startDate: string;
+  endDate: string;
+}) {
+  const { t } = useTranslation();
+  const rangeLabel =
+    rangeMode === "custom"
+      ? t("upload.delete.dateScoped.customRange", {
+          startDate: startDate || t("upload.delete.dateScoped.dateNotSet"),
+          endDate: endDate || t("upload.delete.dateScoped.dateNotSet"),
+        })
+      : t(`upload.range.${rangeMode === "last_2_days" ? "last2Days" : rangeMode}`);
+  const requiredRole = gate.requiredRole ?? "maintainer";
+
+  return (
+    <section className="panel date-scoped-delete-panel" aria-label={t("upload.delete.dateScoped.title")}>
+      <div className="date-scoped-delete-panel__summary">
+        <div>
+          <span className="panel-eyebrow">{t("upload.delete.dateScoped.eyebrow")}</span>
+          <strong>{t("upload.delete.dateScoped.title")}</strong>
+        </div>
+        <StatusBadge tone="blocked" label={t("upload.delete.dateScoped.badge")} />
+      </div>
+      <div className="date-scoped-delete-panel__meta" role="status">
+        <span>{t("upload.delete.dateScoped.range", { range: rangeLabel })}</span>
+        <span>{t("upload.delete.dateScoped.gate", { source: gate.source, role: requiredRole })}</span>
+      </div>
+      <div className="date-scoped-delete-panel__blocked" role="alert">
+        <AlertTriangle size={18} aria-hidden="true" />
+        <div>
+          <strong>{t("upload.delete.dateScoped.blockedTitle")}</strong>
+          <p>{t("upload.delete.dateScoped.blockedDetail")}</p>
+        </div>
+      </div>
+      <button className="button button--secondary" type="button" disabled title={t("upload.delete.dateScoped.disabledTitle")}>
+        <Trash2 size={16} aria-hidden="true" />
+        {t("upload.delete.dateScoped.disabledAction")}
+      </button>
     </section>
   );
 }

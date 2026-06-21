@@ -31,9 +31,26 @@ export interface TargetClassPreflight {
   reason: string;
 }
 
+export interface FeatureGate {
+  key: string;
+  enabled: boolean;
+  source: ConfigSource;
+  mutable: boolean;
+  requiredRole: string | null;
+  status: "enabled" | "hidden" | string;
+  reason: string;
+}
+
+export interface FeatureGates {
+  v2DeleteExpansion: FeatureGate;
+  v2DateScopedDeleteUi: FeatureGate;
+  v2LanAccess: FeatureGate;
+}
+
 export interface ConfigResponse {
   configFilePath: string;
   items: ConfigItem[];
+  featureGates?: FeatureGates;
   targetClasses?: TargetClassPreflight;
   stateContext: StateContext;
 }

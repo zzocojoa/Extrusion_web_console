@@ -99,9 +99,10 @@ V2 must ship behind independent gates.
 | `v2_row_attribution_enabled` | `false` | Enables attribution ledger writes after schema review. |
 | `v2_db_delta_evidence_required` | `true` for new V2 mutations | Requires before/after DB delta evidence where measurable. |
 
-Gate values must come from the same config precedence model as other operator
-settings, but dangerous gates must not be silently enabled by a stale config.
-The backend startup path must log safe gate state without printing secrets.
+Gate values must come from a reviewed startup/configuration path and be visible
+through safe config output, but dangerous gates must not be silently enabled by
+a stale ordinary Settings save. The backend startup path must log safe gate
+state without printing secrets.
 
 Implementation status as of 2026-06-19: the backend has a default-off
 `v2_row_attribution_enabled` gate, keeps the legacy
@@ -110,6 +111,13 @@ an explicit `row_attribution_hmac_key` before gate-on delete evidence can write
 row attribution. The gate is not enabled by default and this document still does
 not approve LAN exposure, delete UI expansion, Supabase schema changes, or
 operational DB mutation.
+
+Implementation status as of 2026-06-22: the backend exposes default-off
+read-only gate state for `v2_delete_expansion_enabled`,
+`v2_date_scoped_delete_ui_enabled`, and `v2_lan_access_enabled` through
+`GET /api/config`. These gates are intentionally not writable through ordinary
+Settings save or config JSON keys. Feature-gate enablement still requires a
+separate approval and reviewed startup/runtime configuration change.
 
 ## Delete Technical Design
 

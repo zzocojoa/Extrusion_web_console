@@ -32,6 +32,7 @@ commit, push, or PR creation.
   - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
   - `docs/164_operator_data_mutation_safety_gate.md`
   - `docs/166_v2_api_mode_package_runtime_evidence.md`
+  - `docs/168_v2_date_scoped_delete_ui_gate.md`
 - Current code evidence in `backend/`, `frontend/`, and `tests/backend/`.
 
 ## Status Definitions
@@ -49,7 +50,7 @@ commit, push, or PR creation.
 | ---: | --- | --- | --- | --- |
 | 1 | Operational upload verification | `Deferred` | `docs/164` defines fresh inventory, Preview-only, Start Upload, and Retry Failed approval gates. | Exact operational approval and fresh evidence are required before any Preview-only, Start Upload, or Retry Failed run. |
 | 2 | API-mode package full runtime smoke and zip handoff | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke. | Does not approve operator mutation or replace the accepted mutation package in `docs/164`. |
-| 3 | Operator-facing date-scoped delete UI | `Deferred` | `docs/161` keeps operator-facing date-scoped delete UI unapproved. | Copy, Korean/English i18n, runbook, role matrix, feature gate, and explicit UI approval. |
+| 3 | Operator-facing date-scoped delete UI | `Completed` | `docs/168` records the default-off read-only feature gate, Korean/English copy, runbook boundary, and non-mutating Upload page shell. | Executable date-scoped delete remains blocked until role matrix, policy/preflight, fixture evidence, production approval record, rollback evidence, and separate gate enablement are approved. |
 | 4 | Delete expansion | `Deferred` | `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Fixture DB evidence, limits, preflight/reconcile/audit/rollback proof, and separate approval. |
 | 5 | Operational DB delete verification | `Deferred` | `docs/164` defines exact destructive approval wording and evidence requirements. | Exact row/key scope, no-undo acknowledgement, approval record, and operational evidence plan. |
 | 6 | Multi-user LAN | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep LAN and non-loopback bind blocked. | Auth/authz/session/actor audit/concurrency/CORS/bind design and explicit rescope. |
@@ -68,7 +69,7 @@ commit, push, or PR creation.
 | Upload readiness hardening | `Completed` | `main` includes Start/Retry readiness hardening for local DB target class, Supabase API/DB/Edge readiness, Edge auth key class, and target-only row approval counts. | Does not approve Start Upload or Retry Failed. |
 | API-mode operator package validation | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 handoff metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke for candidate package `ExtrusionWebConsole-eedac29-20260621-165853-560`. | This does not approve operator mutation and does not replace the `docs/164` accepted mutation package unless that gate is separately updated. |
 | Operator data mutation gate | `Completed` | `docs/164` records current package metadata and exact approval templates for Preview-only, Start Upload, Retry Failed, and Delete. | Each mutation still requires its own exact approval at execution time. |
-| Operator-facing date-scoped delete UI | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep date-scoped delete maintainer-only and defer operator-facing UI. | Copy, i18n, runbook, role matrix, and explicit UI approval. |
+| Operator-facing date-scoped delete UI | `Completed` | `docs/168` plus backend/frontend code provide a default-off read-only gate and non-mutating Upload page shell; default settings render no normal-operator panel. | Actual date-scoped delete preflight/start, role enforcement, limits, fixture evidence, production approval record, rollback evidence, and gate enablement remain separate blocked work. |
 | Delete expansion beyond current selected `already_in_db` path | `Deferred` | V2 design permits future policy work, but no broader delete policy is approved for operators. | Fixture evidence, production approval format, limits, and separate approval. |
 | Operational DB delete verification | `Deferred` | Documents require separate operational approval; no current evidence approves production destructive smoke. | Exact DB target class, row/key scope, no-undo acknowledgement, and audit evidence plan. |
 | Multi-user LAN access | `Deferred` | `docs/159`, `docs/160`, and `docs/161` block LAN, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout. | LAN security gate, auth design, role matrix, concurrency model, and explicit rescope. |
@@ -85,10 +86,11 @@ The current safe statement is:
 
 ```text
 V2 is not complete. Current main has completed the local evidence foundation,
-upload readiness hardening, and API-mode package runtime smoke for a candidate
-handoff package. LAN, operator-facing date-scoped delete UI, operational DB
-delete verification, Grafana/Vector hardening, and the overall V2 release remain
-deferred or excluded until separate approvals resolve them.
+upload readiness hardening, API-mode package runtime smoke for a candidate
+handoff package, and the default-off non-mutating date-scoped delete UI shell.
+LAN, executable date-scoped delete, operational DB delete verification,
+Grafana/Vector hardening, and the overall V2 release remain deferred or
+excluded until separate approvals resolve them.
 ```
 
 Do not say:
@@ -103,13 +105,13 @@ mutation from the accepted `cb8a3c8` package unless
 
 ## Rollback
 
-This is a document-only status matrix. Before commit, rollback is:
+For this date-scoped delete UI gate status update, before commit rollback is:
 
 ```powershell
-git restore CHANGELOG.md docs\165_v2_status_matrix.md
-Remove-Item -LiteralPath docs\166_v2_api_mode_package_runtime_evidence.md
+git restore CHANGELOG.md docs\160_v2_delete_lan_audit_rollback_technical_design.md docs\161_v2_open_decisions_review.md docs\165_v2_status_matrix.md
+Remove-Item -LiteralPath docs\168_v2_date_scoped_delete_ui_gate.md
 ```
 
-After commit, revert the document commit. No operational evidence, local state
-DB, Supabase data, Docker state, package output, or LAN configuration should be
-deleted as rollback for this document.
+After commit, revert the date-scoped delete UI gate commit. No operational
+evidence, local state DB, Supabase data, Docker state, package output, or LAN
+configuration should be deleted as rollback for this document.
