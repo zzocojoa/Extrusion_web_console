@@ -12,6 +12,10 @@ All notable changes to Extrusion Web Console are documented here.
   `docs/167` records alert/runbook and rollback boundaries while keeping raw
   log/metric/trace export, Grafana iframe embedding, LAN exposure, and cleanup
   out of scope.
+- Added `docs/169_v2_supabase_schema_attribution_design.md`, documenting the
+  deferred Supabase attribution migration/backfill/rollback/test gate while
+  preserving the approved local sidecar path and the
+  `all_metrics(timestamp, device_id)` upsert contract.
 - Added an explicit V2 completion-track item table to `docs/165`, so the eight
   remaining V2 items are each classified as `Completed` or `Deferred` without
   implying broad V2 completion.
