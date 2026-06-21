@@ -30,6 +30,10 @@ All notable changes to Extrusion Web Console are documented here.
   auth/session/concurrency support exists. Request middleware also blocks
   non-loopback clients and request server hosts, and `/api/health` reports
   sanitized LAN gate state without approving LAN exposure.
+- Added a V2 operational upload verification gate in `docs/173`, keeping
+  Preview-only, Start Upload, and Retry Failed deferred until fresh inventory,
+  exact approvals, safe evidence records, and rollback/failure handling are
+  available.
 - Added an explicit V2 completion-track item table to `docs/165`, so the eight
   remaining V2 items are each classified as `Completed` or `Deferred` without
   implying broad V2 completion.
