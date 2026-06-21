@@ -31,9 +31,10 @@ reset/cleanup, Docker cleanup, deployment, or operational DB mutation.
   - `mutable=false`;
   - required role;
   - status and reason code.
-- Env-requested enablement for delete expansion, date-scoped delete UI, or LAN
-  remains `enabled=false` with `status=blocked_not_implemented` until the
-  matching executable capability and role model are implemented.
+- Env-requested enablement for the date-scoped delete UI gate exposes only the
+  non-mutating review shell. Env-requested enablement for delete expansion or
+  LAN remains `enabled=false` with `status=blocked_not_implemented` until the
+  matching executable capability is implemented.
 - The date-scoped delete UI gate is intentionally absent from the Settings save
   allowlist and config JSON key map.
 - Settings save with `v2DateScopedDeleteUiEnabled` is rejected as an unknown
@@ -41,9 +42,10 @@ reset/cleanup, Docker cleanup, deployment, or operational DB mutation.
 - The Upload page reads `featureGates.v2DateScopedDeleteUi`.
 - When the gate is absent or disabled, the date-scoped delete panel is not
   rendered.
-- The Upload page renders the panel only when the effective gate is `enabled`.
-  In the current implementation, env-requested enablement is blocked before it
-  reaches the frontend, so normal operators still do not see the panel.
+- The Upload page renders the panel only when the effective date-scoped delete
+  UI gate is `enabled`. Default settings keep it hidden from normal operators.
+  Enabling this review shell still requires separate feature-gate approval and
+  reviewed startup/runtime configuration.
 - English and Korean i18n copy is present for the gated panel.
 
 ## Not Implemented
@@ -74,10 +76,12 @@ The gated date-scoped panel is deliberately non-mutating:
 - it does not enable a feature gate;
 - its only action is a disabled button with blocked-state copy.
 
-Default behavior remains normal-operator hidden because the effective
-`v2DateScopedDeleteUi` gate is `enabled=false`. The current shell does not
-perform role enforcement; `requiredRole` is metadata for the future executable
-policy, and env-requested enablement stays blocked until that role model exists.
+With default settings, normal operators do not see the panel because the
+effective `v2DateScopedDeleteUi` gate is `enabled=false`. With separate
+feature-gate approval and reviewed startup/runtime configuration, the gate can
+expose only this non-mutating review shell. The current shell does not perform
+role enforcement; `requiredRole` is metadata for the future executable policy.
+Gate-on review shell visibility is not approval for executable delete.
 
 ## Runbook
 

@@ -368,7 +368,7 @@ def test_config_get_exposes_v2_feature_gates_default_off_and_read_only(tmp_path:
     assert "v2DateScopedDeleteUiEnabled" not in {item["key"] for item in body["items"]}
 
 
-def test_config_get_reports_env_requested_date_scoped_delete_gate_as_blocked_without_settings_item(
+def test_config_get_reports_env_enabled_date_scoped_delete_review_shell_without_settings_item(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -385,12 +385,12 @@ def test_config_get_reports_env_requested_date_scoped_delete_gate_as_blocked_wit
     assert response.status_code == 200
     body = response.json()
     gate = body["featureGates"]["v2DateScopedDeleteUi"]
-    assert gate["enabled"] is False
+    assert gate["enabled"] is True
     assert gate["source"] == "env"
     assert gate["mutable"] is False
     assert gate["requiredRole"] == "maintainer"
-    assert gate["status"] == "blocked_not_implemented"
-    assert gate["reason"] == "date_scoped_delete_ui_role_model_missing"
+    assert gate["status"] == "enabled"
+    assert gate["reason"] == "date_scoped_delete_ui_gate_enabled"
     assert "v2DateScopedDeleteUiEnabled" not in {item["key"] for item in body["items"]}
 
 

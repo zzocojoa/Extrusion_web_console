@@ -118,12 +118,13 @@ def log_v2_feature_gate_snapshot(settings: Settings) -> None:
         "delete_expansion_requested_enabled=%s "
         "delete_expansion_effective_enabled=False "
         "date_scoped_delete_ui_requested_enabled=%s "
-        "date_scoped_delete_ui_effective_enabled=False "
+        "date_scoped_delete_ui_effective_enabled=%s "
         "lan_access_requested_enabled=%s "
         "lan_access_effective_enabled=False "
         "row_attribution_enabled=%s "
         "db_delta_evidence_required=%s",
         settings.v2_delete_expansion_enabled,
+        settings.v2_date_scoped_delete_ui_enabled,
         settings.v2_date_scoped_delete_ui_enabled,
         settings.v2_lan_access_enabled,
         settings.v2_row_attribution_enabled,

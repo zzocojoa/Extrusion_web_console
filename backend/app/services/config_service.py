@@ -122,7 +122,7 @@ def _build_feature_gates(settings: Settings) -> FeatureGatesDto:
         v2_date_scoped_delete_ui=_build_feature_gate(
             key="v2_date_scoped_delete_ui_enabled",
             requested_enabled=settings.v2_date_scoped_delete_ui_enabled,
-            implemented=False,
+            implemented=True,
             env_key="EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED",
             required_role="maintainer",
             hidden_reason="date_scoped_delete_ui_gate_default_off",
