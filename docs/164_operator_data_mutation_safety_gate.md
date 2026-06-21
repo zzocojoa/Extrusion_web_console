@@ -270,7 +270,8 @@ Required preconditions:
 - ready delete preflight;
 - exact selected item count;
 - exact key count;
-- rollback readiness is true or rollback limitation is explicitly acknowledged;
+- rollback readiness is true and rollback limitation is explicitly
+  acknowledged; acknowledgement does not replace rollback readiness;
 - local DB target guard is ready;
 - DELETE privilege preflight is ready;
 - no mixed-date whole-item workaround is used;
