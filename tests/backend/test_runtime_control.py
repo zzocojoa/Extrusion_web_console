@@ -9,6 +9,7 @@ from backend.app.db.preview_repository import PreviewRepository, iso_now
 from backend.app.db.runtime_repository import RuntimeRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.runtime import (
+    RuntimeContainerStatus,
     RuntimeOperationKind,
     RuntimeOverallStatus,
     RuntimePortStatus,
@@ -482,6 +483,59 @@ def test_start_noops_when_runtime_core_is_already_ready(tmp_path: Path) -> None:
     assert row["status"] == "succeeded"
     assert ("supabase", "start") not in service.runner.commands  # type: ignore[attr-defined]
     assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
+
+
+def test_start_ignores_stopped_non_required_vector_when_core_runtime_ready(tmp_path: Path) -> None:
+    app_settings = settings(tmp_path)
+    vector_name = f"supabase_vector_{app_settings.local_supabase_project_id}"
+    status = runtime_status(
+        api=RuntimeServiceStatus.ready,
+        db=RuntimeServiceStatus.ready,
+        studio=RuntimeServiceStatus.ready,
+        edge=RuntimeServiceStatus.ready,
+    )
+    status.overall_status = RuntimeOverallStatus.attention
+    status.reason_code = "non_core_runtime_attention"
+    status.reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+    status.vector = RuntimeProbeStatus(
+        name="Vector",
+        status=RuntimeServiceStatus.stopped,
+        detail="Vector container status class is stopped.",
+    )
+    status.containers = [
+        RuntimeContainerStatus(
+            name=container.name,
+            required=False,
+            exists=True,
+            running=False,
+            status=RuntimeServiceStatus.stopped,
+            status_text="Exited (0)",
+        )
+        if container.name == vector_name
+        else container
+        for container in status.containers
+    ]
+    runtime = RuntimeRepository(app_settings.state_db_path)
+    service = RuntimeControlService(
+        settings=app_settings,
+        runtime_repository=runtime,
+        preview_repository=PreviewRepository(app_settings.state_db_path),
+        upload_repository=UploadJobRepository(app_settings.state_db_path),
+        runner=FakeRunner(docker_ps_output=all_containers_output(running=True)),
+    )
+    service.readiness = StaticReadiness(status, required_ready=True)  # type: ignore[assignment]
+    operation_id = service.queue_operation(RuntimeOperationKind.start)
+
+    service.run_operation(operation_id)
+
+    row = runtime.get_operation(operation_id)
+    assert row is not None
+    assert row["status"] == "succeeded"
+    assert ("docker", "start", vector_name) not in service.runner.commands  # type: ignore[attr-defined]
+    assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
+    audit = latest_audit(runtime)
+    assert audit["action"] == "runtime.start"
+    assert audit["result"] == "success"
 
 
 @pytest.mark.parametrize("failed_probe", ["api", "db", "studio", "edge"])

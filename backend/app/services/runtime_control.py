@@ -114,7 +114,7 @@ class RuntimeControlService:
             self._finish_blocked(operation_id, "runtime.start", error_code, message, data={"missingContainers": missing})
             return
 
-        stopped = [container.name for container in containers if container.exists and not container.running]
+        stopped = [container.name for container in containers if container.required and container.exists and not container.running]
         if not stopped and runtime_core_ready(status):
             self.runtime_repository.append_event(operation_id, event_type="runtime.start.noop", level="info", message="Local Supabase runtime is already ready.")
             self._finish_success(operation_id, "runtime.start")
