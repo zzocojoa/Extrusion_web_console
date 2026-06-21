@@ -223,6 +223,21 @@ and remains `CLEAN`.
    completion commit or rerun the verification above from `main` before
    describing V2 as a completion candidate.
 
+## Required Approval Wording
+
+To merge review-ready integration PR #202 into `codex/v2-completion-track`, the
+approval must be explicit and narrow:
+
+```text
+I approve merging PR #202 into codex/v2-completion-track.
+This approval is only for the review-ready V2 completion stack integration rehearsal at head d0a57bd.
+This approval does not approve merging codex/v2-completion-track to main, Upload Preview, Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, schema migration, deploy, or operational DB mutation.
+```
+
+If the PR head changes, replace `d0a57bd` with the new reviewed head and rerun
+`git diff --check`, package validation evidence review, and `$review` before
+using the approval.
+
 ## Stop Conditions
 
 Stop and do not claim V2 completion when any of these are true:
