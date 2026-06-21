@@ -6,6 +6,9 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Added a V2 status matrix and refreshed the operator data mutation gate to the
+  current `cb8a3c8` API-mode package metadata, so completed evidence foundation
+  work is not described as a complete V2 release.
 - Hardened Upload Start/Retry readiness gates: Settings save now clears cached
   backend settings for the next request, Start/Retry fail closed when local DB
   target class, Supabase API/DB/Edge readiness, or Edge auth key class is not

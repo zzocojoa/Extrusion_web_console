@@ -539,6 +539,8 @@ Browser QA has been run against:
 - `docs/161_v2_open_decisions_review.md`
 - `docs/162_v2_sidecar_row_attribution_ledger_design.md`
 - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
+- `docs/164_operator_data_mutation_safety_gate.md`
+- `docs/165_v2_status_matrix.md`
 
 ## Reference Project
 
