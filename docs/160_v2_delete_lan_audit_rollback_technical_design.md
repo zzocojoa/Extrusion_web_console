@@ -94,7 +94,7 @@ V2 must ship behind independent gates.
 | Gate | Default | Scope |
 | --- | --- | --- |
 | `v2_delete_expansion_enabled` | `false` | Allows approved delete policies beyond selected `already_in_db`. |
-| `v2_date_scoped_delete_ui_enabled` | `false` | Allows maintainer-only UI for date-scoped delete after copy, i18n, and runbook approval. |
+| `v2_date_scoped_delete_ui_enabled` | `false` | Allows only the non-mutating date-scoped delete review shell until role enforcement, executable policy, and runbook approval are complete. |
 | `v2_lan_access_enabled` | `false` | Allows non-loopback bind only after LAN Security Gate approval. |
 | `v2_row_attribution_enabled` | `false` | Enables attribution ledger writes after schema review. |
 | `v2_db_delta_evidence_required` | `true` for new V2 mutations | Requires before/after DB delta evidence where measurable. |

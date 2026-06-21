@@ -112,10 +112,27 @@ def _frontend_index_response(index_path: Path):
     )
 
 
+def log_v2_feature_gate_snapshot(settings: Settings) -> None:
+    _LOGGER.info(
+        "V2 feature gate snapshot: "
+        "delete_expansion_enabled=%s "
+        "date_scoped_delete_ui_enabled=%s "
+        "lan_access_enabled=%s "
+        "row_attribution_enabled=%s "
+        "db_delta_evidence_required=%s",
+        settings.v2_delete_expansion_enabled,
+        settings.v2_date_scoped_delete_ui_enabled,
+        settings.v2_lan_access_enabled,
+        settings.v2_row_attribution_enabled,
+        settings.v2_db_delta_evidence_required,
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     if not local_token_enforcement_enabled(settings):
         _LOGGER.warning("Local token enforcement is disabled by explicit mode or missing runtime token.")
+    log_v2_feature_gate_snapshot(settings)
     AuditRepository(settings.state_db_path).bootstrap()
     DbDeltaEvidenceRepository(settings.state_db_path).bootstrap()
     RowAttributionRepository(

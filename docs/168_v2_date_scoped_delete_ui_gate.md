@@ -2,7 +2,7 @@
 
 Date: 2026-06-22 Asia/Seoul
 
-Status: `default_off_non_mutating_ui_shell`
+Status: `default_off_non_mutating_review_shell`
 
 ## Purpose
 
@@ -39,7 +39,7 @@ reset/cleanup, Docker cleanup, deployment, or operational DB mutation.
 - When the gate is absent or disabled, the date-scoped delete panel is not
   rendered.
 - When the gate is enabled by an explicitly approved startup configuration, the
-  panel is visible as a maintainer-only, non-mutating shell.
+  panel is visible only as a non-mutating review shell.
 - English and Korean i18n copy is present for the gated panel.
 
 ## Not Implemented
@@ -71,7 +71,8 @@ The gated date-scoped panel is deliberately non-mutating:
 - its only action is a disabled button with blocked-state copy.
 
 Default behavior remains normal-operator hidden because
-`v2_date_scoped_delete_ui_enabled=false`.
+`v2_date_scoped_delete_ui_enabled=false`. The current shell does not perform
+role enforcement; `requiredRole` is metadata for the future executable policy.
 
 ## Runbook
 
