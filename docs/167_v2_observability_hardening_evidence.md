@@ -69,28 +69,28 @@ Rollback and recovery:
 Targeted validation:
 
 - `.\.venv\Scripts\python -m pytest tests\backend\test_runtime_control.py tests\backend\test_runtime_api.py tests\backend\test_dashboard.py tests\backend\test_operator_package_assembly.py`:
-  `67 passed, 2 warnings`
+  `68 passed, 2 warnings`
 - `cd frontend; npm run typecheck`: passed
 - `git diff --check`: passed
 
 Full validation:
 
-- `.\.venv\Scripts\python -m pytest tests\backend`: `347 passed, 18 warnings`
+- `.\.venv\Scripts\python -m pytest tests\backend`: `348 passed, 18 warnings`
 - `cd frontend; npm run build:api`: passed, `frontend build mode: api`
 - `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`:
-  passed
+  passed; package rebuilt from current branch `HEAD`
 - `launcher/start_web_console.ps1 -CheckOnly`: passed; no backend process was
   started
 - `launcher/install_shortcuts.ps1 -CheckOnly`: passed; no shortcuts were written
 
 Candidate package metadata:
 
-- `packageLabel`: `ExtrusionWebConsole-cf4d173-20260621-180717-488`
-- `sourceCommit`: `cf4d173`
+- `packageLabel`: `ExtrusionWebConsole-041e6ee-20260621-200102-587`
+- `sourceCommit`: `041e6ee`
 - `frontendMode`: `api`
 - `runtimeMode`: `operator-ready`
 - `zipCreated`: `true`
-- `zipSha256`: `3f8d0036c009d28d0b6c499485f81bce1594f2eb2db28b021dcb7fe8c9195742`
+- `zipSha256`: `e5464be7626ef2a6c7edf97c39def4aa6e4d3baf60c80c9c00c6b7b8bb1249d4`
 - `packageAgentEntries`: `0`
 - `zipAgentEntries`: `0`
 
@@ -110,7 +110,8 @@ Read-only package HTTP smoke:
 | `/api/openapi.json` | `404` | pass, operator docs disabled |
 | `POST /api/upload/preview` without local token | `403` | pass, rejected before mutation |
 
-Independent `$review` result must be recorded in PR validation before merge.
+Independent `$review` rerun after the Vector start-gate and Dashboard tone fixes:
+`No actionable findings.`
 
 ## Security Notes
 
