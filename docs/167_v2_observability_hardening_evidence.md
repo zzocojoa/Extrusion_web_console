@@ -69,13 +69,13 @@ Rollback and recovery:
 Targeted validation:
 
 - `.\.venv\Scripts\python -m pytest tests\backend\test_runtime_control.py tests\backend\test_runtime_api.py tests\backend\test_dashboard.py tests\backend\test_operator_package_assembly.py`:
-  `65 passed, 2 warnings`
+  `66 passed, 2 warnings`
 - `cd frontend; npm run typecheck`: passed
 - `git diff --check`: passed
 
 Full validation:
 
-- `.\.venv\Scripts\python -m pytest tests\backend`: `345 passed, 18 warnings`
+- `.\.venv\Scripts\python -m pytest tests\backend`: `346 passed, 18 warnings`
 - `cd frontend; npm run build:api`: passed, `frontend build mode: api`
 - `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`:
   passed
@@ -85,12 +85,14 @@ Full validation:
 
 Candidate package metadata:
 
-- `packageLabel`: `ExtrusionWebConsole-d8bec66-20260621-171955-309`
-- `sourceCommit`: `d8bec66`
+- `packageLabel`: `ExtrusionWebConsole-40c94c7-20260621-173100-945`
+- `sourceCommit`: `40c94c7`
 - `frontendMode`: `api`
 - `runtimeMode`: `operator-ready`
 - `zipCreated`: `true`
-- `zipSha256`: `02720c4677d243aaf3630b7131d662b72a5dc95bccd3164daba0494e136e71a9`
+- `zipSha256`: `afebf9fba6a4aeae87cfbddcf7a13d6f0f9212906268cf3a85bea4e4bae90b5a`
+- `packageAgentEntries`: `0`
+- `zipAgentEntries`: `0`
 
 Read-only package HTTP smoke:
 
@@ -103,11 +105,12 @@ Read-only package HTTP smoke:
 | `/api/health` | `200` | pass |
 | `/api/config` | `200` | pass |
 | `/api/audit?limit=1` | `200` | pass |
-| `/api/runtime/local-supabase` | `200`; recorded only `overallStatus`, `grafana.status`, `vector.status=stopped`, and `vector.detail` | pass, sanitized status fields only |
+| `/api/runtime/local-supabase` | `200`; recorded only `overallStatus=attention`, `grafana.status=unreachable`, `vector.status=stopped`, and `vector.detail="Vector container status class is stopped."` | pass, sanitized status fields only |
 | `/api/docs` | `404` | pass, operator docs disabled |
 | `/api/openapi.json` | `404` | pass, operator docs disabled |
+| `POST /api/upload/preview` without local token | `403` | pass, rejected before mutation |
 
-`$review` remains required before merge.
+Independent `$review` result must be recorded in PR validation before merge.
 
 ## Security Notes
 
