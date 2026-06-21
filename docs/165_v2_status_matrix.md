@@ -43,6 +43,19 @@ commit, push, or PR creation.
 | `Deferred` | Not implemented or not approved for execution until a later decision. |
 | `Excluded` | Intentionally outside V2 unless a later approved document changes scope. |
 
+## V2 Completion Track Items
+
+| # | Item | Current status | Evidence | Remaining gate |
+| ---: | --- | --- | --- | --- |
+| 1 | Operational upload verification | `Deferred` | `docs/164` defines fresh inventory, Preview-only, Start Upload, and Retry Failed approval gates. | Exact operational approval and fresh evidence are required before any Preview-only, Start Upload, or Retry Failed run. |
+| 2 | API-mode package full runtime smoke and zip handoff | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke. | Does not approve operator mutation or replace the accepted mutation package in `docs/164`. |
+| 3 | Operator-facing date-scoped delete UI | `Deferred` | `docs/161` keeps operator-facing date-scoped delete UI unapproved. | Copy, Korean/English i18n, runbook, role matrix, feature gate, and explicit UI approval. |
+| 4 | Delete expansion | `Deferred` | `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Fixture DB evidence, limits, preflight/reconcile/audit/rollback proof, and separate approval. |
+| 5 | Operational DB delete verification | `Deferred` | `docs/164` defines exact destructive approval wording and evidence requirements. | Exact row/key scope, no-undo acknowledgement, approval record, and operational evidence plan. |
+| 6 | Multi-user LAN | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep LAN and non-loopback bind blocked. | Auth/authz/session/actor audit/concurrency/CORS/bind design and explicit rescope. |
+| 7 | Grafana/Vector observability hardening | `Deferred` | `docs/159` and `docs/160` require sanitized logs/metrics and keep Grafana linked, not embedded. | Separate implementation, alerts/runbook/package checks, and validation evidence. |
+| 8 | Supabase schema attribution | `Deferred` | `docs/161` approves only sidecar phase 1 and defers Supabase schema changes. | Migration, backfill, rollback, and test design that preserves `all_metrics(timestamp, device_id)` upsert safety. |
+
 ## Matrix
 
 | V2 area | Current status | Current main evidence | Remaining gate |

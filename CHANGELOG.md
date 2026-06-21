@@ -6,6 +6,9 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Added an explicit V2 completion-track item table to `docs/165`, so the eight
+  remaining V2 items are each classified as `Completed` or `Deferred` without
+  implying broad V2 completion.
 - Marked API-mode operator package validation as completed for the V2 candidate
   package `ExtrusionWebConsole-eedac29-20260621-165853-560`, with zip SHA-256,
   launcher/shortcut `-CheckOnly`, and read-only HTTP smoke evidence recorded in
