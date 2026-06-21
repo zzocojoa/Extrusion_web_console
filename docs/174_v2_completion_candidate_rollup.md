@@ -112,6 +112,33 @@ Conflict resolution preserved all referenced evidence documents from
 kept items 2 and 7 as `Completed`, and kept the default-off LAN security guard
 separate from full Multi-user LAN approval.
 
+## Local Rehearsal Validation
+
+Validation from `codex/v2-completion-stack-rehearsal` at commit `a4d55e4`:
+
+- `git diff --check`: passed.
+- Conflict marker scan across `CHANGELOG.md`, `README.md`, `docs`, `backend`,
+  `frontend`, `launcher`, `tests`, and `packaging`: no conflict markers found.
+- `.\.venv\Scripts\python -m pytest tests\backend`: `360 passed, 18 warnings`.
+- `cd frontend; npm run typecheck; npm run build:api`: passed.
+- `.\packaging\assemble_operator_package.ps1 -FrontendMode api`: passed.
+- `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`:
+  passed.
+- Package metadata:
+  - `packageLabel`: `ExtrusionWebConsole-a4d55e4-20260621-222940-214`
+  - `sourceCommit`: `a4d55e4`
+  - `runtimeMode`: `operator-ready`
+  - `frontendMode`: `api`
+  - `zipCreated`: `true`
+  - `zipSha256`:
+    `7bfbeecd6482be1d92aa4a459d569f16409894ee4501920721f0a21d4c4cc254`
+- Codex read-only adversarial review against
+  `origin/codex/v2-completion-track`: no actionable findings.
+
+Package launcher `-CheckOnly`, shortcut `-CheckOnly`, and read-only HTTP smoke
+from the generated package were not run in this rehearsal update and remain a
+separate validation step before describing the stack as ready to land.
+
 ## Landing Interpretation
 
 Do not merge this stack as a claim that V2 is fully operational.
