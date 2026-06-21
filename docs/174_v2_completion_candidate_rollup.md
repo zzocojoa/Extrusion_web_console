@@ -2,7 +2,7 @@
 
 Date: 2026-06-22 Asia/Seoul
 
-Status: `candidate_pr_stack_not_merged`
+Status: `candidate_stack_rehearsal_review_ready`
 
 ## Purpose
 
@@ -26,6 +26,8 @@ merged branch.
 - Current rollup branch: `codex/v2-completion-candidate-rollup`
 - Open PRs reviewed for this rollup: #193 through #200
 - Current rollup PR: #201
+- Current integration rehearsal PR: #202
+  `codex/v2-completion-stack-rehearsal` at `95265a1`
 - GitHub checks: no checks reported on the reviewed branches at rollup time
 
 ## Item Map
@@ -60,6 +62,7 @@ At rollup time:
 | #199 | `codex/v2-completion-track` | `codex/v2-lan-security-gate` | open | no | `CLEAN` |
 | #200 | `codex/v2-completion-track` | `codex/v2-operational-upload-verification-gate` | open | no | `CLEAN` |
 | #201 | `codex/v2-completion-track` | `codex/v2-completion-candidate-rollup` | open | no | `CLEAN` |
+| #202 | `codex/v2-completion-track` | `codex/v2-completion-stack-rehearsal` | open | no | `CLEAN` |
 
 ## Pre-Merge Rehearsal
 
@@ -111,6 +114,11 @@ Conflict resolution preserved all referenced evidence documents from
 `docs/166` through `docs/173`, kept items 1, 3, 4, 5, 6, and 8 as `Deferred`,
 kept items 2 and 7 as `Completed`, and kept the default-off LAN security guard
 separate from full Multi-user LAN approval.
+
+PR #202 now exposes that rehearsal as a review-ready integration PR against
+`codex/v2-completion-track`. It is an integration vehicle for the reviewed PR
+heads and the follow-up runtime observability fixes; it is not approval to run
+operator mutations or a claim that V2 is fully operational.
 
 ## Local Rehearsal Validation
 
@@ -178,7 +186,10 @@ Safe landing interpretation after review:
 
 No merge is approved by this document.
 
-If the user approves landing later, use one deliberate sequence:
+If the user approves landing later, use one deliberate sequence. Either merge
+the reviewed item PRs in order and then refresh #201, or merge review-ready
+integration PR #202 after confirming it still points at the exact validated head
+and remains `CLEAN`.
 
 1. Keep #193 open. Do not merge #193 into `main` at this step.
 2. Merge item PRs #194 through #200 into `codex/v2-completion-track`.
@@ -192,6 +203,9 @@ If the user approves landing later, use one deliberate sequence:
    conflicts explicitly, rerun `git diff --check` and `$review`, and merge #201
    into `codex/v2-completion-track` only if the rollup still matches the
    refreshed stack.
+   If using #202 instead, this step is replaced by reviewing the #202 merge
+   commit set and confirming the validation recorded above still matches the
+   PR head.
 4. Confirm #193 now points at the refreshed `codex/v2-completion-track` that
    includes the reviewed #194 through #201 results.
 5. Rerun verification from the updated completion branch:
