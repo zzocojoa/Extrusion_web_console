@@ -25,6 +25,7 @@ merged branch.
   `b6f11ad26c51440341f2663480b33e079abb4202`
 - Current rollup branch: `codex/v2-completion-candidate-rollup`
 - Open PRs reviewed for this rollup: #193 through #200
+- Current rollup PR: #201
 - GitHub checks: no checks reported on the reviewed branches at rollup time
 
 ## Item Map
@@ -58,6 +59,31 @@ At rollup time:
 | #198 | `codex/v2-completion-track` | `codex/v2-operational-delete-verification-gate` | open | no | `CLEAN` |
 | #199 | `codex/v2-completion-track` | `codex/v2-lan-security-gate` | open | no | `CLEAN` |
 | #200 | `codex/v2-completion-track` | `codex/v2-operational-upload-verification-gate` | open | no | `CLEAN` |
+| #201 | `codex/v2-completion-track` | `codex/v2-completion-candidate-rollup` | open | no | `CLEAN` |
+
+## Pre-Merge Rehearsal
+
+Read-only/synthetic merge rehearsal on 2026-06-22 Asia/Seoul did not update
+branch refs or the working tree.
+
+- #194 into `origin/codex/v2-completion-track`:
+  `git merge-tree --write-tree --messages origin/codex/v2-completion-track
+  origin/codex/v2-observability-hardening` exited 0 and produced synthetic
+  tree `dcfe709eb3af0e66cca19ccab730e55fb976f015`.
+- #195 into the synthetic tree after #194:
+  `git merge-tree --write-tree --messages
+  --merge-base=origin/codex/v2-completion-track
+  dcfe709eb3af0e66cca19ccab730e55fb976f015
+  origin/codex/v2-date-delete-ui` exited 1 with a content conflict in
+  `docs/165_v2_status_matrix.md`.
+- In that same rehearsal step, `CHANGELOG.md`, `frontend/src/i18n/locales/en.json`,
+  and `frontend/src/i18n/locales/ko.json` auto-merged, but the run stopped at
+  the first cumulative conflict.
+
+Interpretation: individual PR `CLEAN` status is not enough. The first known
+cumulative conflict is `docs/165_v2_status_matrix.md` after #194 then #195, and
+the full stack must not be described as integrated until every cumulative
+conflict is resolved and reviewed explicitly.
 
 ## Landing Interpretation
 
@@ -85,10 +111,17 @@ If the user approves landing later, use one deliberate sequence:
 2. Merge item PRs #194 through #200 into `codex/v2-completion-track`.
    Resolve every conflicted file explicitly. `docs/165_v2_status_matrix.md`
    and `CHANGELOG.md` are expected conflict points, not an exhaustive conflict
-   list. Record the final conflict review result before continuing.
-3. Update or rebase #193 only after #194 through #200 are merged into
-   `codex/v2-completion-track`.
-4. Rerun verification from the updated completion branch:
+   list. The pre-merge rehearsal already found a `docs/165_v2_status_matrix.md`
+   conflict after #194 then #195. Record the final conflict review result
+   before continuing.
+3. After #194 through #200 are merged, update or rebase #201 onto the refreshed
+   `codex/v2-completion-track`, resolve `CHANGELOG.md` and rollup-document
+   conflicts explicitly, rerun `git diff --check` and `$review`, and merge #201
+   into `codex/v2-completion-track` only if the rollup still matches the
+   refreshed stack.
+4. Confirm #193 now points at the refreshed `codex/v2-completion-track` that
+   includes the reviewed #194 through #201 results.
+5. Rerun verification from the updated completion branch:
    - `git diff --check`
    - `.\.venv\Scripts\python -m pytest tests\backend`
    - `cd frontend; npm run typecheck; npm run build:api`
@@ -97,9 +130,9 @@ If the user approves landing later, use one deliberate sequence:
    - package launcher/shortcut `-CheckOnly`
    - read-only package HTTP smoke
    - `$review`
-5. Only after the merged completion branch passes, merge the refreshed
+6. Only after the merged completion branch passes, merge the refreshed
    completion branch to `main`.
-6. After the `main` merge, either prove that `main` HEAD is the exact tested
+7. After the `main` merge, either prove that `main` HEAD is the exact tested
    completion commit or rerun the verification above from `main` before
    describing V2 as a completion candidate.
 
@@ -108,6 +141,8 @@ If the user approves landing later, use one deliberate sequence:
 Stop and do not claim V2 completion when any of these are true:
 
 - any PR above is not merged or is merged without conflict review;
+- the known cumulative `docs/165_v2_status_matrix.md` conflict is not resolved
+  and reviewed explicitly;
 - any referenced evidence file is absent from the target branch after its
   corresponding PR merge;
 - `docs/165_v2_status_matrix.md` classifications do not match this rollup:
