@@ -17,8 +17,8 @@ commit, push, or PR creation.
 
 ## Evidence Reviewed
 
-- `main` and `origin/main`: `cb8a3c83de7437f127da71f013224e42a9a46219`.
-- Package metadata:
+- `main` and `origin/main`: `baee4982d8be9f6ef8e44b4a8ca6f1a30a382222`.
+- Accepted operator package metadata:
   - `sourceCommit`: `cb8a3c8`
   - `packageLabel`: `ExtrusionWebConsole-cb8a3c8-20260621-160038-290`
   - `frontendMode`: `api`

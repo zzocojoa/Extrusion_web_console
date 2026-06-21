@@ -6,6 +6,9 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Corrected the V2 status matrix baseline so the reviewed `main`/`origin/main`
+  commit reflects the landed status-document merge while the accepted operator
+  package metadata remains tied to `cb8a3c8`.
 - Added a V2 status matrix and refreshed the operator data mutation gate to the
   current `cb8a3c8` API-mode package metadata, so completed evidence foundation
   work is not described as a complete V2 release.
