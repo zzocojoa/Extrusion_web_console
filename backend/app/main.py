@@ -1,4 +1,3 @@
-from ipaddress import ip_address
 import logging
 from pathlib import Path
 
@@ -23,6 +22,9 @@ from backend.app.core.local_token import bootstrap_script_for_settings
 from backend.app.core.local_token import local_token_enforcement_enabled
 from backend.app.core.local_token import local_token_error_response
 from backend.app.core.local_token import validate_local_token
+from backend.app.core.lan_security import assert_lan_security_gate
+from backend.app.core.lan_security import is_loopback_host
+from backend.app.core.lan_security import server_host_from_scope_server
 from backend.app.core.settings import Settings
 from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditRepository
@@ -45,15 +47,6 @@ def api_docs_enabled(settings: Settings) -> bool:
     if mode == "disabled":
         return False
     return settings.local_token_mode.strip().lower() != "required"
-
-
-def is_loopback_host(host: str | None) -> bool:
-    if host in {None, "", "localhost", "testclient"}:
-        return True
-    try:
-        return ip_address(host).is_loopback
-    except ValueError:
-        return False
 
 
 def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
@@ -135,6 +128,7 @@ def log_v2_feature_gate_snapshot(settings: Settings) -> None:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    assert_lan_security_gate(settings)
     if not local_token_enforcement_enabled(settings):
         _LOGGER.warning("Local token enforcement is disabled by explicit mode or missing runtime token.")
     log_v2_feature_gate_snapshot(settings)
@@ -166,10 +160,16 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def enforce_loopback_client(request: Request, call_next):
+        server_host = server_host_from_scope_server(request.scope.get("server"))
+        if not is_loopback_host(server_host):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Extrusion Web Console LAN bind is blocked until the LAN security gate is approved."},
+            )
         if not is_loopback_host(request.client.host if request.client else None):
             return JSONResponse(
                 status_code=403,
-                content={"detail": "Extrusion Web Console only accepts localhost clients."},
+                content={"detail": "Extrusion Web Console LAN access is blocked until the LAN security gate is approved."},
             )
         return await call_next(request)
 

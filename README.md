@@ -146,6 +146,11 @@ The launcher generates a per-run local API token, passes it to the backend throu
 
 The local API token must not be stored or copied into URL query strings, `localStorage`, `sessionStorage`, launcher logs, backend logs, audit params, screenshots, generated `.gstack` artifacts, or `frontend/dist`. Development with Vite should use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` when the backend is not serving the token bootstrap. Dev/test API docs can be retained with `EWC_API_DOCS_MODE=enabled`; this override is for developer and test use only. If a developer sets only `EWC_LOCAL_API_TOKEN` on the backend while using the Vite dev shell, mutating API calls can fail because the Vite page does not receive the backend-served bootstrap token.
 
+Multi-user LAN remains disabled. `EWC_V2_LAN_ACCESS_ENABLED` is a default-off
+safety gate, not a working LAN mode. If it is enabled before per-user
+authentication, actor sessions, and concurrency controls exist, backend startup
+fails closed. The shared local token is not accepted as LAN user identity.
+
 If `frontend/dist/index.html` is missing, the launcher stops with a clear message. It does not run `npm run build` by default. Developers can explicitly request a build:
 
 ```powershell

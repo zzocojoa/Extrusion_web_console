@@ -112,6 +112,17 @@ def test_launcher_passes_local_token_through_environment_only() -> None:
     assert "Test-FrontendBootstrap" in script
 
 
+def test_launcher_existing_backend_reuse_requires_lan_safe_health() -> None:
+    script = LAUNCHER_PS1.read_text(encoding="utf-8")
+
+    assert "Test-LanSafeHealth" in script
+    assert "$Health.PSObject.Properties.Name -contains \"lan_security\"" in script
+    assert "$Health.PSObject.Properties.Name -contains \"lanSecurity\"" in script
+    assert re.search(r"if \(\$null -eq \$lanSecurity\)\s*\{\s*return \$false\s*\}", script)
+    assert "return ($lanSecurity.status -eq \"localhost_only\" -and $lanSecurity.shared_local_token_allowed -eq $false)" in script
+    assert "does not report localhost-only LAN-safe status" in script
+
+
 def test_launcher_check_only_sets_package_independent_target_defaults_without_raw_values(tmp_path: Path) -> None:
     powershell = shutil.which("powershell") or shutil.which("pwsh")
     if powershell is None:

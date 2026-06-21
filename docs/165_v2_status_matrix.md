@@ -37,6 +37,7 @@ commit, push, or PR creation.
   - `docs/169_v2_supabase_schema_attribution_design.md`
   - `docs/170_v2_delete_expansion_fixture_gate.md`
   - `docs/171_v2_operational_delete_verification_gate.md`
+  - `docs/172_v2_lan_security_gate.md`
 - Current code evidence in `backend/`, `frontend/`, and `tests/backend/`.
 
 ## Status Definitions
@@ -57,7 +58,7 @@ commit, push, or PR creation.
 | 3 | Operator-facing date-scoped delete UI | `Deferred` | `docs/168` completes only the default-off, non-mutating review shell for copy, i18n, and runbook review. | Executable/operator-facing date-scoped delete remains blocked until role matrix, policy/preflight, fixture evidence, production approval record, rollback evidence, and separate gate enablement are approved. |
 | 4 | Delete expansion | `Deferred` | `docs/170` defines the fixture-first gate; `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Concrete policy limits, fixture DB evidence, preflight/reconcile/audit/rollback proof, and separate approval. |
 | 5 | Operational DB delete verification | `Deferred` | `docs/171` defines the approval record, storage, evidence report, rollback, and stop-condition gate; `docs/164` keeps exact destructive approval wording. | Exact approval record, safe evidence report, and separate approval before any operational DB delete. |
-| 6 | Multi-user LAN | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep LAN and non-loopback bind blocked. | Auth/authz/session/actor audit/concurrency/CORS/bind design and explicit rescope. |
+| 6 | Multi-user LAN | `Deferred` | `docs/172` adds a default-off startup guard and sanitized health state; `docs/159`, `docs/160`, and `docs/161` still block LAN exposure. | Auth/authz/session/actor audit/concurrency/CORS/bind implementation, tests, and explicit rescope. |
 | 7 | Grafana/Vector observability hardening | `Completed` | `docs/167` records sanitized Grafana/Vector status classes, Vector runtime row implementation, alert/runbook classes, package/runtime checks, and explicit raw log/metric/trace export exclusions. | Does not approve Grafana iframe embedding, raw observability payload export, LAN exposure, reset/cleanup, or operator mutation. |
 | 8 | Supabase schema attribution | `Deferred` | `docs/169` defines the required migration, backfill, rollback, and test design gate; `docs/161` still approves only sidecar phase 1. | Later written approval is required before any Supabase migration, backfill, fixture mutation, or operational DB access. |
 
@@ -77,7 +78,8 @@ commit, push, or PR creation.
 | Operator-facing executable date-scoped delete UI | `Deferred` | `docs/161` still blocks enabled operator-facing executable UI; `docs/168` documents the completed review shell only. | Actual date-scoped delete preflight/start, role enforcement, limits, fixture evidence, production approval record, rollback evidence, and gate enablement remain separate blocked work. |
 | Delete expansion beyond current selected `already_in_db` path | `Deferred` | `docs/170` requires explicit policy limits and fixture-first proof before broader delete capability can be implemented or discussed for operational data. | Fixture evidence, production approval format, limits, and separate approval. |
 | Operational DB delete verification | `Deferred` | `docs/171` requires immutable or append-only approval storage, exact scope, no-undo acknowledgement, safe evidence report, and blocked rollback semantics before operational delete can be discussed. | Separate approval, current preflight evidence, and post-run evidence report. |
-| Multi-user LAN access | `Deferred` | `docs/159`, `docs/160`, and `docs/161` block LAN, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout. | LAN security gate, auth design, role matrix, concurrency model, and explicit rescope. |
+| Default-off LAN security guard | `Completed` | Backend code has a default-off `v2_lan_access_enabled` startup guard, request middleware blocks non-loopback client/server hosts when LAN is disabled, `/api/health` reports only sanitized LAN gate state, and `docs/172` records the safety boundary. | This does not approve LAN exposure, shared LAN identity, non-loopback bind, LAN CORS widening, or LAN rollout. |
+| Multi-user LAN access | `Deferred` | `docs/159`, `docs/160`, `docs/161`, and `docs/172` block LAN, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout; the guard is safety infrastructure only. | LAN authentication, authorization, role matrix, actor sessions, concurrency model, and explicit rescope. |
 | Grafana/Vector observability hardening | `Completed` | Runtime readiness exposes sanitized Grafana and Vector status classes; Dashboard and package smoke guidance include Vector; `docs/167` records alert/runbook and rollback boundaries. | Raw log/metric/trace export, Grafana iframe embedding, LAN exposure, and cleanup/reset remain excluded. |
 | Supabase schema attribution | `Deferred` | Current approved path is local sidecar only; `docs/169` defines the minimum design gate for a future Supabase attribution table without changing `all_metrics(timestamp, device_id)`. | Later written approval before migration/backfill/fixture mutation/operational DB access. |
 | Full V2 release | `Partial` | Several foundations are complete, but operational upload verification, executable date-scoped delete, delete expansion execution, operational DB delete verification, Multi-user LAN, Supabase schema attribution, and release gates are incomplete. | Do not describe V2 as complete until every deferred item is explicitly resolved or excluded. |
@@ -94,9 +96,11 @@ V2 is not complete. Current main has completed the local evidence foundation,
 upload readiness hardening, and API-mode package runtime smoke for a candidate
 handoff package. Current V2 completion-track work also includes sanitized
 Grafana/Vector observability status classes and runbook evidence, plus the
-default-off non-mutating date-scoped delete review shell. LAN, executable
-date-scoped delete, operational DB delete verification, and the overall V2
-release remain deferred or excluded until separate approvals resolve them.
+default-off non-mutating date-scoped delete review shell and the default-off LAN
+security guard. Operational upload verification, executable date-scoped delete,
+delete expansion execution, operational DB delete verification, Multi-user LAN,
+Supabase schema attribution, and the overall V2 release remain deferred or
+excluded until separate approvals resolve them.
 ```
 
 Do not say:
