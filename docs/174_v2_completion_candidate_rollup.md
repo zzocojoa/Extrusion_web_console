@@ -27,7 +27,8 @@ merged branch.
 - Open PRs reviewed for this rollup: #193 through #200
 - Current rollup PR: #201
 - Current integration rehearsal PR: #202
-  `codex/v2-completion-stack-rehearsal` at `95265a1`
+  `codex/v2-completion-stack-rehearsal`; confirm the exact current
+  `headRefOid` with `gh pr view 202 --json headRefOid` before merge approval.
 - GitHub checks: no checks reported on the reviewed branches at rollup time
 
 ## Item Map
@@ -230,13 +231,14 @@ approval must be explicit and narrow:
 
 ```text
 I approve merging PR #202 into codex/v2-completion-track.
-This approval is only for the review-ready V2 completion stack integration rehearsal at head d0a57bd.
+This approval is only for the review-ready V2 completion stack integration rehearsal at headRefOid <current PR #202 headRefOid>.
 This approval does not approve merging codex/v2-completion-track to main, Upload Preview, Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, schema migration, deploy, or operational DB mutation.
 ```
 
-If the PR head changes, replace `d0a57bd` with the new reviewed head and rerun
-`git diff --check`, package validation evidence review, and `$review` before
-using the approval.
+Before using the approval, replace `<current PR #202 headRefOid>` with the exact
+`headRefOid` reported by GitHub at approval time. If that head differs from the
+last reviewed head, rerun `git diff --check`, package validation evidence review,
+and `$review` before using the approval.
 
 ## Stop Conditions
 
