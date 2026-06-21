@@ -31,6 +31,7 @@ commit, push, or PR creation.
   - `docs/162_v2_sidecar_row_attribution_ledger_design.md`
   - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
   - `docs/164_operator_data_mutation_safety_gate.md`
+  - `docs/166_v2_api_mode_package_runtime_evidence.md`
 - Current code evidence in `backend/`, `frontend/`, and `tests/backend/`.
 
 ## Status Definitions
@@ -52,7 +53,7 @@ commit, push, or PR creation.
 | `row_attribution_ledger` sidecar foundation | `Completed` | Backend settings and local state DB code include the default-off row attribution gate and sidecar repository paths; backend tests cover bootstrap, append-only behavior, safe hashes, and gate-on linkage. | Gate enablement and any operational evidence writes require separate approval. |
 | `db_delta_evidence` foundation | `Completed` | Backend includes append-only local state DB delta evidence and gate-on upload/delete service wiring; tests cover default-off no-write behavior, mismatch handling, and audit/delta/attribution linkage. | Operational use requires explicit mutation approval and gate-on approval. |
 | Upload readiness hardening | `Completed` | `main` includes Start/Retry readiness hardening for local DB target class, Supabase API/DB/Edge readiness, Edge auth key class, and target-only row approval counts. | Does not approve Start Upload or Retry Failed. |
-| API-mode operator package validation | `Partial` | Package metadata for `cb8a3c8` records `frontendMode=api`, `runtimeMode=operator-ready`, and launcher/shortcut `-CheckOnly` passed. | Full runtime smoke and any operator mutation still require separate approval. |
+| API-mode operator package validation | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 handoff metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke for candidate package `ExtrusionWebConsole-eedac29-20260621-165853-560`. | This does not approve operator mutation and does not replace the `docs/164` accepted mutation package unless that gate is separately updated. |
 | Operator data mutation gate | `Completed` | `docs/164` records current package metadata and exact approval templates for Preview-only, Start Upload, Retry Failed, and Delete. | Each mutation still requires its own exact approval at execution time. |
 | Operator-facing date-scoped delete UI | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep date-scoped delete maintainer-only and defer operator-facing UI. | Copy, i18n, runbook, role matrix, and explicit UI approval. |
 | Delete expansion beyond current selected `already_in_db` path | `Deferred` | V2 design permits future policy work, but no broader delete policy is approved for operators. | Fixture evidence, production approval format, limits, and separate approval. |
@@ -71,10 +72,10 @@ The current safe statement is:
 
 ```text
 V2 is not complete. Current main has completed the local evidence foundation,
-upload readiness hardening, and partial API-mode package metadata validation.
-LAN, operator-facing date-scoped delete UI, operational DB delete verification,
-Grafana/Vector hardening, full runtime package smoke, and the overall V2 release
-remain deferred or excluded until separate approvals resolve them.
+upload readiness hardening, and API-mode package runtime smoke for a candidate
+handoff package. LAN, operator-facing date-scoped delete UI, operational DB
+delete verification, Grafana/Vector hardening, and the overall V2 release remain
+deferred or excluded until separate approvals resolve them.
 ```
 
 Do not say:
@@ -84,15 +85,16 @@ V2 is complete.
 ```
 
 Do not use package `sourceCommit` values from older handoffs when approving a
-mutation from the current `cb8a3c8` package.
+mutation from the accepted `cb8a3c8` package unless
+`docs/164_operator_data_mutation_safety_gate.md` is separately updated.
 
 ## Rollback
 
 This is a document-only status matrix. Before commit, rollback is:
 
 ```powershell
-git restore CHANGELOG.md README.md docs/164_operator_data_mutation_safety_gate.md
-Remove-Item -LiteralPath docs\165_v2_status_matrix.md
+git restore CHANGELOG.md docs\165_v2_status_matrix.md
+Remove-Item -LiteralPath docs\166_v2_api_mode_package_runtime_evidence.md
 ```
 
 After commit, revert the document commit. No operational evidence, local state

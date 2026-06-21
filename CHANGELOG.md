@@ -6,6 +6,11 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Marked API-mode operator package validation as completed for the V2 candidate
+  package `ExtrusionWebConsole-eedac29-20260621-165853-560`, with zip SHA-256,
+  launcher/shortcut `-CheckOnly`, and read-only HTTP smoke evidence recorded in
+  `docs/166_v2_api_mode_package_runtime_evidence.md`; this does not approve any
+  operator mutation or replace the `docs/164` accepted mutation package.
 - Corrected the V2 status matrix baseline so the reviewed `main`/`origin/main`
   commit reflects the landed status-document merge while the accepted operator
   package metadata remains tied to `cb8a3c8`.
