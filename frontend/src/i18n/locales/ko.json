@@ -332,6 +332,8 @@
       "db": "DB",
       "updated": "갱신",
       "uploadRows": "업로드 행",
+      "targetRows": "Start 대상 행",
+      "partialOverlapRows": "부분 중복 행",
       "interimSummary": "이미 처리된 행 기준의 잠정 집계입니다. 최종 업로드 가능 여부는 미리보기가 완료된 뒤에만 확정됩니다.",
       "loading": "로컬 CSV와 DB 중복 상태를 확인 중입니다...",
       "error": "업로드 미리보기 상태를 불러오지 못했습니다."
@@ -543,7 +545,9 @@
       "targetDuplicateKeyCount": "대상 중복 키 수",
       "previewDbMatchedKeys": "Preview 전체 DB 일치 키",
       "expectedUploadRows": "예상 업로드 행",
-      "countSemantics": "예상 업로드 행은 승인 기준입니다. acceptedRows와 DB row-count delta는 실행 후 검증하는 값이며 대상 물리 행 수와 다를 수 있습니다.",
+      "partialOverlapRows": "부분 중복 행",
+      "fullUploadEstimateRows": "전체 업로드 추정 행",
+      "countSemantics": "예상 업로드 행은 target-only 승인 기준입니다. 부분 중복 행은 별도 승인된 후속 흐름이 없는 한 Start Upload에서 제외됩니다. acceptedRows와 DB row-count delta는 실행 후 검증하는 값이며 대상 물리 행 수와 다를 수 있습니다.",
       "partialBreakdown": "대상 물리 행/키 breakdown은 로드된 대상 파일 {{loaded}}/{{total}}개 기준입니다. 승인 기준은 계속 예상 업로드 행입니다."
     },
     "retryReview": {

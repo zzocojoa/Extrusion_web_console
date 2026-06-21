@@ -442,6 +442,73 @@ def test_upload_preview_latest_returns_persisted_run_details(tmp_path) -> None:
     assert filtered_payload["page"]["totalItems"] == 0
 
 
+def test_upload_preview_summary_separates_target_and_partial_rows(tmp_path) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_rows",
+        range_mode="today",
+        start_date=None,
+        end_date=None,
+        sources=["plc"],
+        options={},
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+    base_item = {
+        "folder_label": "PLC",
+        "folder_path": "C:\\data\\plc",
+        "kind": "plc",
+        "file_date": "2026-06-01",
+        "size_bytes": 100,
+        "mtime_ns": 1,
+        "modified_at": "2026-06-01T09:00:00+09:00",
+        "file_signature": "sig",
+        "reason_text": "test",
+        "scan_mode": "full",
+        "sample_row_count": 1,
+        "row_count": 1,
+        "local_key_count": 1,
+        "db_match_count": 0,
+        "first_timestamp": "2026-06-01T09:00:00+09:00",
+        "last_timestamp": "2026-06-01T09:00:00+09:00",
+        "device_ids": ["extruder_plc"],
+        "issues": [],
+        "error_code": None,
+        "error_message": None,
+    }
+    for status_name, upload_rows in (("target", 2), ("partial_overlap", 5), ("already_in_db", 0)):
+        repository.insert_item(
+            "prv_rows",
+            {
+                **base_item,
+                "file_key": f"key-{status_name}",
+                "filename": f"{status_name}.csv",
+                "path": f"C:\\data\\plc\\{status_name}.csv",
+                "status": status_name,
+                "reason_code": "db_no_match" if status_name == "target" else "db_partial_match",
+                "upload_row_estimate": upload_rows,
+            },
+        )
+    repository.recompute_summary(
+        "prv_rows",
+        status=PreviewRunStatus.succeeded,
+        db_status=PreviewDbStatus.reachable,
+    )
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/upload/preview/prv_rows")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    summary = response.json()["run"]["summary"]
+    assert summary["uploadRows"] == 7
+    assert summary["targetRows"] == 2
+    assert summary["partialOverlapRows"] == 5
+
+
 def test_upload_preview_conflict_returns_active_run_location(tmp_path) -> None:
     repository = PreviewRepository(str(tmp_path / "state.db"))
     audit_repository = AuditRepository(str(tmp_path / "state.db"))

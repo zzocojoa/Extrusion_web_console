@@ -80,11 +80,31 @@ def deduplicate_upload_records(records: list[dict[str, Any]]) -> DeduplicatedUpl
 
 
 def build_upload_headers(anon_key: str) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {anon_key}",
+    headers = {
         "apikey": anon_key,
         "Content-Type": "application/json",
     }
+    if is_jwt_like_key(anon_key):
+        headers["Authorization"] = f"Bearer {anon_key}"
+    return headers
+
+
+def is_jwt_like_key(value: str) -> bool:
+    parts = value.strip().split(".")
+    return len(parts) == 3 and all(parts)
+
+
+def classify_upload_exception(error: Exception) -> tuple[str, str]:
+    text = str(error)
+    lowered = text.lower()
+    if "invalid jwt" in lowered or "missing authorization" in lowered or "jwt" in lowered or "(401)" in lowered or "(403)" in lowered:
+        return (
+            "auth_invalid_or_stale_config",
+            "Edge upload authentication failed. Recheck the configured Supabase auth key and Edge JWT mode.",
+        )
+    if isinstance(error, (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError)):
+        return "edge_unreachable", "Supabase Edge upload route could not be reached."
+    return "upload_failed", text
 
 
 class CsvUploadRecordReader:
@@ -424,7 +444,8 @@ class UploadJobService:
         except Exception as error:
             latest = self.repository.get_job_file(job_file_id)
             resume_offset = int(latest["resume_offset"] if latest is not None else row["resume_offset"] or 0)
-            self.repository.mark_file_failed(job_file_id, "upload_failed", str(error), resume_offset)
+            error_code, error_message = classify_upload_exception(error)
+            self.repository.mark_file_failed(job_file_id, error_code, error_message, resume_offset)
 
     def _prepare_upload_evidence(self, job_id: str) -> UploadDbEvidenceContext | None | bool:
         if not self._v2_evidence_enabled():

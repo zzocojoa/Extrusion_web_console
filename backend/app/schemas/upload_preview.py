@@ -154,6 +154,8 @@ class PreviewRunSummary(ApiModel):
     risky: int = 0
     excluded: int = 0
     upload_rows: int = 0
+    target_rows: int = 0
+    partial_overlap_rows: int = 0
     db_matched_rows: int = 0
 
 

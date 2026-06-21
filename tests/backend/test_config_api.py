@@ -9,6 +9,7 @@ from backend.app.core.settings import Settings, get_settings
 from backend.app.db.audit_repository import AuditLogFilters, AuditRepository, decode_params_json
 from backend.app.main import app
 from backend.app.schemas.audit import AuditResult
+from backend.app.services.config_service import ConfigService
 
 
 CONFIG_ENV_KEYS = (
@@ -272,6 +273,26 @@ def test_saved_config_json_is_loaded_by_new_settings_instance(tmp_path: Path, mo
     assert loaded.grafana_url == "http://localhost:4000"
     assert loaded.local_supabase_api_port == 54322
     assert loaded.upload_edge_url == "http://127.0.0.1:54322/functions/v1/upload-metrics"
+
+
+def test_config_save_clears_cached_settings_for_next_request(tmp_path: Path, monkeypatch) -> None:
+    _clear_config_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "config.json"
+    db_path = tmp_path / "state.db"
+    monkeypatch.setenv("EWC_CONFIG_FILE_PATH", str(config_path))
+    get_settings.cache_clear()
+    cached_before = get_settings()
+    assert cached_before.grafana_url == "http://localhost:3001"
+
+    service = ConfigService(cached_before, AuditRepository(db_path))
+    response = service.save_config({"grafanaUrl": "http://localhost:4000"}, actor="local_operator")
+
+    cached_after = get_settings()
+    assert response.saved_keys == ["grafanaUrl"]
+    assert cached_after.grafana_url == "http://localhost:4000"
+    assert cached_after is not cached_before
+    get_settings.cache_clear()
 
 
 def test_environment_overrides_saved_config_json(tmp_path: Path, monkeypatch) -> None:

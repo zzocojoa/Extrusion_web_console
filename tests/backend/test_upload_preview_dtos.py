@@ -146,7 +146,7 @@ def test_preview_run_dto_serializes_applied_profile_metadata() -> None:
             "status": "succeeded",
             "requestedAt": "2026-06-17T00:00:00+00:00",
             "dbStatus": "reachable",
-            "summary": {"target": 1, "uploadRows": 10},
+            "summary": {"target": 1, "uploadRows": 10, "targetRows": 4, "partialOverlapRows": 6},
             "requestedProfile": "default",
             "appliedProfile": "large_source_operational",
             "autoProfileReason": "operational_source_class",
@@ -157,6 +157,8 @@ def test_preview_run_dto_serializes_applied_profile_metadata() -> None:
     assert payload["requestedProfile"] == "default"
     assert payload["appliedProfile"] == "large_source_operational"
     assert payload["autoProfileReason"] == "operational_source_class"
+    assert payload["summary"]["targetRows"] == 4
+    assert payload["summary"]["partialOverlapRows"] == 6
 
 
 def test_preview_create_request_custom_range_requires_both_dates_and_valid_order() -> None:
