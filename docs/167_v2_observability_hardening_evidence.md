@@ -72,14 +72,41 @@ Targeted validation:
 - `cd frontend; npm run typecheck`: passed
 - `git diff --check`: passed
 
-Required before merge:
+Full validation:
 
-- full backend tests;
-- frontend API-mode build;
-- API-mode package assembly;
-- API-mode zip package assembly;
-- read-only package HTTP smoke including `/api/runtime/local-supabase`;
-- `$review`.
+- `.\.venv\Scripts\python -m pytest tests\backend`: `345 passed, 18 warnings`
+- `cd frontend; npm run build:api`: passed, `frontend build mode: api`
+- `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`:
+  passed
+- `launcher/start_web_console.ps1 -CheckOnly`: passed; no backend process was
+  started
+- `launcher/install_shortcuts.ps1 -CheckOnly`: passed; no shortcuts were written
+
+Candidate package metadata:
+
+- `packageLabel`: `ExtrusionWebConsole-d8bec66-20260621-171955-309`
+- `sourceCommit`: `d8bec66`
+- `frontendMode`: `api`
+- `runtimeMode`: `operator-ready`
+- `zipCreated`: `true`
+- `zipSha256`: `02720c4677d243aaf3630b7131d662b72a5dc95bccd3164daba0494e136e71a9`
+
+Read-only package HTTP smoke:
+
+| Route | Status | Expected |
+| --- | ---: | --- |
+| `/` | `200` | pass |
+| `/upload` | `200` | pass |
+| `/logs` | `200` | pass |
+| `/settings` | `200` | pass |
+| `/api/health` | `200` | pass |
+| `/api/config` | `200` | pass |
+| `/api/audit?limit=1` | `200` | pass |
+| `/api/runtime/local-supabase` | `200` with `vector.status=stopped` | pass, sanitized status class only |
+| `/api/docs` | `404` | pass, operator docs disabled |
+| `/api/openapi.json` | `404` | pass, operator docs disabled |
+
+`$review` remains required before merge.
 
 ## Security Notes
 
