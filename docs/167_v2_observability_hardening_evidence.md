@@ -27,7 +27,8 @@ Implemented:
 - `/api/dashboard` runtime checks include Vector as a separate observability row.
 - Package manifest smoke guidance now includes read-only
   `/api/runtime/local-supabase` verification for sanitized Grafana and Vector
-  status classes.
+  status classes. Evidence must record only `overallStatus`, `grafana.status`,
+  `vector.status`, and `vector.detail`, not the full JSON response.
 - The operator package runtime note records that Grafana and Vector evidence
   must remain sanitized and that Grafana iframe embedding remains excluded.
 
@@ -49,7 +50,7 @@ Operator-facing alert classes:
 | --- | --- | --- |
 | API, DB, Studio, or Edge is not reachable | `core_runtime_unreachable` | Stop upload mutation flow and inspect runtime readiness. |
 | Grafana is unreachable while core runtime is ready | `non_core_runtime_attention` | Continue core upload review only if Grafana is not an acceptance gate; record caveat. |
-| Vector is stopped, unhealthy, missing, or unknown while core runtime is ready | `non_core_runtime_attention` | Record observability caveat; do not run cleanup/reset/prune as a workaround. |
+| Vector is stopped, unhealthy, missing, or unknown while core runtime is ready | `non_core_runtime_attention` | Record only the sanitized status class and observability caveat; do not run cleanup/reset/prune as a workaround. |
 | Raw log, metric, trace, DB URL, token, JWT, source path, filename, or CSV content appears in evidence | `redaction_failure` | Stop and redact before sharing or merging evidence. |
 
 Rollback and recovery:
@@ -102,7 +103,7 @@ Read-only package HTTP smoke:
 | `/api/health` | `200` | pass |
 | `/api/config` | `200` | pass |
 | `/api/audit?limit=1` | `200` | pass |
-| `/api/runtime/local-supabase` | `200` with `vector.status=stopped` | pass, sanitized status class only |
+| `/api/runtime/local-supabase` | `200`; recorded only `overallStatus`, `grafana.status`, `vector.status=stopped`, and `vector.detail` | pass, sanitized status fields only |
 | `/api/docs` | `404` | pass, operator docs disabled |
 | `/api/openapi.json` | `404` | pass, operator docs disabled |
 

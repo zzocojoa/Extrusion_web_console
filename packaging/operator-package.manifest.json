@@ -187,7 +187,7 @@
     "GET /api/health",
     "GET /api/config",
     "GET /api/audit?limit=1",
-    "GET /api/runtime/local-supabase includes sanitized Grafana and Vector status classes",
+    "GET /api/runtime/local-supabase and record only overallStatus, grafana.status, vector.status, and vector.detail",
     "mutating API without local token returns 403",
     "operator API docs routes return 404",
     "package and zip .agents entries count is 0"

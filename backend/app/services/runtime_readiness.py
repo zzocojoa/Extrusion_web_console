@@ -82,7 +82,11 @@ class RuntimeReadinessService:
         grafana = self._probe_grafana()
         vector = self._probe_vector(containers)
 
-        missing_required = [container.name for container in containers if container.required and not container.exists]
+        missing_required = [
+            container.name
+            for container in containers
+            if self._is_core_required_container(container) and not container.exists
+        ]
         if active_operation is not None:
             overall = RuntimeOverallStatus.running
             reason_code = "runtime_operation_active"
@@ -146,7 +150,11 @@ class RuntimeReadinessService:
     def required_containers_exist(self) -> tuple[bool, list[str], list[RuntimeContainerStatus]]:
         docker_status = self._probe_from_result("Docker", self.runner.run(["docker", "version", "--format", "{{json .}}"], timeout_seconds=5))
         containers = self._container_statuses(docker_status)
-        missing = [container.name for container in containers if container.required and not container.exists]
+        missing = [
+            container.name
+            for container in containers
+            if self._is_core_required_container(container) and not container.exists
+        ]
         return not missing and docker_status.status == RuntimeServiceStatus.ready, missing, containers
 
     def _config_error(self, project_path: Path) -> tuple[str | None, str | None]:
@@ -238,6 +246,10 @@ class RuntimeReadinessService:
             status=vector.status,
             detail=detail_by_status.get(vector.status, f"Vector container status class is {vector.status.value}."),
         )
+
+    def _is_core_required_container(self, container: RuntimeContainerStatus) -> bool:
+        vector_suffix = f"_vector_{self.settings.local_supabase_project_id}"
+        return container.required and not container.name.endswith(vector_suffix)
 
     def _config_items(self) -> list[RuntimeConfigItem]:
         return [

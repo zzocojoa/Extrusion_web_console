@@ -393,6 +393,36 @@ def test_status_exposes_vector_container_as_non_core_observability_attention(
     assert status.vector.detail == "Vector container status class is stopped."
 
 
+def test_status_keeps_missing_vector_as_non_core_observability_attention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings(tmp_path)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="test"),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.runtime_readiness.probe_edge_route",
+        lambda url, *, timeout_seconds=2.0: RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url),
+    )
+    docker_ps_output = all_containers_output(
+        running=True,
+        omitted={"supabase_vector_Extrusion_web_console"},
+    )
+    service = RuntimeReadinessService(app_settings, FakeRunner(docker_ps_output=docker_ps_output))
+
+    status = service.check_status()
+    ready, missing, _containers = service.required_containers_exist()
+
+    assert status.overall_status == RuntimeOverallStatus.attention
+    assert status.reason_code == "non_core_runtime_attention"
+    assert status.vector.status == RuntimeServiceStatus.missing
+    assert "supabase_vector_Extrusion_web_console" not in missing
+    assert ready is True
+
+
 def test_stop_with_docker_unavailable_fails_instead_of_noop_success(tmp_path: Path) -> None:
     app_settings = settings(tmp_path)
     runtime = RuntimeRepository(app_settings.state_db_path)
@@ -638,10 +668,17 @@ def container_status(name: str, *, running: bool):
     )
 
 
-def all_containers_output(*, running: bool, status_overrides: dict[str, str] | None = None) -> str:
+def all_containers_output(
+    *,
+    running: bool,
+    status_overrides: dict[str, str] | None = None,
+    omitted: set[str] | None = None,
+) -> str:
     status = "Up 10 seconds" if running else "Exited (0)"
     overrides = status_overrides or {}
+    omitted_names = omitted or set()
     return "\n".join(
         f'{{"Names":"{name}","Status":"{overrides.get(name, status)}"}}'
         for name in required_supabase_containers("Extrusion_web_console")
+        if name not in omitted_names
     )
