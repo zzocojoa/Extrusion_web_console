@@ -280,7 +280,7 @@ def _runtime_summary(runtime_status: RuntimeStatusResponse | None, settings: Set
     )
     supabase_tone = "ready" if core_ready else "blocked"
     storage_ready = runtime_status.docker.status == RuntimeServiceStatus.ready and runtime_status.wsl.status == RuntimeServiceStatus.ready
-    grafana_tone = _runtime_tone(runtime_status.grafana.status)
+    grafana_tone = _observability_tone(runtime_status.grafana.status)
     return {
         "supabase_tone": supabase_tone,
         "supabase_value": "Core runtime OK" if core_ready else runtime_status.overall_status.value,
@@ -302,6 +302,22 @@ def _runtime_tone(status: RuntimeServiceStatus) -> str:
     if status == RuntimeServiceStatus.unreachable:
         return "blocked"
     return "attention"
+
+
+def _observability_tone(status: RuntimeServiceStatus) -> str:
+    if status == RuntimeServiceStatus.ready:
+        return "ready"
+    if status in {RuntimeServiceStatus.starting, RuntimeServiceStatus.stopping}:
+        return "running"
+    if status in {
+        RuntimeServiceStatus.unknown,
+        RuntimeServiceStatus.stopped,
+        RuntimeServiceStatus.missing,
+        RuntimeServiceStatus.unreachable,
+        RuntimeServiceStatus.unhealthy,
+    }:
+        return "attention"
+    return "muted"
 
 
 def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Settings, now: str, state_context: StateContext) -> list[RuntimeCheckRow]:
@@ -339,7 +355,7 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
         RuntimeCheckRow(
             id="grafana",
             label="Grafana",
-            tone=_runtime_tone(runtime_status.grafana.status),
+            tone=_observability_tone(runtime_status.grafana.status),
             detail=runtime_status.grafana.detail,
             last_checked_at=checked_at,
             href=settings.grafana_url,
@@ -347,7 +363,7 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
         RuntimeCheckRow(
             id="vector",
             label="Vector",
-            tone=_runtime_tone(runtime_status.vector.status),
+            tone=_observability_tone(runtime_status.vector.status),
             detail=runtime_status.vector.detail,
             last_checked_at=checked_at,
         ),

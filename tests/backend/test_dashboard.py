@@ -204,7 +204,7 @@ def test_dashboard_keeps_grafana_failure_as_non_core_caveat(tmp_path: Path) -> N
     grafana_chip = next(item for item in data["topbarChips"] if item["id"] == "grafana")
     runtime_warning = next(item for item in data["warningQueue"] if item["id"] == "supabase_unreachable")
     assert runtime_chip["tone"] == "ready"
-    assert grafana_chip["tone"] == "blocked"
+    assert grafana_chip["tone"] == "attention"
     assert runtime_warning["tone"] == "ready"
     assert runtime_warning["count"] == 0
 
@@ -224,7 +224,7 @@ def test_dashboard_exposes_vector_as_non_core_observability_check(tmp_path: Path
     data = response.json()
     vector_row = next(item for item in data["runtimeChecks"] if item["id"] == "vector")
     runtime_warning = next(item for item in data["warningQueue"] if item["id"] == "supabase_unreachable")
-    assert vector_row["tone"] == "muted"
+    assert vector_row["tone"] == "attention"
     assert vector_row["detail"] == "Vector container status class is stopped."
     assert runtime_warning["tone"] == "ready"
 
