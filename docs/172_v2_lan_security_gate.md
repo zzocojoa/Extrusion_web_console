@@ -30,9 +30,12 @@ At startup, the app blocks unsafe LAN states:
   operation concurrency controls are implemented.
 
 The request middleware also blocks non-loopback clients and non-loopback request
-server hosts. This covers direct development starts that pass a non-loopback
-Uvicorn host without setting `EWC_HOST`. The launcher still starts the backend
-on `127.0.0.1`.
+server hosts after the HTTP request reaches the application. This rejects remote
+requests and non-loopback request server scope, but it is not a substitute for
+socket-bind policy in unsupported direct Uvicorn starts. Supported operator and
+package starts must use the launcher, which binds the backend to `127.0.0.1`.
+Direct `uvicorn ... --host 0.0.0.0` starts remain out of scope and must not be
+used as a LAN enablement path.
 
 ## Health Evidence
 
