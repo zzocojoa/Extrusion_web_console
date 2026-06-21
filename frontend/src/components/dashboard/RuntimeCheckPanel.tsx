@@ -223,6 +223,7 @@ function containerDetail(containers: RuntimeStatusResponse["containers"], t: Tra
 function startDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, actionPending: boolean, t: Translate): string {
   if (actionPending || runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
   if (runtimeStatus.overallStatus === "ready") return t("runtime.actions.alreadyReady");
+  if (runtimeStatus.reasonCode === "non_core_runtime_attention") return t("runtime.actions.nonCoreAttention");
   if (runtimeStatus.reasonCode === "required_container_missing") return t("runtime.actions.requiredContainerMissing");
   if (runtimeStatus.docker.status !== "ready") return t("runtime.actions.dockerUnavailable");
   return "";

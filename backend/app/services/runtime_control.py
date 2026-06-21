@@ -290,7 +290,15 @@ def runtime_core_ready(status: RuntimeStatusResponse) -> bool:
 
 
 def start_precheck_blocker(status: RuntimeStatusResponse) -> tuple[str, str] | None:
-    if status.reason_code in {"project_path_missing", "config_toml_missing", "config_toml_unreadable", "config_port_mismatch", "docker_unavailable", "required_container_missing"}:
+    if status.reason_code in {
+        "project_path_missing",
+        "config_toml_missing",
+        "config_toml_unreadable",
+        "config_port_mismatch",
+        "docker_unavailable",
+        "required_container_missing",
+        "non_core_runtime_attention",
+    }:
         return status.reason_code, status.reason_text
     return None
 

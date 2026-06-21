@@ -202,6 +202,7 @@
       "operationActive": "A runtime operation is already active.",
       "alreadyReady": "Local Supabase is already ready.",
       "alreadyStopped": "Local Supabase containers are already stopped.",
+      "nonCoreAttention": "Core runtime is already ready. Review Grafana or Vector attention separately.",
       "requiredContainerMissing": "Required containers are missing. v1 does not create a new stack.",
       "dockerUnavailable": "Docker is unavailable."
     },

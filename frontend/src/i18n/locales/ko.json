@@ -202,6 +202,7 @@
       "operationActive": "런타임 작업이 이미 진행 중입니다.",
       "alreadyReady": "Local Supabase가 이미 준비되었습니다.",
       "alreadyStopped": "Local Supabase 컨테이너가 이미 중지되었습니다.",
+      "nonCoreAttention": "Core runtime은 이미 준비되었습니다. Grafana 또는 Vector 확인은 별도로 진행하세요.",
       "requiredContainerMissing": "필수 컨테이너가 없습니다. v1은 새 스택을 생성하지 않습니다.",
       "dockerUnavailable": "Docker를 사용할 수 없습니다."
     },

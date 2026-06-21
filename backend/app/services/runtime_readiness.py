@@ -209,10 +209,13 @@ class RuntimeReadinessService:
         for name in self.runner.required_supabase_containers:
             payload = rows.get(name)
             status_text = None if payload is None else str(payload.get("Status") or payload.get("State") or "")
-            running = bool(status_text and status_text.lower().startswith("up"))
+            status_lower = status_text.lower() if status_text else ""
+            running = bool(status_lower.startswith("up"))
             if payload is None:
                 status = RuntimeServiceStatus.missing
-            elif running and "unhealthy" in status_text.lower():
+            elif "restarting" in status_lower:
+                status = RuntimeServiceStatus.unhealthy
+            elif running and "unhealthy" in status_lower:
                 status = RuntimeServiceStatus.unhealthy
             elif running:
                 status = RuntimeServiceStatus.ready

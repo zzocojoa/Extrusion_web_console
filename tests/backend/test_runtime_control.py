@@ -397,6 +397,39 @@ def test_status_exposes_vector_container_as_non_core_observability_attention(
     assert vector_container.exists is True
 
 
+def test_status_maps_restarting_vector_container_to_unhealthy_attention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_settings = settings(tmp_path)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="test"),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.runtime_readiness.probe_edge_route",
+        lambda url, *, timeout_seconds=2.0: RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="test", url=url),
+    )
+    docker_ps_output = all_containers_output(
+        running=True,
+        status_overrides={"supabase_vector_Extrusion_web_console": "Restarting (1) 3 seconds ago"},
+    )
+    service = RuntimeReadinessService(app_settings, FakeRunner(docker_ps_output=docker_ps_output))
+
+    status = service.check_status()
+
+    assert status.overall_status == RuntimeOverallStatus.attention
+    assert status.reason_code == "non_core_runtime_attention"
+    assert status.vector.status == RuntimeServiceStatus.unhealthy
+    assert status.vector.detail == "Vector container status class is unhealthy."
+    vector_container = next(container for container in status.containers if container.name == "supabase_vector_Extrusion_web_console")
+    assert vector_container.required is False
+    assert vector_container.exists is True
+    assert vector_container.running is False
+    assert vector_container.status == RuntimeServiceStatus.unhealthy
+
+
 def test_status_keeps_missing_vector_as_non_core_observability_attention(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -485,7 +518,7 @@ def test_start_noops_when_runtime_core_is_already_ready(tmp_path: Path) -> None:
     assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
 
 
-def test_start_ignores_stopped_non_required_vector_when_core_runtime_ready(tmp_path: Path) -> None:
+def test_start_blocks_non_core_attention_without_noop_success(tmp_path: Path) -> None:
     app_settings = settings(tmp_path)
     vector_name = f"supabase_vector_{app_settings.local_supabase_project_id}"
     status = runtime_status(
@@ -530,12 +563,14 @@ def test_start_ignores_stopped_non_required_vector_when_core_runtime_ready(tmp_p
 
     row = runtime.get_operation(operation_id)
     assert row is not None
-    assert row["status"] == "succeeded"
+    assert row["status"] == "blocked"
+    assert row["error_code"] == "non_core_runtime_attention"
     assert ("docker", "start", vector_name) not in service.runner.commands  # type: ignore[attr-defined]
     assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
     audit = latest_audit(runtime)
     assert audit["action"] == "runtime.start"
-    assert audit["result"] == "success"
+    assert audit["result"] == "blocked"
+    assert audit["error_code"] == "non_core_runtime_attention"
 
 
 @pytest.mark.parametrize("failed_probe", ["api", "db", "studio", "edge"])
