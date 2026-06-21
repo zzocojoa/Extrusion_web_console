@@ -69,13 +69,13 @@ Rollback and recovery:
 Targeted validation:
 
 - `.\.venv\Scripts\python -m pytest tests\backend\test_runtime_control.py tests\backend\test_runtime_api.py tests\backend\test_dashboard.py tests\backend\test_operator_package_assembly.py`:
-  `66 passed, 2 warnings`
+  `67 passed, 2 warnings`
 - `cd frontend; npm run typecheck`: passed
 - `git diff --check`: passed
 
 Full validation:
 
-- `.\.venv\Scripts\python -m pytest tests\backend`: `346 passed, 18 warnings`
+- `.\.venv\Scripts\python -m pytest tests\backend`: `347 passed, 18 warnings`
 - `cd frontend; npm run build:api`: passed, `frontend build mode: api`
 - `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`:
   passed
@@ -85,12 +85,12 @@ Full validation:
 
 Candidate package metadata:
 
-- `packageLabel`: `ExtrusionWebConsole-78d0d60-20260621-175646-433`
-- `sourceCommit`: `78d0d60`
+- `packageLabel`: `ExtrusionWebConsole-cf4d173-20260621-180717-488`
+- `sourceCommit`: `cf4d173`
 - `frontendMode`: `api`
 - `runtimeMode`: `operator-ready`
 - `zipCreated`: `true`
-- `zipSha256`: `8bafcda0903fcdb41eb2dac773da13444d27dbe61e8ed00772f68adc5974cb5e`
+- `zipSha256`: `3f8d0036c009d28d0b6c499485f81bce1594f2eb2db28b021dcb7fe8c9195742`
 - `packageAgentEntries`: `0`
 - `zipAgentEntries`: `0`
 
