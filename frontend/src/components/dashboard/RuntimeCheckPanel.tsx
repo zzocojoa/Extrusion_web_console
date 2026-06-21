@@ -189,7 +189,7 @@ function toneForService(status: RuntimeServiceStatus): StatusTone {
 }
 
 function toneForContainers(containers: RuntimeStatusResponse["containers"]): StatusTone {
-  if (containers.some((row) => row.status === "missing")) return "blocked";
+  if (containers.some((row) => row.required && row.status === "missing")) return "blocked";
   if (containers.some((row) => row.status === "stopped" || row.status === "unreachable" || row.status === "unhealthy")) return "attention";
   if (containers.length > 0 && containers.every((row) => row.status === "ready")) return "ready";
   return "muted";

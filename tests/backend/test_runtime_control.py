@@ -391,6 +391,9 @@ def test_status_exposes_vector_container_as_non_core_observability_attention(
     assert status.reason_code == "non_core_runtime_attention"
     assert status.vector.status == RuntimeServiceStatus.stopped
     assert status.vector.detail == "Vector container status class is stopped."
+    vector_container = next(container for container in status.containers if container.name == "supabase_vector_Extrusion_web_console")
+    assert vector_container.required is False
+    assert vector_container.exists is True
 
 
 def test_status_keeps_missing_vector_as_non_core_observability_attention(
@@ -419,6 +422,9 @@ def test_status_keeps_missing_vector_as_non_core_observability_attention(
     assert status.overall_status == RuntimeOverallStatus.attention
     assert status.reason_code == "non_core_runtime_attention"
     assert status.vector.status == RuntimeServiceStatus.missing
+    vector_container = next(container for container in status.containers if container.name == "supabase_vector_Extrusion_web_console")
+    assert vector_container.required is False
+    assert vector_container.exists is False
     assert "supabase_vector_Extrusion_web_console" not in missing
     assert ready is True
 

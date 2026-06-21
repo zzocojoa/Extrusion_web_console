@@ -218,7 +218,16 @@ class RuntimeReadinessService:
                 status = RuntimeServiceStatus.ready
             else:
                 status = RuntimeServiceStatus.stopped
-            containers.append(RuntimeContainerStatus(name=name, required=True, exists=payload is not None, running=running, status=status, status_text=status_text))
+            containers.append(
+                RuntimeContainerStatus(
+                    name=name,
+                    required=not self._is_vector_container_name(name),
+                    exists=payload is not None,
+                    running=running,
+                    status=status,
+                    status_text=status_text,
+                )
+            )
         return containers
 
     def _probe_grafana(self) -> RuntimeProbeStatus:
@@ -248,8 +257,11 @@ class RuntimeReadinessService:
         )
 
     def _is_core_required_container(self, container: RuntimeContainerStatus) -> bool:
+        return container.required and not self._is_vector_container_name(container.name)
+
+    def _is_vector_container_name(self, name: str) -> bool:
         vector_suffix = f"_vector_{self.settings.local_supabase_project_id}"
-        return container.required and not container.name.endswith(vector_suffix)
+        return name.endswith(vector_suffix)
 
     def _config_items(self) -> list[RuntimeConfigItem]:
         return [
