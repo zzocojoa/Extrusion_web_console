@@ -82,6 +82,28 @@ Full backend validation is recommended before merge:
 .\.venv\Scripts\python -m pytest tests\backend
 ```
 
+Current PR validation evidence:
+
+- Targeted backend: `37 passed, 2 warnings`.
+- Full backend: `350 passed, 18 warnings`.
+- Frontend: `npm run typecheck` passed.
+- Frontend API build: `npm run build:api` passed.
+- Package assembly: `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip` passed.
+- Package label: `ExtrusionWebConsole-ce2c07b-20260621-212525-838`.
+- Package source commit: `ce2c07b`.
+- Package zip SHA-256:
+  `11851b0857844a93ad8b8bb488f3620bbd6b5a3a27331d28e9f51ebcef4517de`.
+- Package launcher `-CheckOnly`: passed; no backend process started.
+- Package shortcut installer `-CheckOnly`: passed; no shortcuts were written.
+- Package read-only HTTP smoke: `/`, `/upload`, `/logs`, `/settings`,
+  `/api/health`, `/api/config`, and `/api/audit?limit=1` returned 200;
+  `/api/docs` and `/api/openapi.json` returned 404.
+- Package health LAN state: `lanStatus=localhost_only`,
+  `lanEnabled=false`, `sharedLocalTokenAllowed=false`.
+- `$review` adversarial after fixes: `No actionable findings.`
+- `$review` structured after fixes: no blocking correctness or security
+  finding.
+
 ## Rollback
 
 Before commit:
