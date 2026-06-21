@@ -162,6 +162,14 @@ Validation from `codex/v2-completion-stack-rehearsal` at commit `f98524e`:
   before commit `f98524e`; the commit blocks Start on non-core attention and
   maps Docker `Restarting` container status to `unhealthy` instead of
   `stopped`.
+- A later Codex read-only adversarial review found that `docs/172` overstated
+  the LAN guard's ability to prevent unsupported direct non-loopback Uvicorn
+  socket binds. `docs/172` now states the actual boundary: supported
+  operator/package starts must use the launcher, request middleware rejects
+  remote requests after they reach the app, and direct
+  `uvicorn ... --host 0.0.0.0` starts remain out of scope.
+- Final Codex read-only adversarial review after the LAN boundary correction:
+  no actionable findings.
 
 This read-only smoke does not approve Upload Preview, Start Upload, Retry
 Failed, Delete, Settings save, feature-gate enablement, LAN exposure, deploy,
