@@ -114,12 +114,12 @@ separate from full Multi-user LAN approval.
 
 ## Local Rehearsal Validation
 
-Validation from `codex/v2-completion-stack-rehearsal` at commit `a4d55e4`:
+Validation from `codex/v2-completion-stack-rehearsal` at commit `f98524e`:
 
 - `git diff --check`: passed.
 - Conflict marker scan across `CHANGELOG.md`, `README.md`, `docs`, `backend`,
   `frontend`, `launcher`, `tests`, and `packaging`: no conflict markers found.
-- `.\.venv\Scripts\python -m pytest tests\backend`: `360 passed, 18 warnings`.
+- `.\.venv\Scripts\python -m pytest tests\backend`: `361 passed, 18 warnings`.
 - `cd frontend; npm run typecheck; npm run build:api`: passed.
 - `.\packaging\assemble_operator_package.ps1 -FrontendMode api`: passed.
 - `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`:
@@ -137,20 +137,22 @@ Validation from `codex/v2-completion-stack-rehearsal` at commit `a4d55e4`:
 - Sanitized runtime smoke fields from `/api/runtime/local-supabase`:
   - `overallStatus`: `attention`
   - `grafana.status`: `unreachable`
-  - `vector.status`: `stopped`
-  - `vector.detail`: `Vector container status class is stopped.`
+  - `vector.status`: `unhealthy`
+  - `vector.detail`: `Vector container status class is unhealthy.`
 - The smoke backend was stopped after the run and port 8010 was confirmed
   closed.
 - Package metadata:
-  - `packageLabel`: `ExtrusionWebConsole-a4d55e4-20260621-222940-214`
-  - `sourceCommit`: `a4d55e4`
+  - `packageLabel`: `ExtrusionWebConsole-f98524e-20260621-224425-557`
+  - `sourceCommit`: `f98524e`
   - `runtimeMode`: `operator-ready`
   - `frontendMode`: `api`
   - `zipCreated`: `true`
   - `zipSha256`:
-    `7bfbeecd6482be1d92aa4a459d569f16409894ee4501920721f0a21d4c4cc254`
-- Codex read-only adversarial review against
-  `origin/codex/v2-completion-track`: no actionable findings.
+    `4addd94b5be5f157a65395f00af7601c403995bbc6a42200893352323c7542a4`
+- Codex read-only adversarial review found two runtime observability findings
+  before commit `f98524e`; the commit blocks Start on non-core attention and
+  maps Docker `Restarting` container status to `unhealthy` instead of
+  `stopped`.
 
 This read-only smoke does not approve Upload Preview, Start Upload, Retry
 Failed, Delete, Settings save, feature-gate enablement, LAN exposure, deploy,
