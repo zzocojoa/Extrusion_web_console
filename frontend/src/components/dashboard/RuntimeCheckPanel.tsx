@@ -143,7 +143,7 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
     {
       id: "grafana",
       label: t("runtime.services.grafana"),
-      tone: toneForService(runtimeStatus.grafana.status),
+      tone: toneForObservabilityService(runtimeStatus.grafana.status),
       detail: runtimeStatus.grafana.url ?? runtimeServiceDetail(runtimeStatus.grafana, t),
       href: runtimeStatus.grafana.url ?? undefined,
       lastCheckedAt: checkedAt,
@@ -151,7 +151,7 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
     {
       id: "vector",
       label: t("runtime.services.vector"),
-      tone: toneForService(runtimeStatus.vector.status),
+      tone: toneForObservabilityService(runtimeStatus.vector.status),
       detail: runtimeServiceDetail(runtimeStatus.vector, t),
       lastCheckedAt: checkedAt,
     },
@@ -185,6 +185,15 @@ function toneForService(status: RuntimeServiceStatus): StatusTone {
   if (status === "starting" || status === "stopping") return "running";
   if (status === "stopped" || status === "unreachable" || status === "unhealthy") return "attention";
   if (status === "missing") return "blocked";
+  return "muted";
+}
+
+function toneForObservabilityService(status: RuntimeServiceStatus): StatusTone {
+  if (status === "ready") return "ready";
+  if (status === "starting" || status === "stopping") return "running";
+  if (status === "stopped" || status === "unreachable" || status === "unhealthy" || status === "missing" || status === "unknown") {
+    return "attention";
+  }
   return "muted";
 }
 
