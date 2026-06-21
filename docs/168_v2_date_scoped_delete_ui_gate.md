@@ -112,12 +112,16 @@ package output as rollback for this UI gate.
 
 ## Validation
 
-Initial validation completed:
+Validation completed:
 
 ```powershell
 .\.venv\Scripts\python -m pytest tests\backend\test_config_api.py
 node -e "JSON.parse(require('fs').readFileSync('frontend/src/i18n/locales/en.json','utf8')); JSON.parse(require('fs').readFileSync('frontend/src/i18n/locales/ko.json','utf8')); console.log('i18n json ok')"
 cd frontend; npm run typecheck
+.\.venv\Scripts\python -m pytest tests\backend
+cd frontend; npm run build:api
+.\packaging\assemble_operator_package.ps1 -FrontendMode api
+.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip
 ```
 
 Results:
@@ -125,6 +129,27 @@ Results:
 - `tests\backend\test_config_api.py`: `22 passed, 2 warnings`
 - i18n JSON parse: `i18n json ok`
 - frontend typecheck: passed
+- full backend tests: `346 passed, 18 warnings`
+- frontend API build: passed
+- package assembly without zip: passed
+- package assembly with zip: passed
 
-Broader backend, API build, package, and `$review` validation remain required
-before merge.
+Package metadata:
+
+- `packageLabel`: `ExtrusionWebConsole-f6e051e-20260621-182738-697`
+- `sourceCommit`: `f6e051e`
+- `frontendMode`: `api`
+- `runtimeMode`: `operator-ready`
+- `zipCreated`: `true`
+- SHA-256:
+  `ab8916e6aef2c6b5d8b39cc86a7263421bad21c5b9e9a691a1c39528253f81d4`
+
+Package smoke:
+
+- `launcher\start_web_console.ps1 -CheckOnly`: passed
+- `launcher\install_shortcuts.ps1 -CheckOnly`: passed
+- read-only HTTP smoke on isolated loopback port `18080`: `/`, `/upload`,
+  `/logs`, `/settings`, `/api/health`, `/api/config`, and
+  `/api/audit?limit=1` all returned HTTP `200`
+- The smoke command discarded response bodies and stopped the launcher-owned
+  backend after the read-only checks.
