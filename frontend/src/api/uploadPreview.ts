@@ -68,6 +68,8 @@ export interface PreviewSummary {
   risky: number;
   excluded: number;
   uploadRows: number;
+  targetRows: number;
+  partialOverlapRows: number;
   dbMatchedRows: number;
 }
 
@@ -249,6 +251,16 @@ function toCamelPreviewResponse(raw: any): PreviewResponse {
         risky: summary.risky ?? summary.risky_count ?? 0,
         excluded: summary.excluded ?? summary.excluded_count ?? 0,
         uploadRows: summary.uploadRows ?? summary.upload_rows ?? summary.upload_row_estimate ?? 0,
+        targetRows:
+          summary.targetRows ??
+          summary.target_rows ??
+          summary.target_upload_rows ??
+          summary.uploadRows ??
+          summary.upload_rows ??
+          summary.upload_row_estimate ??
+          0,
+        partialOverlapRows:
+          summary.partialOverlapRows ?? summary.partial_overlap_rows ?? summary.partial_overlap_upload_rows ?? 0,
         dbMatchedRows: summary.dbMatchedRows ?? summary.db_matched_rows ?? summary.db_match_count ?? 0,
       },
       warnings: run.warnings ?? [],

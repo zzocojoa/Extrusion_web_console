@@ -198,6 +198,12 @@ function applyFilters(
 }
 
 function summarize(items: PreviewItem[]): PreviewSummary {
+  const targetRows = items
+    .filter((item) => item.status === "target")
+    .reduce((sum, item) => sum + (item.uploadRowEstimate ?? 0), 0);
+  const partialOverlapRows = items
+    .filter((item) => item.status === "partial_overlap")
+    .reduce((sum, item) => sum + (item.uploadRowEstimate ?? 0), 0);
   return {
     total: items.length,
     target: items.filter((item) => item.status === "target").length,
@@ -205,9 +211,9 @@ function summarize(items: PreviewItem[]): PreviewSummary {
     partialOverlap: items.filter((item) => item.status === "partial_overlap").length,
     risky: items.filter((item) => item.status === "risky").length,
     excluded: items.filter((item) => item.status === "excluded").length,
-    uploadRows: items
-      .filter((item) => item.status === "target")
-      .reduce((sum, item) => sum + (item.uploadRowEstimate ?? 0), 0),
+    uploadRows: targetRows + partialOverlapRows,
+    targetRows,
+    partialOverlapRows,
     dbMatchedRows: items.reduce((sum, item) => sum + (item.dbMatchCount ?? 0), 0),
   };
 }

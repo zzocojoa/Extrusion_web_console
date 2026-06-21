@@ -170,12 +170,13 @@ def parse_json_dict(value: str | None) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def run_dto(row: Any) -> PreviewRunDto:
+def run_dto(row: Any, row_estimates_by_status: dict[str, int] | None = None) -> PreviewRunDto:
     config_snapshot = parse_json_dict(row["config_snapshot_json"])
     options = parse_json_dict(row["options_json"])
     profile_snapshot = config_snapshot.get("previewProfile", {})
     if not isinstance(profile_snapshot, dict):
         profile_snapshot = {}
+    row_estimates = row_estimates_by_status or {}
     return PreviewRunDto(
         preview_run_id=row["preview_run_id"],
         status=PreviewRunStatus(row["status"]),
@@ -191,6 +192,8 @@ def run_dto(row: Any) -> PreviewRunDto:
             risky=row["risky_count"],
             excluded=row["excluded_count"],
             upload_rows=row["upload_row_estimate"],
+            target_rows=row_estimates.get("target", 0),
+            partial_overlap_rows=row_estimates.get("partial_overlap", 0),
             db_matched_rows=row["db_match_count"],
         ),
         warnings=[],
@@ -498,8 +501,9 @@ def build_preview_detail(
         limit=limit,
         offset=offset,
     )
+    row_estimates = repository.upload_row_estimates_by_status(preview_run_id)
     return PreviewRunDetailResponse(
-        run=run_dto(row),
+        run=run_dto(row, row_estimates),
         items=[item_dto(item) for item in items],
         page=PreviewPageDto(limit=limit, offset=offset, total_items=total_items),
     )

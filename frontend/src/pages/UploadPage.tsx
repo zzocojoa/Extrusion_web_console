@@ -226,6 +226,10 @@ function hasDbReconciliationEvidence(item: PreviewItem) {
 
 function buildInterimSummary(response: PreviewResponse): PreviewSummary {
   const items = response.items;
+  const targetRows = sumNullable(items.filter((item) => item.status === "target").map((item) => item.uploadRowEstimate));
+  const partialOverlapRows = sumNullable(
+    items.filter((item) => item.status === "partial_overlap").map((item) => item.uploadRowEstimate),
+  );
   return {
     total: Math.max(response.page.totalItems ?? 0, items.length),
     target: items.filter((item) => item.status === "target").length,
@@ -233,7 +237,9 @@ function buildInterimSummary(response: PreviewResponse): PreviewSummary {
     partialOverlap: items.filter((item) => item.status === "partial_overlap").length,
     risky: items.filter((item) => item.status === "risky").length,
     excluded: items.filter((item) => item.status === "excluded").length,
-    uploadRows: sumNullable(items.filter((item) => item.status === "target").map((item) => item.uploadRowEstimate)),
+    uploadRows: targetRows + partialOverlapRows,
+    targetRows,
+    partialOverlapRows,
     dbMatchedRows: sumNullable(items.map((item) => item.dbMatchCount)),
   };
 }
@@ -243,14 +249,17 @@ function buildPreviewGateBreakdown(preview: PreviewResponse) {
   const targetItems = preview.items.filter((item) => item.status === "target");
   const physicalRowsFromItems = sumNullable(targetItems.map((item) => item.rowCount));
   const uniqueKeysFromItems = sumNullable(targetItems.map((item) => item.localKeyCount));
-  const physicalRows = physicalRowsFromItems > 0 ? physicalRowsFromItems : summary.uploadRows;
-  const uniqueUploadKeys = uniqueKeysFromItems > 0 ? uniqueKeysFromItems : summary.uploadRows;
+  const targetRows = summary.targetRows > 0 ? summary.targetRows : summary.uploadRows;
+  const physicalRows = physicalRowsFromItems > 0 ? physicalRowsFromItems : targetRows;
+  const uniqueUploadKeys = uniqueKeysFromItems > 0 ? uniqueKeysFromItems : targetRows;
   return {
     targetPhysicalRows: physicalRows,
     targetUniqueUploadKeys: uniqueUploadKeys,
     targetDuplicateKeyCount: Math.max(0, physicalRows - uniqueUploadKeys),
     previewDbMatchedKeys: summary.dbMatchedRows,
-    expectedUploadRows: summary.uploadRows,
+    expectedUploadRows: targetRows,
+    partialOverlapRows: summary.partialOverlapRows,
+    fullUploadEstimateRows: summary.uploadRows,
     loadedTargetFiles: targetItems.length,
     targetFiles: summary.target,
   };
@@ -404,10 +413,10 @@ export function UploadPage() {
     return currentPreview.items.filter((item) => selected.has(item.previewItemId) && item.status === "already_in_db");
   }, [currentPreview, selectedDeleteItemIds]);
   const canStartUpload = Boolean(
-    currentPreview?.run.status === "succeeded" &&
+      currentPreview?.run.status === "succeeded" &&
       currentPreview.run.dbStatus === "reachable" &&
       currentPreview.run.summary.target > 0 &&
-      currentPreview.run.summary.uploadRows > 0 &&
+      currentPreview.run.summary.targetRows > 0 &&
       currentPreview.run.summary.risky === 0,
   );
   const latestDeleteJobQuery = useQuery({
@@ -881,7 +890,7 @@ function PreviewTab(props: PreviewTabProps) {
 
   function confirmStartUpload() {
     props.onStartUpload({
-      expectedTargetRows: reviewablePreview?.run.summary.uploadRows ?? 0,
+      expectedTargetRows: reviewablePreview?.run.summary.targetRows ?? 0,
       expectedTargetFiles: reviewablePreview?.run.summary.target ?? 0,
     });
     setStartReviewOpen(false);
@@ -1123,19 +1132,19 @@ function StartUploadConfirmationModal({
   const { run } = preview;
   const { summary } = run;
   const breakdown = buildPreviewGateBreakdown(preview);
-  const expectedRows = String(summary.uploadRows);
-  const formattedUploadRows = formatNumber(summary.uploadRows);
+  const expectedRows = String(summary.targetRows);
+  const formattedUploadRows = formatNumber(summary.targetRows);
   const confirmAllowed =
     run.status === "succeeded" &&
     run.dbStatus === "reachable" &&
     summary.target > 0 &&
-    summary.uploadRows > 0 &&
+    summary.targetRows > 0 &&
     summary.risky === 0 &&
     typedRows.trim() === expectedRows;
   const blockedReasons = [
     run.status !== "succeeded" ? t("upload.startReview.blocked.previewStatus") : null,
     run.dbStatus !== "reachable" ? t("upload.startReview.blocked.dbStatus") : null,
-    summary.target <= 0 || summary.uploadRows <= 0 ? t("upload.startReview.blocked.noTarget") : null,
+    summary.target <= 0 || summary.targetRows <= 0 ? t("upload.startReview.blocked.noTarget") : null,
     summary.risky > 0 ? t("upload.startReview.blocked.risky") : null,
   ].filter((reason): reason is string => Boolean(reason));
   const countItems: Array<{ id: string; label: string; value: string | number }> = [
@@ -1146,6 +1155,8 @@ function StartUploadConfirmationModal({
     { id: "targetDuplicateKeyCount", label: t("upload.startReview.targetDuplicateKeyCount"), value: formatNumber(breakdown.targetDuplicateKeyCount) },
     { id: "previewDbMatchedKeys", label: t("upload.startReview.previewDbMatchedKeys"), value: formatNumber(breakdown.previewDbMatchedKeys) },
     { id: "expectedUploadRows", label: t("upload.startReview.expectedUploadRows"), value: formatNumber(breakdown.expectedUploadRows) },
+    { id: "partialOverlapRows", label: t("upload.startReview.partialOverlapRows"), value: formatNumber(breakdown.partialOverlapRows) },
+    { id: "fullUploadEstimateRows", label: t("upload.startReview.fullUploadEstimateRows"), value: formatNumber(breakdown.fullUploadEstimateRows) },
     { id: "alreadyInDb", label: t("upload.startReview.alreadyInDb"), value: summary.alreadyInDb },
     { id: "risky", label: t("upload.startReview.risky"), value: summary.risky },
     { id: "excluded", label: t("upload.startReview.excluded"), value: summary.excluded },
@@ -1521,6 +1532,14 @@ function PreviewSummaryStrip({
       <div className="preview-summary-cell">
         <span>{t("upload.preview.uploadRows")}</span>
         <strong>{formatNumber(summary.uploadRows)}</strong>
+      </div>
+      <div className="preview-summary-cell">
+        <span>{t("upload.preview.targetRows")}</span>
+        <strong>{formatNumber(summary.targetRows)}</strong>
+      </div>
+      <div className="preview-summary-cell">
+        <span>{t("upload.preview.partialOverlapRows")}</span>
+        <strong>{formatNumber(summary.partialOverlapRows)}</strong>
       </div>
     </div>
   );

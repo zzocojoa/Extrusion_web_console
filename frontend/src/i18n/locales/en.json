@@ -332,6 +332,8 @@
       "db": "DB",
       "updated": "Updated",
       "uploadRows": "Upload rows",
+      "targetRows": "Start target rows",
+      "partialOverlapRows": "Partial overlap rows",
       "interimSummary": "Interim counts from rows already processed. Final upload eligibility is available only after Preview succeeds.",
       "loading": "Checking local CSV files and DB reconciliation...",
       "error": "Upload preview status could not be loaded."
@@ -373,7 +375,9 @@
       "targetDuplicateKeyCount": "Target duplicate key count",
       "previewDbMatchedKeys": "Preview DB matched keys",
       "expectedUploadRows": "Expected upload rows",
-      "countSemantics": "Expected upload rows is the approval gate. acceptedRows and the DB row-count delta are checked after execution and may differ from target physical rows.",
+      "partialOverlapRows": "Partial overlap rows",
+      "fullUploadEstimateRows": "Full upload estimate",
+      "countSemantics": "Expected upload rows is the target-only approval gate. Partial-overlap rows are excluded from Start Upload unless a later approved flow explicitly allows them. acceptedRows and the DB row-count delta are checked after execution and may differ from target physical rows.",
       "partialBreakdown": "Target physical/key breakdown is based on {{loaded}} of {{total}} loaded target files. Expected upload rows remains the confirmation gate."
     },
     "controls": {

@@ -10,7 +10,7 @@ from backend.app.schemas.upload_jobs import UploadJobStatus
 PREVIEW_GATE_SNAPSHOT = {
     "plc": {"pathClass": "missing", "pathFingerprint": None},
     "temperature": {"pathClass": "missing", "pathFingerprint": None},
-    "supabaseDbUrlConfigured": False,
+    "supabaseDbUrlConfigured": True,
 }
 
 

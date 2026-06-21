@@ -8,7 +8,10 @@ from backend.app.schemas.upload_jobs import UploadJobStatus
 from backend.app.services.upload_jobs import (
     UploadDbEvidenceContext,
     UploadJobService,
+    build_upload_headers,
     deduplicate_upload_records,
+    classify_upload_exception,
+    is_jwt_like_key,
     parse_edge_accepted_rows,
 )
 from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
@@ -28,6 +31,14 @@ class FakeUploader:
             raise RuntimeError("edge timeout")
         self.batches.append(batch)
         return len(batch)
+
+
+class FailingUploader:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def upload_batch(self, batch: list[dict[str, object]]) -> int:
+        raise self.error
 
 
 class FakeUploadEvidenceDb:
@@ -307,6 +318,24 @@ def test_parse_edge_accepted_rows_falls_back_to_upserted_then_legacy_inserted() 
     assert parse_edge_accepted_rows({}) == 0
 
 
+def test_upload_headers_use_authorization_only_for_jwt_like_keys() -> None:
+    jwt_key = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.signature"
+    publishable_key = "sb_publishable_fixture"
+
+    assert is_jwt_like_key(jwt_key) is True
+    assert "Authorization" in build_upload_headers(jwt_key)
+    publishable_headers = build_upload_headers(publishable_key)
+    assert publishable_headers["apikey"] == publishable_key
+    assert "Authorization" not in publishable_headers
+
+
+def test_upload_exception_classifies_jwt_edge_rejection_as_auth_config() -> None:
+    code, message = classify_upload_exception(RuntimeError("Edge rejected upload (401): Invalid JWT"))
+
+    assert code == "auth_invalid_or_stale_config"
+    assert "Invalid JWT" not in message
+
+
 def test_upload_job_service_records_file_failure_without_silent_exit(tmp_path: Path) -> None:
     repository, job_id, _csv_path = prepare_target_job(
         tmp_path,
@@ -328,6 +357,26 @@ def test_upload_job_service_records_file_failure_without_silent_exit(tmp_path: P
     assert files[0]["last_error_code"] == "upload_failed"
     assert any(event["event_type"] == "file.failed" for event in events)
     assert any(event["event_type"] == "job.failed" for event in events)
+
+
+def test_upload_job_service_records_auth_failure_reason(tmp_path: Path) -> None:
+    repository, job_id, _csv_path = prepare_target_job(
+        tmp_path,
+        "timestamp,device_id,value\n2026-06-02T09:00:00+09:00,extruder_plc,1\n",
+    )
+    service = UploadJobService(
+        Settings(supabase_edge_url="http://localhost/upload", supabase_anon_key="anon"),
+        repository,
+        uploader=FailingUploader(RuntimeError("Edge rejected upload (401): Invalid JWT")),  # type: ignore[arg-type]
+    )
+
+    service.run_job(job_id)
+
+    job = repository.get_job(job_id)
+    files = repository.list_job_files(job_id)
+    assert job["status"] == UploadJobStatus.failed.value
+    assert files[0]["last_error_code"] == "auth_invalid_or_stale_config"
+    assert "Invalid JWT" not in files[0]["last_error_message"]
 
 
 def test_upload_job_service_blocks_changed_file_since_preview(tmp_path: Path) -> None:

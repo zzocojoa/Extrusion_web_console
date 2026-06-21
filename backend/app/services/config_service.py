@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from backend.app.core.settings import Settings
+from backend.app.core.settings import Settings, clear_settings_cache
 from backend.app.core.state_context import build_state_context
 from backend.app.core.target_class import build_upload_target_preflight
 from backend.app.db.audit_repository import AuditRepository
@@ -201,6 +201,7 @@ class ConfigService:
             raise
 
         saved_keys = sorted(normalized.keys())
+        clear_settings_cache()
         self._audit_save(actor=actor, result=AuditResult.success, keys=saved_keys)
         return ConfigSaveResponse(saved_keys=saved_keys, config_file_path=str(self.config_path))
 

@@ -2,6 +2,16 @@
 
 All notable changes to Extrusion Web Console are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Hardened Upload Start/Retry readiness gates: Settings save now clears cached
+  backend settings for the next request, Start/Retry fail closed when local DB
+  target class, Supabase API/DB/Edge readiness, or Edge auth key class is not
+  ready, and Preview summaries expose target-only rows separately from
+  partial-overlap rows so Start Upload approvals use the target-only count.
+
 ## [0.1.0.1] - 2026-06-19
 
 ### Added

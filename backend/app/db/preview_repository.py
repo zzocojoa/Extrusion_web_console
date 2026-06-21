@@ -423,6 +423,19 @@ class PreviewRepository:
                 f"SELECT * FROM preview_runs {where} ORDER BY created_at DESC LIMIT 1"
             ).fetchone()
 
+    def upload_row_estimates_by_status(self, preview_run_id: str) -> dict[str, int]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT status, COALESCE(SUM(COALESCE(upload_row_estimate, 0)), 0) AS upload_rows
+                FROM preview_items
+                WHERE preview_run_id = ?
+                GROUP BY status
+                """,
+                (preview_run_id,),
+            ).fetchall()
+        return {str(row["status"]): int(row["upload_rows"] or 0) for row in rows}
+
     def list_items(
         self,
         preview_run_id: str,

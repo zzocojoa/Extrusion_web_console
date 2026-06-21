@@ -172,9 +172,17 @@ Required preconditions:
 - Preview run is fresh and succeeded;
 - Preview source class matches the approved source class;
 - DB status is reachable and reviewed;
+- current app config still points to the expected local DB target class, and
+  runtime readiness for Supabase API, DB, and Edge is ready;
+- configured Edge auth is ready for the function JWT mode; a publishable key or
+  stale non-JWT value must not be treated as a Start Upload approval key while
+  the Edge function still requires JWT verification;
 - `risky = 0`;
 - target files and target rows are greater than zero;
-- target row count matches UI/API/approval text;
+- target-only row count matches UI/API/approval text;
+- partial-overlap rows are reviewed separately and are not included in the
+  Start Upload approval row count unless a later explicitly approved flow says
+  otherwise;
 - package source commit and checksum still match this document;
 - no feature gate is enabled as part of the upload approval.
 
@@ -190,7 +198,9 @@ Evidence to record after Start Upload:
 
 - preview run id;
 - upload job id;
-- approved target row count;
+- approved target-only row count;
+- full upload estimate, target-only rows, and partial-overlap rows as separate
+  counts when available;
 - started/completed timestamps;
 - file counts and job status;
 - accepted/upserted row count from the Edge response class;

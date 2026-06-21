@@ -1,6 +1,7 @@
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -31,14 +32,50 @@ from backend.app.schemas.upload_jobs import (
     UploadJobSummary,
 )
 from backend.app.services.preview_safety import source_gate_snapshot
-from backend.app.services.upload_jobs import UploadJobService
+from backend.app.services.command_runner import AllowedCommandRunner
+from backend.app.services.runtime_readiness import RuntimeReadinessService
+from backend.app.services.upload_jobs import UploadJobService, is_jwt_like_key
 
 router = APIRouter(prefix="/api/upload/jobs", tags=["upload-jobs"])
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-job")
 
 
+@dataclass(frozen=True)
+class UploadRuntimeReadiness:
+    ready: bool
+    reason: str | None = None
+    detail: dict[str, Any] | None = None
+
+
 def get_upload_job_repository(settings: Settings = Depends(get_settings)) -> UploadJobRepository:
     return UploadJobRepository(settings.state_db_path)
+
+
+def get_upload_runtime_readiness(settings: Settings = Depends(get_settings)) -> UploadRuntimeReadiness:
+    try:
+        runner = AllowedCommandRunner(
+            settings.local_supabase_project_path,
+            settings.runtime_command_timeout_seconds,
+            project_id=settings.local_supabase_project_id,
+        )
+        runtime = RuntimeReadinessService(settings, runner).check_status()
+    except Exception:
+        return UploadRuntimeReadiness(ready=False, reason="runtime_status_unavailable")
+
+    detail = {
+        "overallStatus": runtime.overall_status.value,
+        "reasonCode": runtime.reason_code,
+        "apiStatus": runtime.api.status.value,
+        "dbStatus": runtime.db.status.value,
+        "edgeStatus": runtime.edge_runtime.status.value,
+    }
+    if runtime.api.status.value != "ready":
+        return UploadRuntimeReadiness(ready=False, reason="api_unreachable", detail=detail)
+    if runtime.db.status.value != "ready":
+        return UploadRuntimeReadiness(ready=False, reason="db_unreachable", detail=detail)
+    if runtime.edge_runtime.status.value != "ready":
+        return UploadRuntimeReadiness(ready=False, reason="edge_unreachable", detail=detail)
+    return UploadRuntimeReadiness(ready=True, detail=detail)
 
 
 def _dt(value: str | None) -> datetime | None:
@@ -191,7 +228,13 @@ def reject_with_audit(
     raise HTTPException(status_code=status_code, detail=detail, headers=headers)
 
 
-def ensure_upload_config(settings: Settings, repository: UploadJobRepository, action: str, params: dict[str, Any]) -> None:
+def ensure_upload_config(
+    settings: Settings,
+    repository: UploadJobRepository,
+    action: str,
+    params: dict[str, Any],
+    runtime_readiness: UploadRuntimeReadiness,
+) -> None:
     if not settings.upload_edge_url or not settings.supabase_anon_key:
         reject_with_audit(
             repository,
@@ -214,6 +257,40 @@ def ensure_upload_config(settings: Settings, repository: UploadJobRepository, ac
             params={**params, "targetClassPreflight": target_preflight.to_api()},
             detail_extra={"targetClassPreflight": target_preflight.to_api()},
         )
+    if target_preflight.db.target_class != "loopback_expected_db_port":
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action=action,
+            target_type="upload_job",
+            target_id=None,
+            reason="db_target_class_mismatch",
+            params={**params, "targetClassPreflight": target_preflight.to_api()},
+            detail_extra={"targetClassPreflight": target_preflight.to_api()},
+        )
+    if not is_jwt_like_key(settings.supabase_anon_key):
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action=action,
+            target_type="upload_job",
+            target_id=None,
+            reason="auth_invalid_or_stale_config",
+            params={**params, "authKeyClass": "not_jwt"},
+            detail_extra={"authKeyClass": "not_jwt"},
+        )
+    if not runtime_readiness.ready:
+        reason = runtime_readiness.reason or "runtime_status_unavailable"
+        reject_with_audit(
+            repository,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            action=action,
+            target_type="upload_job",
+            target_id=None,
+            reason=reason,
+            params={**params, "runtimeReadiness": runtime_readiness.detail or {"reason": reason}},
+            detail_extra={"runtimeReadiness": runtime_readiness.detail or {"reason": reason}},
+        )
 
 
 @router.post("", response_model=UploadJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -221,6 +298,7 @@ def create_upload_job(
     request: UploadJobCreateRequest,
     settings: Settings = Depends(get_settings),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
+    runtime_readiness: UploadRuntimeReadiness = Depends(get_upload_runtime_readiness),
 ) -> UploadJobCreateResponse:
     if request.mode != UploadJobMode.preview_targets:
         reject_with_audit(
@@ -259,7 +337,7 @@ def create_upload_job(
         )
     expected_target_rows = request.expected_target_rows
     assert expected_target_rows is not None
-    ensure_upload_config(settings, repository, "upload.start", approval_params)
+    ensure_upload_config(settings, repository, "upload.start", approval_params, runtime_readiness)
     job_id = f"upl_{uuid4().hex[:12]}"
     result = repository.create_job_from_preview(
         job_id=job_id,
@@ -359,6 +437,7 @@ def retry_upload_job(
     job_id: str = Path(alias="jobId"),
     settings: Settings = Depends(get_settings),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
+    runtime_readiness: UploadRuntimeReadiness = Depends(get_upload_runtime_readiness),
 ) -> UploadJobCreateResponse:
     approval_params = {
         "retryOfJobId": job_id,
@@ -389,7 +468,7 @@ def retry_upload_job(
         )
     expected_remaining_rows = request.expected_remaining_rows
     assert expected_remaining_rows is not None
-    ensure_upload_config(settings, repository, "upload.retry", approval_params)
+    ensure_upload_config(settings, repository, "upload.retry", approval_params, runtime_readiness)
     retry_job_id = f"upl_{uuid4().hex[:12]}"
     result = repository.create_retry_job(
         job_id=retry_job_id,
