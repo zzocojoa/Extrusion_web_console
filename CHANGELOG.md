@@ -6,6 +6,10 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Added a fixture-first gate for V2 delete expansion in
+  `docs/170_v2_delete_expansion_fixture_gate.md`, keeping broader delete policy
+  work deferred until concrete limits, fixture DB evidence, audit/reconcile
+  proof, rollback boundaries, and separate approvals exist.
 - Added an explicit V2 completion-track item table to `docs/165`, so the eight
   remaining V2 items are each classified as `Completed` or `Deferred` without
   implying broad V2 completion.

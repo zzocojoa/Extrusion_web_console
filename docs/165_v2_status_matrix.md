@@ -32,6 +32,7 @@ commit, push, or PR creation.
   - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
   - `docs/164_operator_data_mutation_safety_gate.md`
   - `docs/166_v2_api_mode_package_runtime_evidence.md`
+  - `docs/170_v2_delete_expansion_fixture_gate.md`
 - Current code evidence in `backend/`, `frontend/`, and `tests/backend/`.
 
 ## Status Definitions
@@ -50,7 +51,7 @@ commit, push, or PR creation.
 | 1 | Operational upload verification | `Deferred` | `docs/164` defines fresh inventory, Preview-only, Start Upload, and Retry Failed approval gates. | Exact operational approval and fresh evidence are required before any Preview-only, Start Upload, or Retry Failed run. |
 | 2 | API-mode package full runtime smoke and zip handoff | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke. | Does not approve operator mutation or replace the accepted mutation package in `docs/164`. |
 | 3 | Operator-facing date-scoped delete UI | `Deferred` | `docs/161` keeps operator-facing date-scoped delete UI unapproved. | Copy, Korean/English i18n, runbook, role matrix, feature gate, and explicit UI approval. |
-| 4 | Delete expansion | `Deferred` | `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Fixture DB evidence, limits, preflight/reconcile/audit/rollback proof, and separate approval. |
+| 4 | Delete expansion | `Deferred` | `docs/170` defines the fixture-first gate; `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Concrete policy limits, fixture DB evidence, preflight/reconcile/audit/rollback proof, and separate approval. |
 | 5 | Operational DB delete verification | `Deferred` | `docs/164` defines exact destructive approval wording and evidence requirements. | Exact row/key scope, no-undo acknowledgement, approval record, and operational evidence plan. |
 | 6 | Multi-user LAN | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep LAN and non-loopback bind blocked. | Auth/authz/session/actor audit/concurrency/CORS/bind design and explicit rescope. |
 | 7 | Grafana/Vector observability hardening | `Deferred` | `docs/159` and `docs/160` require sanitized logs/metrics and keep Grafana linked, not embedded. | Separate implementation, alerts/runbook/package checks, and validation evidence. |
@@ -69,7 +70,7 @@ commit, push, or PR creation.
 | API-mode operator package validation | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 handoff metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke for candidate package `ExtrusionWebConsole-eedac29-20260621-165853-560`. | This does not approve operator mutation and does not replace the `docs/164` accepted mutation package unless that gate is separately updated. |
 | Operator data mutation gate | `Completed` | `docs/164` records current package metadata and exact approval templates for Preview-only, Start Upload, Retry Failed, and Delete. | Each mutation still requires its own exact approval at execution time. |
 | Operator-facing date-scoped delete UI | `Deferred` | `docs/159`, `docs/160`, and `docs/161` keep date-scoped delete maintainer-only and defer operator-facing UI. | Copy, i18n, runbook, role matrix, and explicit UI approval. |
-| Delete expansion beyond current selected `already_in_db` path | `Deferred` | V2 design permits future policy work, but no broader delete policy is approved for operators. | Fixture evidence, production approval format, limits, and separate approval. |
+| Delete expansion beyond current selected `already_in_db` path | `Deferred` | `docs/170` requires explicit policy limits and fixture-first proof before broader delete capability can be implemented or discussed for operational data. | Fixture evidence, production approval format, limits, and separate approval. |
 | Operational DB delete verification | `Deferred` | Documents require separate operational approval; no current evidence approves production destructive smoke. | Exact DB target class, row/key scope, no-undo acknowledgement, and audit evidence plan. |
 | Multi-user LAN access | `Deferred` | `docs/159`, `docs/160`, and `docs/161` block LAN, non-loopback bind, LAN CORS widening, LAN sessions, and LAN rollout. | LAN security gate, auth design, role matrix, concurrency model, and explicit rescope. |
 | Grafana/Vector observability hardening | `Deferred` | V2 requirements are documented, but no current implementation evidence shows the hardened observability release is complete. | Separate design and implementation approval; Grafana remains linked, not embedded. |
@@ -108,6 +109,7 @@ This is a document-only status matrix. Before commit, rollback is:
 ```powershell
 git restore CHANGELOG.md docs\165_v2_status_matrix.md
 Remove-Item -LiteralPath docs\166_v2_api_mode_package_runtime_evidence.md
+Remove-Item -LiteralPath docs\170_v2_delete_expansion_fixture_gate.md
 ```
 
 After commit, revert the document commit. No operational evidence, local state
