@@ -130,9 +130,14 @@ Validation completed:
 ```powershell
 .\.venv\Scripts\python -m pytest tests\backend\test_app_startup.py tests\backend\test_config_api.py
 node -e "JSON.parse(require('fs').readFileSync('frontend/src/i18n/locales/en.json','utf8')); JSON.parse(require('fs').readFileSync('frontend/src/i18n/locales/ko.json','utf8')); console.log('i18n json ok')"
-cd frontend; npm run typecheck
+Push-Location frontend
+npm run typecheck
+$env:EWC_QA_VITE_API_MODE='api'
+npx playwright test --config qa/playwright.config.ts qa/date-scoped-delete-gate.spec.ts
+Remove-Item Env:EWC_QA_VITE_API_MODE
+npm run build:api
+Pop-Location
 .\.venv\Scripts\python -m pytest tests\backend
-cd frontend; npm run build:api
 .\packaging\assemble_operator_package.ps1 -FrontendMode api
 .\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip
 ```
@@ -143,6 +148,7 @@ Results:
   `24 passed, 2 warnings`
 - i18n JSON parse: `i18n json ok`
 - frontend typecheck: passed
+- API-mode Playwright gate spec: `2 passed`
 - full backend tests: `348 passed, 18 warnings`
 - frontend API build: passed
 - package assembly without zip: passed
@@ -150,19 +156,24 @@ Results:
 
 Package metadata:
 
-- `packageLabel`: `ExtrusionWebConsole-95fce17-20260621-190012-358`
-- `sourceCommit`: `95fce17`
+The package `sourceCommit` is the last code-bearing date-scoped delete review
+shell commit. Later commits in this branch may update this evidence record only;
+they do not change packaged runtime code unless the package metadata below is
+refreshed again.
+
+- `packageLabel`: `ExtrusionWebConsole-52b8ba1-20260621-192359-265`
+- `sourceCommit`: `52b8ba1`
 - `frontendMode`: `api`
 - `runtimeMode`: `operator-ready`
 - `zipCreated`: `true`
 - SHA-256:
-  `346b033a30f616cb7bacb612cb872ea876bd7e774214fcebc771dd0f6d0c58af`
+  `fa7cc09ac72a8246c08171ac3c3f9f13507387e4b937052e85b411d3d94a9071`
 
 Package smoke:
 
 - `launcher\start_web_console.ps1 -CheckOnly`: passed
 - `launcher\install_shortcuts.ps1 -CheckOnly`: passed
-- read-only HTTP smoke on isolated loopback port `18084`: `/`, `/upload`,
+- read-only HTTP smoke on isolated loopback port `18085`: `/`, `/upload`,
   `/logs`, `/settings`, `/api/health`, `/api/config`, and
   `/api/audit?limit=1` all returned HTTP `200`
 - The smoke command discarded response bodies and stopped the launcher-owned
