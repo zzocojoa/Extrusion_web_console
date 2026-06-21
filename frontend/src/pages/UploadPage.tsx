@@ -1055,7 +1055,7 @@ function PreviewTab(props: PreviewTabProps) {
         onClear={props.onClearDeleteSelection}
         onReconcile={props.onReconcileDelete}
       />
-      {props.dateScopedDeleteGate?.enabled ? (
+      {props.dateScopedDeleteGate?.reviewShellVisible ? (
         <DateScopedDeleteGatePanel
           gate={props.dateScopedDeleteGate}
           rangeMode={props.rangeMode}

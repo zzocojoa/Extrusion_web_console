@@ -94,7 +94,7 @@ V2 must ship behind independent gates.
 | Gate | Default | Scope |
 | --- | --- | --- |
 | `v2_delete_expansion_enabled` | `false` | Allows approved delete policies beyond selected `already_in_db`. |
-| `v2_date_scoped_delete_ui_enabled` | `false` | Allows only the non-mutating date-scoped delete review shell until role enforcement, executable policy, and runbook approval are complete. |
+| `v2_date_scoped_delete_ui_enabled` | `false` | Allows only the non-mutating date-scoped delete review shell through `reviewShellVisible`; executable `enabled` remains false until role enforcement, executable policy, and runbook approval are complete. |
 | `v2_lan_access_enabled` | `false` | Allows non-loopback bind only after LAN Security Gate approval. |
 | `v2_row_attribution_enabled` | `false` | Enables attribution ledger writes after schema review. |
 | `v2_db_delta_evidence_required` | `true` for new V2 mutations | Requires before/after DB delta evidence where measurable. |
@@ -115,8 +115,9 @@ operational DB mutation.
 Implementation status as of 2026-06-22: the backend exposes default-off
 read-only gate state for `v2_delete_expansion_enabled`,
 `v2_date_scoped_delete_ui_enabled`, and `v2_lan_access_enabled` through
-`GET /api/config`. The date-scoped delete UI gate controls only the
-non-mutating review shell. Delete expansion and LAN remain
+`GET /api/config`. The date-scoped delete UI gate can expose only the
+non-mutating review shell by setting `reviewShellVisible=true`; its executable
+`enabled` field remains `false`. Delete expansion and LAN remain
 `enabled=false` with `status=blocked_not_implemented` until their matching
 capabilities are implemented. These gates are intentionally not writable
 through ordinary Settings save or config JSON keys. Feature-gate enablement

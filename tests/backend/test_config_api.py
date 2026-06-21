@@ -357,6 +357,7 @@ def test_config_get_exposes_v2_feature_gates_default_off_and_read_only(tmp_path:
     assert date_gate == {
         "key": "v2_date_scoped_delete_ui_enabled",
         "enabled": False,
+        "reviewShellVisible": False,
         "source": "default",
         "mutable": False,
         "requiredRole": "maintainer",
@@ -385,12 +386,13 @@ def test_config_get_reports_env_enabled_date_scoped_delete_review_shell_without_
     assert response.status_code == 200
     body = response.json()
     gate = body["featureGates"]["v2DateScopedDeleteUi"]
-    assert gate["enabled"] is True
+    assert gate["enabled"] is False
+    assert gate["reviewShellVisible"] is True
     assert gate["source"] == "env"
     assert gate["mutable"] is False
     assert gate["requiredRole"] == "maintainer"
-    assert gate["status"] == "enabled"
-    assert gate["reason"] == "date_scoped_delete_ui_gate_enabled"
+    assert gate["status"] == "review_shell_visible"
+    assert gate["reason"] == "date_scoped_delete_ui_review_shell_visible"
     assert "v2DateScopedDeleteUiEnabled" not in {item["key"] for item in body["items"]}
 
 
@@ -408,6 +410,7 @@ def test_config_get_reports_env_requested_lan_gate_as_blocked_until_lan_is_imple
     assert response.status_code == 200
     gate = response.json()["featureGates"]["v2LanAccess"]
     assert gate["enabled"] is False
+    assert gate["reviewShellVisible"] is False
     assert gate["source"] == "env"
     assert gate["mutable"] is False
     assert gate["requiredRole"] == "admin"

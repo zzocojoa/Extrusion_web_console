@@ -6,6 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const runId = process.env.EWC_SCREENSHOT_QA_RUN_ID ?? new Date().toISOString().replace(/[:.]/g, "-");
 const port = process.env.EWC_SCREENSHOT_QA_PORT ?? "5175";
+const viteApiMode = process.env.EWC_QA_VITE_API_MODE ?? "";
 const artifactRoot = path.resolve(__dirname, "..", "..", ".gstack", "screenshots", "upload-job-browser-qa", runId);
 
 export default defineConfig({
@@ -30,7 +31,7 @@ export default defineConfig({
     timeout: 30_000,
     env: {
       ...process.env,
-      VITE_API_MODE: "",
+      VITE_API_MODE: viteApiMode,
     },
   },
 });

@@ -26,26 +26,28 @@ reset/cleanup, Docker cleanup, deployment, or operational DB mutation.
   - `v2_lan_access_enabled`
 - `GET /api/config` exposes those gates under `featureGates` with:
   - safe gate key;
-  - enabled state;
+  - executable enabled state;
+  - review-shell visibility state;
   - source class of `default` or `env`;
   - `mutable=false`;
   - required role;
   - status and reason code.
-- Env-requested enablement for the date-scoped delete UI gate exposes only the
-  non-mutating review shell. Env-requested enablement for delete expansion or
-  LAN remains `enabled=false` with `status=blocked_not_implemented` until the
-  matching executable capability is implemented.
+- Env-requested enablement for the date-scoped delete UI gate keeps
+  `enabled=false` and sets only `reviewShellVisible=true` for the non-mutating
+  review shell. Env-requested enablement for delete expansion or LAN remains
+  `enabled=false` with `status=blocked_not_implemented` until the matching
+  executable capability is implemented.
 - The date-scoped delete UI gate is intentionally absent from the Settings save
   allowlist and config JSON key map.
 - Settings save with `v2DateScopedDeleteUiEnabled` is rejected as an unknown
   key and writes a failed `settings.save` audit row.
 - The Upload page reads `featureGates.v2DateScopedDeleteUi`.
-- When the gate is absent or disabled, the date-scoped delete panel is not
-  rendered.
-- The Upload page renders the panel only when the effective date-scoped delete
-  UI gate is `enabled`. Default settings keep it hidden from normal operators.
-  Enabling this review shell still requires separate feature-gate approval and
-  reviewed startup/runtime configuration.
+- When the gate is absent or `reviewShellVisible=false`, the date-scoped delete
+  panel is not rendered.
+- The Upload page renders the panel only when the date-scoped delete UI gate has
+  `reviewShellVisible=true`. Default settings keep it hidden from normal
+  operators. Exposing this review shell still requires separate feature-gate
+  approval and reviewed startup/runtime configuration.
 - English and Korean i18n copy is present for the gated panel.
 
 ## Not Implemented
@@ -76,12 +78,13 @@ The gated date-scoped panel is deliberately non-mutating:
 - it does not enable a feature gate;
 - its only action is a disabled button with blocked-state copy.
 
-With default settings, normal operators do not see the panel because the
-effective `v2DateScopedDeleteUi` gate is `enabled=false`. With separate
-feature-gate approval and reviewed startup/runtime configuration, the gate can
-expose only this non-mutating review shell. The current shell does not perform
-role enforcement; `requiredRole` is metadata for the future executable policy.
-Gate-on review shell visibility is not approval for executable delete.
+With default settings, normal operators do not see the panel because
+`reviewShellVisible=false`. With separate feature-gate approval and reviewed
+startup/runtime configuration, the gate can expose only this non-mutating
+review shell through `reviewShellVisible=true` while `enabled` remains `false`.
+The current shell does not perform role enforcement; `requiredRole` is metadata
+for the future executable policy. Gate-on review shell visibility is not
+approval for executable delete.
 
 ## Runbook
 

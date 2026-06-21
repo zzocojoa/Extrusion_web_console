@@ -37,6 +37,7 @@ class ConfigItemDto(ApiModel):
 class FeatureGateDto(ApiModel):
     key: str
     enabled: bool
+    review_shell_visible: bool = False
     source: str
     mutable: bool = False
     required_role: str | None = None

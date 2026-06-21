@@ -34,10 +34,11 @@ export interface TargetClassPreflight {
 export interface FeatureGate {
   key: string;
   enabled: boolean;
+  reviewShellVisible?: boolean;
   source: ConfigSource;
   mutable: boolean;
   requiredRole: string | null;
-  status: "enabled" | "hidden" | string;
+  status: "enabled" | "hidden" | "review_shell_visible" | string;
   reason: string;
 }
 

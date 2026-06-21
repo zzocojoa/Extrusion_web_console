@@ -27,7 +27,8 @@ def test_create_app_logs_safe_v2_feature_gate_snapshot(tmp_path: Path, monkeypat
     assert "delete_expansion_requested_enabled=False" in messages
     assert "delete_expansion_effective_enabled=False" in messages
     assert "date_scoped_delete_ui_requested_enabled=True" in messages
-    assert "date_scoped_delete_ui_effective_enabled=True" in messages
+    assert "date_scoped_delete_ui_effective_enabled=False" in messages
+    assert "date_scoped_delete_ui_review_shell_visible=True" in messages
     assert "lan_access_requested_enabled=False" in messages
     assert "lan_access_effective_enabled=False" in messages
     assert "row_attribution_enabled=True" in messages

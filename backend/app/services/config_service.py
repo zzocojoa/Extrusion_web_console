@@ -87,18 +87,32 @@ def _build_feature_gate(
     key: str,
     requested_enabled: bool,
     implemented: bool,
+    review_shell_implemented: bool = False,
     env_key: str,
     required_role: str | None,
     hidden_reason: str,
     enabled_reason: str,
     blocked_reason: str,
+    review_shell_reason: str | None = None,
 ) -> FeatureGateDto:
     enabled = bool(requested_enabled and implemented)
-    status = "enabled" if enabled else "blocked_not_implemented" if requested_enabled else "hidden"
-    reason = enabled_reason if enabled else blocked_reason if requested_enabled else hidden_reason
+    review_shell_visible = bool(requested_enabled and not enabled and review_shell_implemented)
+    if enabled:
+        status = "enabled"
+        reason = enabled_reason
+    elif review_shell_visible:
+        status = "review_shell_visible"
+        reason = review_shell_reason or hidden_reason
+    elif requested_enabled:
+        status = "blocked_not_implemented"
+        reason = blocked_reason
+    else:
+        status = "hidden"
+        reason = hidden_reason
     return FeatureGateDto(
         key=key,
         enabled=enabled,
+        review_shell_visible=review_shell_visible,
         source=_feature_gate_source(env_key),
         mutable=False,
         required_role=required_role,
@@ -122,12 +136,14 @@ def _build_feature_gates(settings: Settings) -> FeatureGatesDto:
         v2_date_scoped_delete_ui=_build_feature_gate(
             key="v2_date_scoped_delete_ui_enabled",
             requested_enabled=settings.v2_date_scoped_delete_ui_enabled,
-            implemented=True,
+            implemented=False,
+            review_shell_implemented=True,
             env_key="EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED",
             required_role="maintainer",
             hidden_reason="date_scoped_delete_ui_gate_default_off",
             enabled_reason="date_scoped_delete_ui_gate_enabled",
             blocked_reason="date_scoped_delete_ui_role_model_missing",
+            review_shell_reason="date_scoped_delete_ui_review_shell_visible",
         ),
         v2_lan_access=_build_feature_gate(
             key="v2_lan_access_enabled",
