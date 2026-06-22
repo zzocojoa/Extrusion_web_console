@@ -23,12 +23,18 @@ match the exact tested completion-track commit.
 
 - Current `origin/main` baseline:
   `baee4982d8be9f6ef8e44b4a8ca6f1a30a382222`.
-- Completion-track candidate baseline before this docs readiness fix:
+- Reviewed completion-track candidate before this package-evidence rule update:
   `codex/v2-completion-track` and `origin/codex/v2-completion-track` at
-  `a80876fa5a03d021a98c588e4f4d3fabc3826e66`.
-- Package evidence baseline for the latest completion-track refresh:
-  `sourceCommit=a80876f`,
-  `packageLabel=ExtrusionWebConsole-a80876f-20260622-003633-680`,
+  `e405fcddc0161c4fde48e4e314b642ad8472a0c9`.
+- Package evidence policy:
+  approval-time `package-build-info.json` verification is canonical. Static
+  package metadata in this document is sample evidence only. Before PR #193 main
+  merge approval, package `sourceCommit` must match the current PR #193
+  `headRefOid` short SHA, or the package evidence remains sample-only and main
+  merge must stop.
+- Latest local verification sample:
+  `sourceCommit=e405fcd`,
+  `packageLabel=ExtrusionWebConsole-e405fcd-20260622-024709-519`,
   `frontendMode=api`, `runtimeMode=operator-ready`, `zipCreated=false`, and
   `zipSha256=not_applicable`.
 - PR #193 is the remaining `codex/v2-completion-track` to `main` merge
@@ -218,11 +224,13 @@ Follow-up validation on `codex/vector-start-stop-symmetry`:
   Vector readiness fix; after that fix, rerun reported
   `No actionable findings.`
 
-## Latest Completion-Track Package Refresh
+## Package Verification Evidence
 
-After PR #203 was squash-merged, the completion-track candidate baseline became
-`a80876fa5a03d021a98c588e4f4d3fabc3826e66`. The latest package evidence for
-that baseline is:
+Static entries in this section are verification samples. They document what was
+checked locally at a point in time, but they are not evergreen approval evidence
+after docs-only commits change PR #193 `headRefOid`.
+
+Previous completion-track refresh sample after PR #203:
 
 - `packageLabel`: `ExtrusionWebConsole-a80876f-20260622-003633-680`
 - `sourceCommit`: `a80876f`
@@ -233,13 +241,29 @@ that baseline is:
 - `zipCreated`: `false`
 - `zipSha256`: `not_applicable`
 
-Package-local `-CheckOnly` refresh on 2026-06-22 Asia/Seoul passed for the
-launcher and shortcut installer. The launcher check did not start a backend
-process, and the shortcut check did not write shortcuts.
+Latest local PR #193 precheck sample after PR #204:
 
-This latest package evidence is for PR #193 readiness review only. It does not
-replace the accepted mutation package in
-`docs/164_operator_data_mutation_safety_gate.md` and does not approve Upload
+- `packageLabel`: `ExtrusionWebConsole-e405fcd-20260622-024709-519`
+- `sourceCommit`: `e405fcd`
+- `createdUtc`: `2026-06-22T02:47:16.2854392Z`
+- `frontendMode`: `api`
+- `runtimeMode`: `operator-ready`
+- `frontendBuildMetadataPresent`: `true`
+- `zipCreated`: `false`
+- `zipSha256`: `not_applicable`
+
+Package-local `-CheckOnly` refreshes on 2026-06-22 Asia/Seoul passed for the
+launcher and shortcut installer. Launcher checks did not start backend
+processes, and shortcut checks did not write shortcuts.
+
+Before PR #193 main merge approval, recheck the actual handoff package
+`package-build-info.json`. If its `sourceCommit` does not match the current PR
+#193 `headRefOid` short SHA, either rebuild the package from the current head or
+mark the package evidence as sample-only and stop the merge.
+
+These package samples are for PR #193 readiness review only. They do not replace
+the accepted mutation package in
+`docs/164_operator_data_mutation_safety_gate.md` and do not approve Upload
 Preview, Start Upload, Retry Failed, Delete, Settings save, feature-gate
 enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, schema
 migration, deploy, or operational DB mutation.
@@ -271,7 +295,15 @@ If the user approves landing later, use one deliberate sequence:
 2. Land any docs readiness fix into `codex/v2-completion-track` if it is not
    already present, then confirm PR #193 points at the refreshed completion
    branch and remains `CLEAN`.
-3. Rerun verification from the updated completion branch:
+3. Immediately before approval, verify the actual handoff package
+   `package-build-info.json`:
+   - `sourceCommit` must match the current PR #193 `headRefOid` short SHA;
+   - `frontendMode` must be `api`;
+   - `runtimeMode` must be `operator-ready`;
+   - `frontendBuildMetadataPresent` must be `true`;
+   - when `zipCreated=false`, `zipSha256` is `not_applicable`;
+   - when `zipCreated=true`, verify the generated zip SHA-256 sidecar.
+4. Rerun verification from the updated completion branch:
    - `git diff --check`
    - `.\.venv\Scripts\python -m pytest tests\backend`
    - `cd frontend; npm run typecheck; npm run build:api`
@@ -280,8 +312,9 @@ If the user approves landing later, use one deliberate sequence:
    - package launcher/shortcut `-CheckOnly`
    - read-only package HTTP smoke
    - `$review`
-4. Only after the refreshed completion branch passes, merge PR #193 to `main`.
-5. After the `main` merge, either prove that `main` HEAD is the exact tested
+5. Only after the refreshed completion branch and approval-time package metadata
+   verification pass, merge PR #193 to `main`.
+6. After the `main` merge, either prove that `main` HEAD is the exact tested
    completion commit or rerun the verification above from `main` before
    describing `main` as a V2 completion candidate.
 
@@ -299,7 +332,9 @@ This approval does not approve Upload Preview, Start Upload, Retry Failed, Delet
 Before using the approval, replace `<current PR #193 headRefOid>` with the exact
 `headRefOid` reported by GitHub at approval time. If that head differs from the
 last reviewed completion-track candidate, rerun `git diff --check`, package
-validation evidence review, and `$review` before using the approval.
+validation evidence review, and `$review` before using the approval. Also
+record the actual handoff package `package-build-info.json` metadata checked at
+approval time; static package samples above are not sufficient for approval.
 
 ## Stop Conditions
 
@@ -317,7 +352,8 @@ Stop and do not claim V2 completion when any of these are true:
   items 1, 3, 4, 5, 6, and 8 must remain `Deferred`; items 2 and 7 must be
   `Completed`;
 - package metadata and source commits in evidence docs do not match the merged
-  package;
+  package, unless those entries are explicitly marked sample-only and
+  approval-time `package-build-info.json` verification is performed;
 - GitHub checks or local verification fail;
 - operational approval text is missing for any requested mutation;
 - raw source paths, filenames, exact keys, DB URLs, tokens, raw SQL, or secrets
