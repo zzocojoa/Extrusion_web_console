@@ -1,6 +1,6 @@
 # operator-ui-density-and-navigation - Design Document
 
-> Version: 0.1.0 | Date: 2026-06-22 | Status: Ready for P0 Implementation
+> Version: 0.2.0 | Date: 2026-06-22 | Status: Implemented Candidate
 > Level: Dynamic | Plan: docs/01-plan/features/operator-ui-density-and-navigation.plan.md
 
 ---
@@ -396,7 +396,28 @@ copy actions.
 7. Settings copy cleanup and advanced-info placement.
 8. Viewport screenshot QA and regression review.
 
-## 10. Rollback
+## 10. Implementation Result
+
+Completed as frontend-only work:
+
+- `ResizableDataTable`, `TablePagination`, and `DetailCell` primitives were
+  added for Upload Preview and Audit Logs.
+- Upload Preview uses client-side display pagination over already loaded
+  preview rows; it does not change Preview execution limits or API semantics.
+- Audit Logs keeps the existing `GET /api/audit` limit/offset semantics while
+  using persisted page-size UI preference.
+- Sidebar collapsed state, table column widths, page sizes, and Job Logs
+  viewer toggles are stored only as UI preferences in localStorage.
+- Settings command-policy implementation wording is moved behind a collapsed
+  advanced detail.
+- Screenshot QA covers 1920x1080, 1600x900, 1366x768, 1024x768, 768x1024,
+  and 390x844.
+
+Validation completed with `npm run typecheck`, `npm run build:api`,
+`npm run qa:screenshots`, `git diff --check`, and changed-frontend diff marker
+scan for credential/path markers.
+
+## 11. Rollback
 
 Before commit, rollback is `git restore` for the frontend files changed by the
 implementation.
@@ -405,12 +426,12 @@ After commit, rollback is a normal git revert of the UI implementation commit.
 Do not delete operational evidence, local state DB rows, Supabase data, Docker
 state, package outputs, or AppData logs as rollback for this UI work.
 
-## 11. Open Decisions
+## 12. Open Decisions
 
 | Decision | Default recommendation |
 | --- | --- |
-| Upload Preview pagination source | Client-side display pagination over current Preview result rows. |
-| Audit Logs default page size | 15 if backend behavior remains compatible; otherwise keep backend default until reviewed. |
-| Popover vs side panel | Popover for short values; side panel for multi-field params/errors if layout becomes cramped. |
-| Column resize keyboard behavior | At minimum provide reset and full-value inspection; add keyboard resize if implementation remains ergonomic. |
-| Job Logs optional controls | Implement after base layout if low risk. |
+| Upload Preview pagination source | Completed as client-side display pagination over current Preview result rows. |
+| Audit Logs default page size | Completed at 15 with options 5 / 15 / 30 / 60 / 100. |
+| Popover vs side panel | Completed with cell detail popovers for current scope. |
+| Column resize keyboard behavior | Deferred beyond reset/full-value inspection; pointer resize plus reset is implemented. |
+| Job Logs optional controls | Completed for autoscroll, jump to bottom, wrap, and copy. |

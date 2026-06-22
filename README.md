@@ -412,7 +412,7 @@ npm run qa:screenshots
 
 The screenshot runner writes ignored artifacts under `.gstack/screenshots/upload-job-browser-qa/`, checks the required viewport matrix, verifies `Accepted` / `수락` wording, captures console/network failures, and redacts path/credential-like markers before writing text artifacts.
 It uses `127.0.0.1:5175` by default and does not reuse an existing server, so screenshot QA cannot silently attach to a stale app or API-mode dev server.
-The runner captures 32 screenshots across Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings, verifies `DB에 있음` / `Already in DB`, blocks inserted-row wording such as `Inserted`, `적재`, `삽입`, and `새로 삽입`, and scans artifacts for generic timestamp-style CSV names, Windows absolute paths, DB URLs, tokens, and credential-like markers. Source docs and mock labels should use sanitized sample names instead of operational CSV filename patterns.
+The runner captures 48 screenshots across Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings at the required viewport matrix, verifies `DB에 있음` / `Already in DB`, blocks inserted-row wording such as `Inserted`, `적재`, `삽입`, and `새로 삽입`, and scans artifacts for generic timestamp-style CSV names, Windows absolute paths, DB URLs, tokens, and credential-like markers. Source docs and mock labels should use sanitized sample names instead of operational CSV filename patterns.
 
 Mock Dashboard states can be checked with query strings:
 

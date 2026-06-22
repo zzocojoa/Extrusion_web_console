@@ -1,15 +1,28 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { ArrowDown, Copy, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { fetchAuditLogs, type AuditLog, type AuditLogListResponse, type AuditQuery, type AuditResult } from "../api/audit";
 import { fetchLatestUploadJob, type JobEvent } from "../api/uploadJobs";
 import { localizeDiagnosticMessage, localizeJobEvent, type Translate } from "../components/dashboard/localizedDashboardText";
 import { StatusBadge } from "../components/status/StatusBadge";
+import {
+  DetailCell,
+  ResizableDataTable,
+  TablePagination,
+  readStoredPageSize,
+  type DataTableColumn,
+  type TablePaginationLabels,
+} from "../components/table/ResizableDataTable";
 import type { StatusTone } from "./dashboard/dashboardTypes";
 
 const API_MODE = import.meta.env.VITE_API_MODE === "api";
+const auditLogColumnStorageKey = "ewc.ui.auditLogs.columnWidths.v1";
+const auditLogPageSizeStorageKey = "ewc.ui.auditLogs.pageSize.v1";
+const jobLogAutoScrollStorageKey = "ewc.ui.jobLogs.autoscroll.v1";
+const jobLogWrapStorageKey = "ewc.ui.jobLogs.wrap.v1";
+const tablePageSizeOptions = [5, 15, 30, 60, 100];
 
 type LogsTab = "job" | "audit";
 type RecentWindow = "all" | "24h" | "7d" | "30d";
@@ -124,7 +137,12 @@ export function LogsPage() {
   const [requestId, setRequestId] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(() => readStoredPageSize(auditLogPageSizeStorageKey, 15, tablePageSizeOptions));
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(auditLogPageSizeStorageKey, String(limit));
+  }, [limit]);
 
   const auditQuery: AuditQuery = useMemo(
     () => ({
@@ -216,8 +234,7 @@ export function LogsPage() {
           onClear={resetFilters}
           onJobIdChange={(value) => updateFilter(() => setJobId(value))}
           onLimitChange={(value) => updateFilter(() => setLimit(value))}
-          onNext={() => setOffset((value) => value + limit)}
-          onPrevious={() => setOffset((value) => Math.max(0, value - limit))}
+          onOffsetChange={setOffset}
           onRecentWindowChange={(value) => updateFilter(() => setRecentWindow(value))}
           onRequestIdChange={(value) => updateFilter(() => setRequestId(value))}
           onResultChange={(value) => updateFilter(() => setResult(value))}
@@ -238,6 +255,9 @@ interface JobLogsPanelProps {
 function JobLogsPanel({ events, isError, isLoading, showMock }: JobLogsPanelProps) {
   const { t } = useTranslation();
   const translate: Translate = (key, options) => String(t(key, options));
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(() => readStoredBoolean(jobLogAutoScrollStorageKey, true));
+  const [wrapLines, setWrapLines] = useState(() => readStoredBoolean(jobLogWrapStorageKey, true));
   const visibleEvents = showMock
     ? [
         {
@@ -249,19 +269,73 @@ function JobLogsPanel({ events, isError, isLoading, showMock }: JobLogsPanelProp
         },
       ]
     : events;
+  const logText = visibleEvents
+    .map((event) => `${formatDateTime(event.ts)} ${event.level.toUpperCase()} ${event.eventType} ${localizeJobEvent(event, translate)}`)
+    .join("\n");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(jobLogAutoScrollStorageKey, autoScroll ? "true" : "false");
+  }, [autoScroll]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(jobLogWrapStorageKey, wrapLines ? "true" : "false");
+  }, [wrapLines]);
+
+  useEffect(() => {
+    if (!autoScroll) return;
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    viewer.scrollTop = viewer.scrollHeight;
+  }, [autoScroll, visibleEvents]);
+
+  function updateScrollIntent() {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const distanceFromBottom = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight;
+    setAutoScroll(distanceFromBottom < 48);
+  }
+
+  async function copyLogs() {
+    if (typeof navigator === "undefined" || !navigator.clipboard || !logText) return;
+    await navigator.clipboard.writeText(logText).catch(() => undefined);
+  }
 
   return (
-    <section className="panel logs-panel" aria-labelledby="job-logs-title">
+    <section className="panel logs-panel logs-panel--job" aria-labelledby="job-logs-title">
       <div className="panel__header">
         <div>
           <h2 id="job-logs-title">{t("logs.job.title")}</h2>
           <p className="panel-subtitle">{t("logs.job.subtitle")}</p>
         </div>
+        <div className="job-log-actions">
+          <button className={`button button--secondary button--compact ${autoScroll ? "button--active" : ""}`} type="button" onClick={() => setAutoScroll((value) => !value)}>
+            <ArrowDown size={14} aria-hidden="true" />
+            {t("logs.job.actions.autoScroll")}
+          </button>
+          <button className={`button button--secondary button--compact ${wrapLines ? "button--active" : ""}`} type="button" onClick={() => setWrapLines((value) => !value)}>
+            {t("logs.job.actions.wrap")}
+          </button>
+          <button className="button button--secondary button--compact" type="button" onClick={() => {
+            const viewer = viewerRef.current;
+            if (!viewer) return;
+            viewer.scrollTop = viewer.scrollHeight;
+            setAutoScroll(true);
+          }}>
+            <ArrowDown size={14} aria-hidden="true" />
+            {t("logs.job.actions.bottom")}
+          </button>
+          <button className="button button--secondary button--compact" type="button" onClick={copyLogs}>
+            <Copy size={14} aria-hidden="true" />
+            {t("logs.job.actions.copy")}
+          </button>
+        </div>
       </div>
       {isLoading ? <div className="panel--loading">{t("logs.job.loading")}</div> : null}
       {isError ? <div className="panel--error" role="alert">{t("logs.job.error")}</div> : null}
       {!isLoading && !isError ? (
-        <div className="job-log-viewer" role="log" aria-live="polite">
+        <div className={`job-log-viewer ${wrapLines ? "job-log-viewer--wrap" : "job-log-viewer--nowrap"}`} ref={viewerRef} role="log" aria-live="polite" onScroll={updateScrollIntent}>
           {visibleEvents.length === 0 ? (
             <div className="job-log-line job-log-line--muted">{t("logs.job.empty")}</div>
           ) : (
@@ -296,8 +370,7 @@ interface AuditLogsPanelProps {
   onClear: () => void;
   onJobIdChange: (value: string) => void;
   onLimitChange: (value: number) => void;
-  onNext: () => void;
-  onPrevious: () => void;
+  onOffsetChange: (value: number) => void;
   onRecentWindowChange: (value: RecentWindow) => void;
   onRequestIdChange: (value: string) => void;
   onResultChange: (value: AuditResult | "all") => void;
@@ -308,9 +381,11 @@ function AuditLogsPanel(props: AuditLogsPanelProps) {
   const { t } = useTranslation();
   const items = props.auditLogs?.items ?? [];
   const page = props.auditLogs?.page;
+  const paginationLabels = useTablePaginationLabels();
+  const pageIndex = Math.floor((page?.offset ?? props.offset) / props.limit);
 
   return (
-    <section className="panel logs-panel" aria-labelledby="audit-logs-title">
+    <section className="panel logs-panel logs-panel--audit" aria-labelledby="audit-logs-title">
       <div className="panel__header">
         <div>
           <h2 id="audit-logs-title">{t("logs.audit.title")}</h2>
@@ -370,23 +445,15 @@ function AuditLogsPanel(props: AuditLogsPanelProps) {
       {!props.isLoading && !props.isError ? (
         <>
           <AuditTable items={items} />
-          <div className="audit-pagination">
-            <label>
-              {t("logs.audit.pagination.limit")}
-              <select value={props.limit} onChange={(event) => props.onLimitChange(Number(event.target.value))}>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={200}>200</option>
-              </select>
-            </label>
-            <button className="button button--secondary" type="button" disabled={!page?.hasPrevious} onClick={props.onPrevious}>
-              {t("logs.audit.pagination.previous")}
-            </button>
-            <button className="button button--secondary" type="button" disabled={!page?.hasNext} onClick={props.onNext}>
-              {t("logs.audit.pagination.next")}
-            </button>
-          </div>
+          <TablePagination
+            labels={paginationLabels}
+            pageIndex={pageIndex}
+            pageSize={props.limit}
+            pageSizeOptions={tablePageSizeOptions}
+            totalItems={page?.totalItems ?? 0}
+            onPageIndexChange={(value) => props.onOffsetChange(value * props.limit)}
+            onPageSizeChange={props.onLimitChange}
+          />
         </>
       ) : null}
     </section>
@@ -397,62 +464,190 @@ function AuditTable({ items }: { items: AuditLog[] }) {
   const { t } = useTranslation();
   const translate: Translate = (key, options) => String(t(key, options));
   if (items.length === 0) return <div className="audit-empty">{t("logs.audit.empty")}</div>;
+  const columns: Array<DataTableColumn<AuditLog>> = [
+    {
+      id: "time",
+      header: t("logs.audit.columns.time"),
+      width: 180,
+      minWidth: 160,
+      maxWidth: 240,
+      className: "num nowrap-cell",
+      render: (item) => formatDateTime(item.ts),
+    },
+    {
+      id: "result",
+      header: t("logs.audit.columns.result"),
+      width: 120,
+      minWidth: 112,
+      maxWidth: 180,
+      render: (item) => <StatusBadge tone={resultTone[item.result]} label={t(`logs.audit.results.${item.result}`)} />,
+    },
+    {
+      id: "action",
+      header: t("logs.audit.columns.action"),
+      width: 180,
+      minWidth: 140,
+      maxWidth: 300,
+      className: "mono-cell",
+      render: (item) => (
+        <DetailCell
+          closeLabel={t("table.actions.close")}
+          copyLabel={t("table.actions.copy")}
+          detailLabel={t("logs.audit.columns.action")}
+          monospace
+          value={item.action}
+        />
+      ),
+    },
+    {
+      id: "target",
+      header: t("logs.audit.columns.target"),
+      width: 220,
+      minWidth: 170,
+      maxWidth: 360,
+      render: (item) => (
+        <DetailCell
+          closeLabel={t("table.actions.close")}
+          copyLabel={t("table.actions.copy")}
+          detailLabel={t("logs.audit.columns.target")}
+          value={`${item.targetType}\n${item.targetId ?? "-"}`}
+          preview={(
+            <>
+              <span className="audit-target">{item.targetType}</span>
+              <small>{item.targetId ?? "-"}</small>
+            </>
+          )}
+        />
+      ),
+    },
+    {
+      id: "actor",
+      header: t("logs.audit.columns.actor"),
+      width: 150,
+      minWidth: 120,
+      maxWidth: 240,
+      render: (item) => item.actor,
+    },
+    {
+      id: "jobId",
+      header: t("logs.audit.columns.jobId"),
+      width: 220,
+      minWidth: 160,
+      maxWidth: 340,
+      className: "mono-cell",
+      render: (item) => (
+        <DetailCell
+          closeLabel={t("table.actions.close")}
+          copyLabel={t("table.actions.copy")}
+          detailLabel={t("logs.audit.columns.jobId")}
+          monospace
+          value={item.jobId ?? "-"}
+        />
+      ),
+    },
+    {
+      id: "params",
+      header: t("logs.audit.columns.params"),
+      width: 380,
+      minWidth: 280,
+      maxWidth: 720,
+      render: (item) => <ParamChips params={item.params} />,
+    },
+    {
+      id: "error",
+      header: t("logs.audit.columns.error"),
+      width: 280,
+      minWidth: 220,
+      maxWidth: 560,
+      render: (item) => {
+        const errorMessage = item.errorMessage ? localizeDiagnosticMessage(item.errorMessage, translate) : null;
+        return (
+          <DetailCell
+            closeLabel={t("table.actions.close")}
+            copyLabel={t("table.actions.copy")}
+            detailLabel={t("logs.audit.columns.error")}
+            value={errorMessage ? `${item.errorCode ?? "-"}\n${errorMessage}` : item.errorCode ?? "-"}
+            preview={(
+              <>
+                <span className={item.errorCode ? "audit-error-code" : "muted"}>{item.errorCode ?? "-"}</span>
+                {errorMessage ? <small>{errorMessage}</small> : null}
+              </>
+            )}
+          />
+        );
+      },
+    },
+  ];
   return (
-    <div className="table-scroll">
-      <table className="data-table data-table--audit-logs">
-        <thead>
-          <tr>
-            <th>{t("logs.audit.columns.time")}</th>
-            <th>{t("logs.audit.columns.result")}</th>
-            <th>{t("logs.audit.columns.action")}</th>
-            <th>{t("logs.audit.columns.target")}</th>
-            <th>{t("logs.audit.columns.actor")}</th>
-            <th>{t("logs.audit.columns.jobId")}</th>
-            <th>{t("logs.audit.columns.params")}</th>
-            <th>{t("logs.audit.columns.error")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => {
-            const errorMessage = item.errorMessage ? localizeDiagnosticMessage(item.errorMessage, translate) : null;
-            return (
-              <tr className={`row--${resultTone[item.result]}`} key={item.auditId}>
-                <td className="num">{formatDateTime(item.ts)}</td>
-                <td><StatusBadge tone={resultTone[item.result]} label={t(`logs.audit.results.${item.result}`)} /></td>
-                <td className="mono-cell">{item.action}</td>
-                <td>
-                  <span className="audit-target">{item.targetType}</span>
-                  <small>{item.targetId ?? "-"}</small>
-                </td>
-                <td>{item.actor}</td>
-                <td className="mono-cell">{item.jobId ?? "-"}</td>
-                <td><ParamChips params={item.params} /></td>
-                <td>
-                  <span className={item.errorCode ? "audit-error-code" : "muted"}>{item.errorCode ?? "-"}</span>
-                  {errorMessage ? <small>{errorMessage}</small> : null}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <ResizableDataTable
+      className="data-table--audit-logs"
+      columns={columns}
+      empty={<div className="audit-empty">{t("logs.audit.empty")}</div>}
+      getRowKey={(item) => item.auditId}
+      resetLabel={t("table.actions.resetColumns")}
+      rowClassName={(item) => `row--${resultTone[item.result]}`}
+      rows={items}
+      storageKey={auditLogColumnStorageKey}
+      tableLabel={t("logs.audit.title")}
+    />
   );
 }
 
 function ParamChips({ params }: { params: Record<string, unknown> }) {
+  const { t } = useTranslation();
   const entries = Object.entries(params);
   if (entries.length === 0) return <span className="muted">-</span>;
   const visible = entries.slice(0, 3);
   const hiddenCount = entries.length - visible.length;
   return (
-    <span className="param-chip-list">
-      {visible.map(([key, value]) => (
-        <span className={`param-chip ${value === "[redacted]" ? "param-chip--redacted" : ""}`} key={key}>
-          {key}: {String(value)}
+    <DetailCell
+      closeLabel={t("table.actions.close")}
+      copyLabel={t("table.actions.copy")}
+      detailLabel={t("logs.audit.columns.params")}
+      value={entries.map(([key, value]) => `${key}: ${formatAuditValue(value)}`).join("\n")}
+      preview={(
+        <span className="param-chip-list">
+          {visible.map(([key, value]) => (
+            <span className={`param-chip ${value === "[redacted]" ? "param-chip--redacted" : ""}`} key={key}>
+              {key}: {formatAuditValue(value, true)}
+            </span>
+          ))}
+          {hiddenCount > 0 ? <span className="param-chip">+{hiddenCount}</span> : null}
         </span>
-      ))}
-      {hiddenCount > 0 ? <span className="param-chip">+{hiddenCount}</span> : null}
-    </span>
+      )}
+    />
   );
+}
+
+function useTablePaginationLabels(): TablePaginationLabels {
+  const { t } = useTranslation();
+  return {
+    range: (start, end, total) => t("table.pagination.range", { start, end, total }),
+    pageSize: t("table.pagination.pageSize"),
+    first: t("table.pagination.first"),
+    previous: t("table.pagination.previous"),
+    next: t("table.pagination.next"),
+    last: t("table.pagination.last"),
+    page: (current, total) => t("table.pagination.page", { current, total }),
+  };
+}
+
+function formatAuditValue(value: unknown, compact = false): string {
+  if (value === null) return "null";
+  if (value === undefined) return "-";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value, null, compact ? 0 : 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function readStoredBoolean(storageKey: string, defaultValue: boolean) {
+  if (typeof window === "undefined") return defaultValue;
+  const stored = window.localStorage.getItem(storageKey);
+  if (stored === "true") return true;
+  if (stored === "false") return false;
+  return defaultValue;
 }

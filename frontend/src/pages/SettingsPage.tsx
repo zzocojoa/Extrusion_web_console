@@ -259,10 +259,10 @@ export function SettingsPage() {
               })}
             </div>
 
-            <div className="settings-runtime-note">
-              <strong>{t("settings.runtime.commandPolicyTitle")}</strong>
+            <details className="settings-runtime-note">
+              <summary>{t("settings.runtime.supportedCommands")}</summary>
               <p>{t("settings.runtime.commandPolicy")}</p>
-            </div>
+            </details>
 
             <div className="settings-save-bar" role="status" aria-live="polite">
               <div className="settings-save-bar__state">

@@ -366,9 +366,21 @@
   background: var(--color-surface);
 }
 
+.button--active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
 .button--danger {
   color: var(--color-text-inverse);
   background: var(--color-danger);
+}
+
+.button--compact {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: var(--text-xs);
 }
 
 .upload-tabs {
@@ -785,14 +797,36 @@
   position: relative;
 }
 
+.preview-table-panel {
+  overflow: visible;
+}
+
 .logs-panel {
   min-width: 0;
+}
+
+.logs-panel--job {
+  min-height: min(70vh, 720px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.logs-panel--audit {
+  overflow: visible;
 }
 
 .panel-subtitle {
   margin: 3px 0 0;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+}
+
+.job-log-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .audit-toolbar {
@@ -1024,6 +1058,100 @@
   color: var(--color-text-muted);
 }
 
+.detail-cell {
+  position: relative;
+  min-width: 0;
+  display: block;
+}
+
+.detail-cell__trigger {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-cell--lines-1 .detail-cell__trigger {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-cell--lines-2 .detail-cell__trigger,
+.detail-cell--lines-3 .detail-cell__trigger {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+}
+
+.detail-cell--lines-2 .detail-cell__trigger {
+  -webkit-line-clamp: 2;
+}
+
+.detail-cell--lines-3 .detail-cell__trigger {
+  -webkit-line-clamp: 3;
+}
+
+.detail-cell--mono .detail-cell__trigger,
+.detail-cell--mono .detail-popover__body {
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+}
+
+.detail-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(520px, 80vw);
+  max-height: min(420px, 64vh);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+}
+
+.detail-popover__header {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.detail-popover__header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+
+.detail-popover__actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.detail-popover__body {
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: var(--space-3);
+  color: var(--color-text);
+  line-height: var(--line-normal);
+}
+
 .num {
   font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
@@ -1111,7 +1239,9 @@
 }
 
 .job-log-viewer {
-  max-height: 260px;
+  min-height: 420px;
+  max-height: none;
+  height: min(68vh, 720px);
   overflow: auto;
   padding: var(--space-3);
   border-top: 1px solid #263241;
@@ -1159,6 +1289,15 @@
 .job-log-line__message {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.job-log-viewer--nowrap .job-log-line {
+  min-width: 900px;
+}
+
+.job-log-viewer--nowrap .job-log-line__message {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .runtime-summary {
@@ -1361,6 +1500,13 @@
   background: var(--color-surface-muted);
 }
 
+.settings-runtime-note summary {
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
 .settings-runtime-note p {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
@@ -1417,6 +1563,17 @@
 }
 
 @media (max-width: 720px) {
+  .logs-panel .panel__header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .job-log-actions {
+    justify-content: flex-start;
+  }
+
   .upload-preview__controls .panel__header {
     align-items: stretch;
     flex-direction: column;

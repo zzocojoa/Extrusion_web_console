@@ -6,6 +6,12 @@
     "version": "v1 Core Ops",
     "language": "English"
   },
+  "appShell": {
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation",
+    "collapseNavigation": "Collapse navigation",
+    "expandNavigation": "Expand navigation"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "upload": "Upload",
@@ -310,7 +316,8 @@
       "configLabel": "Runtime configuration values",
       "source": "Source",
       "commandPolicyTitle": "Command policy",
-      "commandPolicy": "v1 only runs allowlisted status/start/stop commands against the configured Local Supabase project. Bootstrap, reset, deletion, and cleanup commands are not supported."
+      "supportedCommands": "Status check, start, and stop are supported.",
+      "commandPolicy": "Advanced: only approved status/start/stop commands are available for the configured Local Supabase project."
     },
     "source": {
       "default": "Default",
@@ -700,6 +707,12 @@
       "error": "Job logs could not be loaded.",
       "empty": "No upload job events yet.",
       "mockMessage": "Development job log row. Switch to API mode to read persisted job events.",
+      "actions": {
+        "autoScroll": "Auto",
+        "wrap": "Wrap",
+        "bottom": "Bottom",
+        "copy": "Copy"
+      },
       "events": {
         "jobFinished": "Upload job finished with status {{status}}.",
         "fileProgressWithName": "Progress {{filename}}: {{processed}}/{{total}}.",
@@ -756,6 +769,22 @@
         "blocked": "Blocked",
         "cancelled": "Cancelled"
       }
+    }
+  },
+  "table": {
+    "actions": {
+      "resetColumns": "Reset columns",
+      "copy": "Copy",
+      "close": "Close"
+    },
+    "pagination": {
+      "range": "Showing {{start}}-{{end}} of {{total}}",
+      "pageSize": "Rows",
+      "first": "First",
+      "previous": "Previous",
+      "next": "Next",
+      "last": "Last",
+      "page": "{{current}} / {{total}}"
     }
   },
   "status": {
