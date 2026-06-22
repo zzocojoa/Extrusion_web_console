@@ -186,6 +186,7 @@
       "edge": "Edge Function",
       "wsl": "WSL",
       "grafana": "Grafana",
+      "vector": "Vector",
       "containers": "Containers",
       "stateContext": "State context"
     },
@@ -201,6 +202,7 @@
       "operationActive": "A runtime operation is already active.",
       "alreadyReady": "Local Supabase is already ready.",
       "alreadyStopped": "Local Supabase containers are already stopped.",
+      "nonCoreAttention": "Core runtime is already ready. Review Grafana or Vector attention separately.",
       "requiredContainerMissing": "Required containers are missing. v1 does not create a new stack.",
       "dockerUnavailable": "Docker is unavailable."
     },
@@ -224,7 +226,7 @@
     "reason": {
       "ready": "Local Supabase core runtime is ready.",
       "core_runtime_unreachable": "Core runtime is blocked because API, DB, Studio, or Edge is not reachable.",
-      "non_core_runtime_attention": "Core runtime is ready. Non-core Grafana needs attention.",
+      "non_core_runtime_attention": "Core runtime is ready. Non-core Grafana or Vector needs attention.",
       "docker_unreachable": "Docker is not reachable from the backend process.",
       "edge_probe_timeout": "Edge route probe timed out.",
       "required_container_missing": "Required runtime containers are missing."
@@ -595,6 +597,19 @@
         "noSelection": "Select already-in-DB rows before delete preflight.",
         "reconcile": "Reconcile delete",
         "reconciling": "Reconciling"
+      },
+      "dateScoped": {
+        "title": "Date-scoped delete review",
+        "eyebrow": "Feature-gated review shell",
+        "badge": "Mutation unavailable",
+        "range": "Current screen range: {{range}}",
+        "customRange": "{{startDate}} to {{endDate}}",
+        "dateNotSet": "not set",
+        "gate": "Gate source: {{source}}. Future execution role: {{role}}.",
+        "blockedTitle": "Date-scoped delete cannot start from this UI.",
+        "blockedDetail": "This panel only verifies copy, i18n, runbook, and confirmation placement. It does not create a delete preflight, start a delete job, retry, save settings, or enable a feature gate.",
+        "disabledTitle": "Date-scoped delete requires a separate policy, preflight, approval record, rollback evidence, and gate enablement.",
+        "disabledAction": "Date-scoped delete unavailable"
       },
       "table": {
         "select": "Delete",

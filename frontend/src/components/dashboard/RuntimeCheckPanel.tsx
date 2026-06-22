@@ -143,9 +143,16 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
     {
       id: "grafana",
       label: t("runtime.services.grafana"),
-      tone: toneForService(runtimeStatus.grafana.status),
+      tone: toneForObservabilityService(runtimeStatus.grafana.status),
       detail: runtimeStatus.grafana.url ?? runtimeServiceDetail(runtimeStatus.grafana, t),
       href: runtimeStatus.grafana.url ?? undefined,
+      lastCheckedAt: checkedAt,
+    },
+    {
+      id: "vector",
+      label: t("runtime.services.vector"),
+      tone: toneForObservabilityService(runtimeStatus.vector.status),
+      detail: runtimeServiceDetail(runtimeStatus.vector, t),
       lastCheckedAt: checkedAt,
     },
     {
@@ -181,9 +188,20 @@ function toneForService(status: RuntimeServiceStatus): StatusTone {
   return "muted";
 }
 
+function toneForObservabilityService(status: RuntimeServiceStatus): StatusTone {
+  if (status === "ready") return "ready";
+  if (status === "starting" || status === "stopping") return "running";
+  if (status === "stopped" || status === "unreachable" || status === "unhealthy" || status === "missing" || status === "unknown") {
+    return "attention";
+  }
+  return "muted";
+}
+
 function toneForContainers(containers: RuntimeStatusResponse["containers"]): StatusTone {
-  if (containers.some((row) => row.status === "missing")) return "blocked";
-  if (containers.some((row) => row.status === "stopped" || row.status === "unreachable" || row.status === "unhealthy")) return "attention";
+  if (containers.some((row) => row.required && row.status === "missing")) return "blocked";
+  if (containers.some((row) => row.status === "stopped" || row.status === "unreachable" || row.status === "unhealthy" || row.status === "missing")) {
+    return "attention";
+  }
   if (containers.length > 0 && containers.every((row) => row.status === "ready")) return "ready";
   return "muted";
 }
@@ -205,6 +223,7 @@ function containerDetail(containers: RuntimeStatusResponse["containers"], t: Tra
 function startDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, actionPending: boolean, t: Translate): string {
   if (actionPending || runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
   if (runtimeStatus.overallStatus === "ready") return t("runtime.actions.alreadyReady");
+  if (runtimeStatus.reasonCode === "non_core_runtime_attention") return t("runtime.actions.nonCoreAttention");
   if (runtimeStatus.reasonCode === "required_container_missing") return t("runtime.actions.requiredContainerMissing");
   if (runtimeStatus.docker.status !== "ready") return t("runtime.actions.dockerUnavailable");
   return "";

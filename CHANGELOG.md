@@ -6,6 +6,58 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Added V2 Grafana/Vector observability hardening: runtime readiness now exposes
+  a sanitized Vector status class, Dashboard runtime checks show Vector
+  separately, package smoke guidance includes `/api/runtime/local-supabase`, and
+  `docs/167` records alert/runbook and rollback boundaries while keeping raw
+  log/metric/trace export, Grafana iframe embedding, LAN exposure, and cleanup
+  out of scope.
+- Added `docs/169_v2_supabase_schema_attribution_design.md`, documenting the
+  deferred Supabase attribution migration/backfill/rollback/test gate while
+  preserving the approved local sidecar path and the
+  `all_metrics(timestamp, device_id)` upsert contract.
+- Added a fixture-first gate for V2 delete expansion in
+  `docs/170_v2_delete_expansion_fixture_gate.md`, keeping broader delete policy
+  work deferred until concrete limits, fixture DB evidence, audit/reconcile
+  proof, rollback boundaries, and separate approvals exist.
+- Added an operational DB delete verification gate in
+  `docs/171_v2_operational_delete_verification_gate.md`, keeping production
+  destructive delete verification deferred until exact approval storage, safe
+  evidence reporting, no-undo acknowledgement, mandatory rollback readiness,
+  rollback-limit acknowledgement, and separate approval exist.
+- Added a default-off V2 LAN security gate. Backend startup now fails closed for
+  unsafe configured LAN host/CORS classes or attempted LAN enablement before
+  auth/session/concurrency support exists. Request middleware also blocks
+  non-loopback clients and request server hosts, and `/api/health` reports
+  sanitized LAN gate state without approving LAN exposure.
+- Added a V2 operational upload verification gate in `docs/173`, keeping
+  Preview-only, Start Upload, and Retry Failed deferred until fresh inventory,
+  exact approvals, safe evidence records, and rollback/failure handling are
+  available.
+- Added a V2 completion-candidate rollup in
+  `docs/174_v2_completion_candidate_rollup.md`, mapping the open PR stack for
+  items 1 through 8 without approving any operational action; see that document
+  for explicit exclusions.
+- Clarified the V2 completion-track readiness docs so current `main`, the
+  `codex/v2-completion-track` candidate, sample package evidence, and
+  approval-time `package-build-info.json` verification remain separate before
+  PR #193 main merge review.
+- Added an explicit V2 completion-track item table to `docs/165`, so the eight
+  remaining V2 items are each classified as `Completed` or `Deferred` without
+  implying broad V2 completion.
+- Marked API-mode operator package validation as completed for the V2 candidate
+  package `ExtrusionWebConsole-eedac29-20260621-165853-560`, with zip SHA-256,
+  launcher/shortcut `-CheckOnly`, and read-only HTTP smoke evidence recorded in
+  `docs/166_v2_api_mode_package_runtime_evidence.md`; this does not approve any
+  operator mutation or replace the `docs/164` accepted mutation package.
+- Corrected the V2 status matrix baseline so the reviewed `main`/`origin/main`
+  commit reflects the landed status-document merge while the accepted operator
+  package metadata remains tied to `cb8a3c8`.
+- Added a default-off, read-only V2 date-scoped delete UI gate, safe startup
+  gate-state logging, and a non-mutating Upload page review shell with
+  Korean/English copy; this does not add a date-scoped delete API, does not
+  enable the feature gate through Settings save, and does not approve
+  destructive delete verification.
 - Added a V2 status matrix and refreshed the operator data mutation gate to the
   current `cb8a3c8` API-mode package metadata, so completed evidence foundation
   work is not described as a complete V2 release.

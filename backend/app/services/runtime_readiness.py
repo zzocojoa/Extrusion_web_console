@@ -80,8 +80,13 @@ class RuntimeReadinessService:
         studio = port_status("Supabase Studio", self.settings.local_supabase_studio_port)
         edge = probe_edge_route(self.settings.local_runtime_edge_url, timeout_seconds=2.0)
         grafana = self._probe_grafana()
+        vector = self._probe_vector(containers)
 
-        missing_required = [container.name for container in containers if container.required and not container.exists]
+        missing_required = [
+            container.name
+            for container in containers
+            if self._is_core_required_container(container) and not container.exists
+        ]
         if active_operation is not None:
             overall = RuntimeOverallStatus.running
             reason_code = "runtime_operation_active"
@@ -111,10 +116,10 @@ class RuntimeReadinessService:
             overall = RuntimeOverallStatus.blocked
             reason_code = "core_runtime_unreachable"
             reason_text = "Supabase API, DB, Studio, or Edge is not reachable."
-        elif grafana.status != RuntimeServiceStatus.ready:
+        elif grafana.status != RuntimeServiceStatus.ready or vector.status != RuntimeServiceStatus.ready:
             overall = RuntimeOverallStatus.attention
             reason_code = "non_core_runtime_attention"
-            reason_text = "Core runtime is reachable, but non-core Grafana needs attention."
+            reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
         else:
             overall = RuntimeOverallStatus.ready
             reason_code = "runtime_ready"
@@ -135,6 +140,7 @@ class RuntimeReadinessService:
             studio=studio,
             edge_runtime=edge,
             grafana=grafana,
+            vector=vector,
             containers=containers,
             config=self._config_items(),
             state_context=build_state_context(self.settings).to_api(),
@@ -144,7 +150,11 @@ class RuntimeReadinessService:
     def required_containers_exist(self) -> tuple[bool, list[str], list[RuntimeContainerStatus]]:
         docker_status = self._probe_from_result("Docker", self.runner.run(["docker", "version", "--format", "{{json .}}"], timeout_seconds=5))
         containers = self._container_statuses(docker_status)
-        missing = [container.name for container in containers if container.required and not container.exists]
+        missing = [
+            container.name
+            for container in containers
+            if self._is_core_required_container(container) and not container.exists
+        ]
         return not missing and docker_status.status == RuntimeServiceStatus.ready, missing, containers
 
     def _config_error(self, project_path: Path) -> tuple[str | None, str | None]:
@@ -199,16 +209,28 @@ class RuntimeReadinessService:
         for name in self.runner.required_supabase_containers:
             payload = rows.get(name)
             status_text = None if payload is None else str(payload.get("Status") or payload.get("State") or "")
-            running = bool(status_text and status_text.lower().startswith("up"))
+            status_lower = status_text.lower() if status_text else ""
+            running = bool(status_lower.startswith("up"))
             if payload is None:
                 status = RuntimeServiceStatus.missing
-            elif running and "unhealthy" in status_text.lower():
+            elif "restarting" in status_lower:
+                status = RuntimeServiceStatus.unhealthy
+            elif running and "unhealthy" in status_lower:
                 status = RuntimeServiceStatus.unhealthy
             elif running:
                 status = RuntimeServiceStatus.ready
             else:
                 status = RuntimeServiceStatus.stopped
-            containers.append(RuntimeContainerStatus(name=name, required=True, exists=payload is not None, running=running, status=status, status_text=status_text))
+            containers.append(
+                RuntimeContainerStatus(
+                    name=name,
+                    required=not self._is_vector_container_name(name),
+                    exists=payload is not None,
+                    running=running,
+                    status=status,
+                    status_text=status_text,
+                )
+            )
         return containers
 
     def _probe_grafana(self) -> RuntimeProbeStatus:
@@ -219,6 +241,30 @@ class RuntimeReadinessService:
             return RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.unreachable, detail=str(exc), url=url)
         status = RuntimeServiceStatus.ready if response.status_code < 500 else RuntimeServiceStatus.unhealthy
         return RuntimeProbeStatus(name="Grafana", status=status, detail=f"HTTP {response.status_code}", url=url)
+
+    def _probe_vector(self, containers: list[RuntimeContainerStatus]) -> RuntimeProbeStatus:
+        suffix = f"_vector_{self.settings.local_supabase_project_id}"
+        vector = next((container for container in containers if container.name.endswith(suffix)), None)
+        if vector is None:
+            return RuntimeProbeStatus(name="Vector", status=RuntimeServiceStatus.unknown, detail="Vector container status class is unknown.")
+        detail_by_status = {
+            RuntimeServiceStatus.ready: "Vector container is running.",
+            RuntimeServiceStatus.stopped: "Vector container status class is stopped.",
+            RuntimeServiceStatus.unhealthy: "Vector container status class is unhealthy.",
+            RuntimeServiceStatus.missing: "Vector container status class is missing.",
+        }
+        return RuntimeProbeStatus(
+            name="Vector",
+            status=vector.status,
+            detail=detail_by_status.get(vector.status, f"Vector container status class is {vector.status.value}."),
+        )
+
+    def _is_core_required_container(self, container: RuntimeContainerStatus) -> bool:
+        return container.required and not self._is_vector_container_name(container.name)
+
+    def _is_vector_container_name(self, name: str) -> bool:
+        vector_suffix = f"_vector_{self.settings.local_supabase_project_id}"
+        return name.endswith(vector_suffix)
 
     def _config_items(self) -> list[RuntimeConfigItem]:
         return [

@@ -35,3 +35,14 @@ When launched from the prepared package, the launcher sets process-only defaults
 Local config, state, and logs remain outside this package and are managed by the running application.
 
 If a required package file is missing, the launcher or package check should fail clearly instead of silently continuing.
+
+## Observability
+
+The Dashboard and runtime API expose Grafana and Vector as sanitized status
+classes for operator visibility. They do not copy raw Grafana, Vector, Docker,
+Supabase, or Edge logs into the package, and they must not print generated
+credentials, DB URLs, Authorization values, JWTs, raw source paths, or raw CSV
+content.
+
+Grafana remains a status/link target only. The package does not embed Grafana in
+an iframe and does not widen web-console LAN access.

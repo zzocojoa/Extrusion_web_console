@@ -119,6 +119,7 @@ class RuntimeStatusResponse(ApiModel):
     studio: RuntimePortStatus
     edge_runtime: RuntimeProbeStatus
     grafana: RuntimeProbeStatus
+    vector: RuntimeProbeStatus
     containers: list[RuntimeContainerStatus]
     config: list[RuntimeConfigItem]
     state_context: StateContextDto = Field(default_factory=unknown_state_context)

@@ -186,6 +186,7 @@
       "edge": "Edge Function",
       "wsl": "WSL",
       "grafana": "Grafana",
+      "vector": "Vector",
       "containers": "컨테이너",
       "stateContext": "상태 컨텍스트"
     },
@@ -201,6 +202,7 @@
       "operationActive": "런타임 작업이 이미 진행 중입니다.",
       "alreadyReady": "Local Supabase가 이미 준비되었습니다.",
       "alreadyStopped": "Local Supabase 컨테이너가 이미 중지되었습니다.",
+      "nonCoreAttention": "Core runtime은 이미 준비되었습니다. Grafana 또는 Vector 확인은 별도로 진행하세요.",
       "requiredContainerMissing": "필수 컨테이너가 없습니다. v1은 새 스택을 생성하지 않습니다.",
       "dockerUnavailable": "Docker를 사용할 수 없습니다."
     },
@@ -224,7 +226,7 @@
     "reason": {
       "ready": "Local Supabase core runtime이 준비되었습니다.",
       "core_runtime_unreachable": "API, DB, Studio, Edge 중 하나가 연결되지 않아 Core runtime이 차단되었습니다.",
-      "non_core_runtime_attention": "Core runtime은 준비되었습니다. non-core Grafana 확인이 필요합니다.",
+      "non_core_runtime_attention": "Core runtime은 준비되었습니다. non-core Grafana 또는 Vector 확인이 필요합니다.",
       "docker_unreachable": "백엔드 프로세스에서 Docker에 연결할 수 없습니다.",
       "edge_probe_timeout": "Edge route probe가 시간 초과되었습니다.",
       "required_container_missing": "필수 런타임 컨테이너가 없습니다."
@@ -595,6 +597,19 @@
         "noSelection": "Select already-in-DB rows before delete preflight.",
         "reconcile": "Reconcile delete",
         "reconciling": "Reconciling"
+      },
+      "dateScoped": {
+        "title": "기간 지정 삭제 검토",
+        "eyebrow": "게이트된 검토 UI",
+        "badge": "실행 불가",
+        "range": "현재 화면 기간: {{range}}",
+        "customRange": "{{startDate}} ~ {{endDate}}",
+        "dateNotSet": "미지정",
+        "gate": "게이트 출처: {{source}}. 향후 실행 필요 역할: {{role}}.",
+        "blockedTitle": "이 화면에서는 기간 지정 삭제를 시작할 수 없습니다.",
+        "blockedDetail": "이 패널은 문구, 다국어, runbook, 확인 절차 배치만 검증합니다. delete preflight 생성, delete job 시작, retry, settings save, feature gate enablement를 수행하지 않습니다.",
+        "disabledTitle": "기간 지정 삭제에는 별도 정책, preflight, 승인 기록, rollback 증거, feature gate enablement가 필요합니다.",
+        "disabledAction": "기간 지정 삭제 사용 불가"
       },
       "table": {
         "select": "Delete",
