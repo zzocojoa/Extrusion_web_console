@@ -178,6 +178,38 @@ This read-only smoke does not approve Upload Preview, Start Upload, Retry
 Failed, Delete, Settings save, feature-gate enablement, LAN exposure, deploy,
 Supabase reset/cleanup, Docker cleanup, or any operational DB mutation.
 
+## Post-Merge Runtime Review Follow-Up
+
+After PR #202 was squash-merged into `codex/v2-completion-track` at commit
+`50aa6bf071b31f1d78f0c1476dff1936f29a3524`, an independent read-only
+`$review` found one runtime-control blocker: Runtime Stop can stop the
+non-required Vector container, but Runtime Start only restarted required
+containers and therefore left an existing stopped Vector container unrecoverable
+without an out-of-scope reset, cleanup, or manual Docker action.
+
+The follow-up branch `codex/vector-start-stop-symmetry` fixes that asymmetry by
+allowing Runtime Start to restart an already-existing stopped
+`supabase_vector_*` container while keeping missing, unhealthy, or unknown
+Vector states as non-core runtime attention. This does not approve or implement
+Supabase reset/cleanup, Docker cleanup, broad container deletion, LAN exposure,
+operator mutation, or deploy.
+
+Follow-up validation on `codex/vector-start-stop-symmetry`:
+
+- targeted runtime-control tests for stopped Vector recovery, unhealthy started
+  Vector timeout, existing runtime noop, and required container missing
+  behavior: `4 passed, 1 warning`;
+- `git diff --check`: passed;
+- backend runtime/API/health tests:
+  `.\.venv\Scripts\python -m pytest tests\backend\test_runtime_control.py tests\backend\test_runtime_api.py tests\backend\test_health.py`
+  returned `35 passed, 2 warnings`;
+- full backend tests: `362 passed, 18 warnings`;
+- API-mode package assembly:
+  `.\packaging\assemble_operator_package.ps1 -FrontendMode api` passed;
+- independent read-only `$review`: first pass requested the unhealthy started
+  Vector readiness fix; after that fix, rerun reported
+  `No actionable findings.`
+
 ## Landing Interpretation
 
 Do not merge this stack as a claim that V2 is fully operational.
