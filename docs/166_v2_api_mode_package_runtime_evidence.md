@@ -17,7 +17,7 @@ cleanup, LAN exposure, deployment, or any operational data mutation.
 gate. Do not treat this package smoke as permission to replace the accepted
 mutation package unless that gate is updated by a separate reviewed change.
 
-## Source
+## Original Item 2 Source
 
 - Branch: `codex/v2-completion-track`
 - Source commit: `eedac29`
@@ -26,7 +26,7 @@ mutation package unless that gate is updated by a separate reviewed change.
 - Package command: `.\packaging\assemble_operator_package.ps1 -FrontendMode api`
 - Zip handoff command: `.\packaging\assemble_operator_package.ps1 -FrontendMode api -CreateZip`
 
-## Package Metadata
+## Original Item 2 Package Metadata
 
 Candidate package:
 
@@ -88,6 +88,37 @@ launcher-owned backend after verification.
 The smoke did not run Upload Preview, Start Upload, Retry Failed, Delete,
 Settings save, feature-gate enablement, Supabase reset/cleanup, Docker cleanup,
 LAN exposure, or deployment.
+
+## Completion-Track Package Refresh
+
+After PR #202 and PR #203 were merged into `codex/v2-completion-track`, the
+latest completion-track package evidence was refreshed from candidate commit
+`a80876fa5a03d021a98c588e4f4d3fabc3826e66`.
+
+Latest package metadata:
+
+- `packageLabel`: `ExtrusionWebConsole-a80876f-20260622-003633-680`
+- `sourceCommit`: `a80876f`
+- `createdUtc`: `2026-06-22T00:36:40.1122717Z`
+- `frontendMode`: `api`
+- `runtimeMode`: `operator-ready`
+- `frontendBuildMetadataPresent`: `true`
+- `zipCreated`: `false`
+- `zipSha256`: `not_applicable`
+
+Package-local refresh checks:
+
+- `launcher/start_web_console.ps1 -CheckOnly`: passed; no backend process was
+  started.
+- `launcher/install_shortcuts.ps1 -CheckOnly`: passed; no shortcuts were
+  written.
+
+This refresh does not replace the original item 2 zip handoff evidence above,
+does not replace the accepted mutation package in
+`docs/164_operator_data_mutation_safety_gate.md`, and does not approve Upload
+Preview, Start Upload, Retry Failed, Delete, Settings save, feature-gate
+enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, deployment,
+or any operational DB mutation.
 
 ## Review
 
