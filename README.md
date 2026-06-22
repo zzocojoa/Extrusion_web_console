@@ -203,6 +203,14 @@ Zip handoff is optional:
 
 When `-CreateZip` is used, a SHA-256 checksum file is written next to the zip. The package folder metadata records the actual zip hash after creation; the metadata inside the zip marks `zipCreated=true` and points to the adjacent checksum file. The script does not install shortcuts, delete existing package folders, delete AppData config/state/logs, run database cleanup, or run Docker cleanup.
 
+Maintainers can wrap an already assembled API-mode zip in a Windows NSIS installer EXE after NSIS is installed or available from the local electron-builder NSIS cache:
+
+```powershell
+.\packaging\build_nsis_installer.ps1 -PackageContainer <repo-external-package-container>
+```
+
+The NSIS build script searches `PATH`, standard NSIS install locations, Scoop, and the local electron-builder NSIS cache; maintainers can pass `-MakensisPath` for an explicit compiler path. The installer validates the embedded zip checksum and `package-build-info.json` before installing. It requires `frontendMode=api`, `runtimeMode=operator-ready`, and `frontendBuildMetadataPresent=true`. The installer is unsigned unless a separate signing process is applied, so Windows may show a publisher warning. The installer writes the package under the current user's local application programs folder by default and refreshes shortcuts through the package shortcut installer; it does not delete AppData config, state databases, launcher logs, local Supabase data, Docker data, or operational CSV files. For maintainer smoke without installing, set `EWC_INSTALLER_CHECK_ONLY=1` and run the EXE with `Start-Process -Wait -PassThru` so the exit code is captured.
+
 For operator handoff, follow `docs/32_operator_package_handoff_runbook.md` for zip/checksum verification, extraction, shortcut install, first launch, Settings checks, log collection, rollback, and support escalation.
 
 For day-to-day upload decisions, including the normal "no upload target" outcome,

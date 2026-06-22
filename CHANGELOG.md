@@ -6,6 +6,11 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Added maintainer tooling and handoff guidance for wrapping a verified
+  API-mode operator package zip in an unsigned user-scope NSIS installer EXE
+  without changing Upload Preview, Start Upload, Retry Failed, Delete,
+  Settings save, Supabase cleanup, Docker cleanup, LAN, deploy, or operational
+  DB mutation behavior.
 - Added V2 Grafana/Vector observability hardening: runtime readiness now exposes
   a sanitized Vector status class, Dashboard runtime checks show Vector
   separately, package smoke guidance includes `/api/runtime/local-supabase`, and
