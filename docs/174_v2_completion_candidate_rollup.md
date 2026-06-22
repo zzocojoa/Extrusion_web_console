@@ -2,42 +2,51 @@
 
 Date: 2026-06-22 Asia/Seoul
 
-Status: `candidate_stack_rehearsal_review_ready`
+Status: `completion_track_candidate_main_merge_precheck`
 
 ## Purpose
 
-This document records the current V2 completion-candidate PR stack for the eight
-remaining V2 items.
+This document records the current V2 completion-track candidate for the eight
+remaining V2 items and separates the current `main` baseline, the
+completion-track candidate baseline, and package evidence baseline.
 
 It does not approve merge, deployment, LAN exposure, Upload Preview, Start
 Upload, Retry Failed, Delete, Settings save, feature-gate enablement, Supabase
 reset/cleanup, Docker cleanup, schema migration, operational DB mutation, or
 source-file mutation.
 
-`main` is not yet a V2 completion candidate until the relevant PRs are reviewed,
-merged in a deliberate order, and the post-merge verification is rerun from the
-merged branch.
+`main` is not yet a V2 completion candidate until PR #193 is reviewed, merged
+to `main`, and the post-merge verification is rerun from `main` or proven to
+match the exact tested completion-track commit.
 
 ## Baseline
 
-- `origin/main`: `baee4982d8be9f6ef8e44b4a8ca6f1a30a382222`
-- V2 stack base: `origin/codex/v2-completion-track`
-  `b6f11ad26c51440341f2663480b33e079abb4202`
-- Current rollup branch: `codex/v2-completion-candidate-rollup`
-- Open PRs reviewed for this rollup: #193 through #200
-- Current rollup PR: #201
-- Current integration rehearsal PR: #202
-  `codex/v2-completion-stack-rehearsal`; confirm the exact current
-  `headRefOid` with `gh pr view 202 --json headRefOid` before merge approval.
-- GitHub checks: no checks reported on the reviewed branches at rollup time
+- Current `origin/main` baseline:
+  `baee4982d8be9f6ef8e44b4a8ca6f1a30a382222`.
+- Completion-track candidate baseline before this docs readiness fix:
+  `codex/v2-completion-track` and `origin/codex/v2-completion-track` at
+  `a80876fa5a03d021a98c588e4f4d3fabc3826e66`.
+- Package evidence baseline for the latest completion-track refresh:
+  `sourceCommit=a80876f`,
+  `packageLabel=ExtrusionWebConsole-a80876f-20260622-003633-680`,
+  `frontendMode=api`, `runtimeMode=operator-ready`, `zipCreated=false`, and
+  `zipSha256=not_applicable`.
+- PR #193 is the remaining `codex/v2-completion-track` to `main` merge
+  candidate. At the checked baseline it is open, ready, mergeable, and `CLEAN`.
+- PR #202 was squash-merged into `codex/v2-completion-track` at
+  `50aa6bf071b31f1d78f0c1476dff1936f29a3524`.
+- PR #203 was squash-merged into `codex/v2-completion-track` at
+  `a80876fa5a03d021a98c588e4f4d3fabc3826e66`.
+- GitHub checks: no checks reported on PR #193 at the checked baseline.
 
 ## Item Map
 
-Evidence paths are PR-scoped until their corresponding PR is merged into the
-target branch. Do not land a rollup that references evidence files absent from
-the target branch after the corresponding PR merge.
+Evidence paths are completion-track candidate scoped until PR #193 lands on
+`main`. The PR column identifies where each item was originally reviewed or is
+currently carried; do not claim `main` evidence until the file exists on `main`
+after merge.
 
-| Item | Candidate status | PR | Evidence | Merge note |
+| Item | Candidate status | Origin PR / carrier | Evidence | Merge note |
 | ---: | --- | --- | --- | --- |
 | 1 | `Deferred` | #200 `docs: define v2 operational upload verification gate` | `docs/173_v2_operational_upload_verification_gate.md` defines fresh inventory, Preview-only, Start Upload, Retry Failed, safe evidence, stop conditions, and rollback boundaries. `$review` clean. | Does not run or approve operational upload. |
 | 2 | `Completed` | #193 `docs: record v2 package runtime evidence` | `docs/166_v2_api_mode_package_runtime_evidence.md` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, read-only HTTP smoke, and item 2 `$review` result. | Does not replace the accepted mutation package in `docs/164_operator_data_mutation_safety_gate.md`. |
@@ -50,20 +59,18 @@ the target branch after the corresponding PR merge.
 
 ## PR Stack State
 
-At rollup time:
+Current landing state after the completion-track integration:
 
-| PR | Base | Head | State | Draft | Merge state |
-| ---: | --- | --- | --- | --- | --- |
-| #193 | `main` | `codex/v2-completion-track` | open | no | `CLEAN` |
-| #194 | `codex/v2-completion-track` | `codex/v2-observability-hardening` | open | no | `CLEAN` |
-| #195 | `codex/v2-completion-track` | `codex/v2-date-delete-ui` | open | no | `CLEAN` |
-| #196 | `codex/v2-completion-track` | `codex/v2-schema-attribution-design` | open | no | `CLEAN` |
-| #197 | `codex/v2-completion-track` | `codex/v2-delete-expansion-gate` | open | no | `CLEAN` |
-| #198 | `codex/v2-completion-track` | `codex/v2-operational-delete-verification-gate` | open | no | `CLEAN` |
-| #199 | `codex/v2-completion-track` | `codex/v2-lan-security-gate` | open | no | `CLEAN` |
-| #200 | `codex/v2-completion-track` | `codex/v2-operational-upload-verification-gate` | open | no | `CLEAN` |
-| #201 | `codex/v2-completion-track` | `codex/v2-completion-candidate-rollup` | open | no | `CLEAN` |
-| #202 | `codex/v2-completion-track` | `codex/v2-completion-stack-rehearsal` | open | no | `CLEAN` |
+| PR | Base | Head | State | Merge interpretation |
+| ---: | --- | --- | --- | --- |
+| #193 | `main` | `codex/v2-completion-track` | open | Remaining main merge candidate; do not merge until the docs readiness fix and `$review` are complete. |
+| #202 | `codex/v2-completion-track` | `codex/v2-completion-stack-rehearsal` | merged | Integration vehicle for the reviewed item PRs and rollup evidence; do not request or approve this merge again. |
+| #203 | `codex/v2-completion-track` | `codex/vector-start-stop-symmetry` | merged | Runtime start/stop symmetry follow-up; included in the `a80876f` completion-track candidate baseline. |
+
+Earlier item PRs #194 through #201 are represented in the merged PR #202
+integration path for this candidate. Treat their individual GitHub state as
+historical for the current landing path unless the team intentionally reopens an
+item-by-item landing strategy and reruns the corresponding reviews.
 
 ## Pre-Merge Rehearsal
 
@@ -116,10 +123,11 @@ Conflict resolution preserved all referenced evidence documents from
 kept items 2 and 7 as `Completed`, and kept the default-off LAN security guard
 separate from full Multi-user LAN approval.
 
-PR #202 now exposes that rehearsal as a review-ready integration PR against
-`codex/v2-completion-track`. It is an integration vehicle for the reviewed PR
-heads and the follow-up runtime observability fixes; it is not approval to run
-operator mutations or a claim that V2 is fully operational.
+PR #202 exposed that rehearsal as a review-ready integration PR against
+`codex/v2-completion-track` and was later squash-merged into the completion
+track. It is an integration vehicle for the reviewed PR heads and the follow-up
+runtime observability fixes; it is not approval to run operator mutations or a
+claim that V2 is fully operational.
 
 ## Local Rehearsal Validation
 
@@ -210,6 +218,32 @@ Follow-up validation on `codex/vector-start-stop-symmetry`:
   Vector readiness fix; after that fix, rerun reported
   `No actionable findings.`
 
+## Latest Completion-Track Package Refresh
+
+After PR #203 was squash-merged, the completion-track candidate baseline became
+`a80876fa5a03d021a98c588e4f4d3fabc3826e66`. The latest package evidence for
+that baseline is:
+
+- `packageLabel`: `ExtrusionWebConsole-a80876f-20260622-003633-680`
+- `sourceCommit`: `a80876f`
+- `createdUtc`: `2026-06-22T00:36:40.1122717Z`
+- `frontendMode`: `api`
+- `runtimeMode`: `operator-ready`
+- `frontendBuildMetadataPresent`: `true`
+- `zipCreated`: `false`
+- `zipSha256`: `not_applicable`
+
+Package-local `-CheckOnly` refresh on 2026-06-22 Asia/Seoul passed for the
+launcher and shortcut installer. The launcher check did not start a backend
+process, and the shortcut check did not write shortcuts.
+
+This latest package evidence is for PR #193 readiness review only. It does not
+replace the accepted mutation package in
+`docs/164_operator_data_mutation_safety_gate.md` and does not approve Upload
+Preview, Start Upload, Retry Failed, Delete, Settings save, feature-gate
+enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, schema
+migration, deploy, or operational DB mutation.
+
 ## Landing Interpretation
 
 Do not merge this stack as a claim that V2 is fully operational.
@@ -230,29 +264,14 @@ Safe landing interpretation after review:
 
 No merge is approved by this document.
 
-If the user approves landing later, use one deliberate sequence. Either merge
-the reviewed item PRs in order and then refresh #201, or merge review-ready
-integration PR #202 after confirming it still points at the exact validated head
-and remains `CLEAN`.
+If the user approves landing later, use one deliberate sequence:
 
-1. Keep #193 open. Do not merge #193 into `main` at this step.
-2. Merge item PRs #194 through #200 into `codex/v2-completion-track`.
-   Resolve every conflicted file explicitly. `docs/165_v2_status_matrix.md`
-   and `CHANGELOG.md` are expected conflict points, not an exhaustive conflict
-   list. The pre-merge rehearsal already found a `docs/165_v2_status_matrix.md`
-   conflict after #194 then #195. Record the final conflict review result
-   before continuing.
-3. After #194 through #200 are merged, update or rebase #201 onto the refreshed
-   `codex/v2-completion-track`, resolve `CHANGELOG.md` and rollup-document
-   conflicts explicitly, rerun `git diff --check` and `$review`, and merge #201
-   into `codex/v2-completion-track` only if the rollup still matches the
-   refreshed stack.
-   If using #202 instead, this step is replaced by reviewing the #202 merge
-   commit set and confirming the validation recorded above still matches the
-   PR head.
-4. Confirm #193 now points at the refreshed `codex/v2-completion-track` that
-   includes the reviewed #194 through #201 results.
-5. Rerun verification from the updated completion branch:
+1. Do not merge PR #202 or PR #203 again; both are already represented in
+   `codex/v2-completion-track`.
+2. Land any docs readiness fix into `codex/v2-completion-track` if it is not
+   already present, then confirm PR #193 points at the refreshed completion
+   branch and remains `CLEAN`.
+3. Rerun verification from the updated completion branch:
    - `git diff --check`
    - `.\.venv\Scripts\python -m pytest tests\backend`
    - `cd frontend; npm run typecheck; npm run build:api`
@@ -261,35 +280,37 @@ and remains `CLEAN`.
    - package launcher/shortcut `-CheckOnly`
    - read-only package HTTP smoke
    - `$review`
-6. Only after the merged completion branch passes, merge the refreshed
-   completion branch to `main`.
-7. After the `main` merge, either prove that `main` HEAD is the exact tested
+4. Only after the refreshed completion branch passes, merge PR #193 to `main`.
+5. After the `main` merge, either prove that `main` HEAD is the exact tested
    completion commit or rerun the verification above from `main` before
-   describing V2 as a completion candidate.
+   describing `main` as a V2 completion candidate.
 
 ## Required Approval Wording
 
-To merge review-ready integration PR #202 into `codex/v2-completion-track`, the
-approval must be explicit and narrow:
+To merge PR #193 from `codex/v2-completion-track` to `main`, the approval must
+be explicit and narrow:
 
 ```text
-I approve merging PR #202 into codex/v2-completion-track.
-This approval is only for the review-ready V2 completion stack integration rehearsal at headRefOid <current PR #202 headRefOid>.
-This approval does not approve merging codex/v2-completion-track to main, Upload Preview, Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, schema migration, deploy, or operational DB mutation.
+I approve merging PR #193 from codex/v2-completion-track to main.
+This approval is only for the reviewed V2 completion-track candidate at headRefOid <current PR #193 headRefOid>.
+This approval does not approve Upload Preview, Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, schema migration, deploy, or operational DB mutation.
 ```
 
-Before using the approval, replace `<current PR #202 headRefOid>` with the exact
+Before using the approval, replace `<current PR #193 headRefOid>` with the exact
 `headRefOid` reported by GitHub at approval time. If that head differs from the
-last reviewed head, rerun `git diff --check`, package validation evidence review,
-and `$review` before using the approval.
+last reviewed completion-track candidate, rerun `git diff --check`, package
+validation evidence review, and `$review` before using the approval.
 
 ## Stop Conditions
 
 Stop and do not claim V2 completion when any of these are true:
 
-- any PR above is not merged or is merged without conflict review;
-- the known cumulative `docs/165_v2_status_matrix.md` conflict is not resolved
-  and reviewed explicitly;
+- PR #193 is not mergeable, not `CLEAN`, or not pointing at the exact reviewed
+  completion-track candidate;
+- PR #202 or PR #203 merge commits are absent from the completion-track
+  candidate being reviewed;
+- any docs readiness fix required by `$review` is absent from the completion
+  branch;
 - any referenced evidence file is absent from the target branch after its
   corresponding PR merge;
 - `docs/165_v2_status_matrix.md` classifications do not match this rollup:
@@ -308,8 +329,8 @@ Stop and do not claim V2 completion when any of these are true:
 ## Rollback
 
 Before commit, inspect the diff and revert only the rollup document hunk and
-the matching CHANGELOG hunk after confirming no unrelated working-tree changes
-share those files.
+matching `docs/165`, `docs/166`, or CHANGELOG hunks after confirming no
+unrelated working-tree changes share those files.
 
 After commit, revert the specific rollup document commit.
 
