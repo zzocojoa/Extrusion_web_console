@@ -1,6 +1,6 @@
 # operator-ui-density-and-navigation - Plan Document
 
-> Version: 0.1.0 | Date: 2026-06-22 | Status: Ready for P0 Implementation
+> Version: 0.2.0 | Date: 2026-06-22 | Status: Implemented Candidate
 > Level: Dynamic
 
 ---
@@ -106,13 +106,13 @@ operational DB mutation.
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| UI-1 | Dashboard Runtime Status last-check column keeps header and date/time values on one line on desktop, with horizontal table overflow on narrow screens. | P0 | Pending |
-| UI-2 | Upload Preview table supports horizontal scroll, non-wrapping key columns, full-value inspection for filename/path/reason, page-size persistence, and page reset on new Preview. | P0 | Pending |
-| UI-3 | Job Logs panel sits directly under the Logs tabs and uses most remaining viewport height, with internal scrolling. | P1 | Pending |
-| UI-4 | Audit Logs table supports readable parameter evidence through chips plus full-detail inspection while preserving redaction. | P0 | Pending |
-| UI-5 | Settings page removes or hides implementation-heavy operator copy behind advanced information. | P2 | Pending |
-| UI-6 | Sidebar remains available on desktop, supports collapsed/expanded state persistence, and uses a mobile drawer on narrow screens. | P0 | Pending |
-| UI-7 | Upload Preview and Audit Logs share a reusable table utility where the abstractions reduce duplicated behavior. | P1 | Pending |
+| UI-1 | Dashboard Runtime Status last-check column keeps header and date/time values on one line on desktop, with horizontal table overflow on narrow screens. | P0 | Completed |
+| UI-2 | Upload Preview table supports horizontal scroll, non-wrapping key columns, full-value inspection for filename/path/reason, page-size persistence, and page reset on new Preview. | P0 | Completed |
+| UI-3 | Job Logs panel sits directly under the Logs tabs and uses most remaining viewport height, with internal scrolling. | P1 | Completed |
+| UI-4 | Audit Logs table supports readable parameter evidence through chips plus full-detail inspection while preserving redaction. | P0 | Completed |
+| UI-5 | Settings page removes or hides implementation-heavy operator copy behind advanced information. | P2 | Completed |
+| UI-6 | Sidebar remains available on desktop, supports collapsed/expanded state persistence, and uses a mobile drawer on narrow screens. | P0 | Completed |
+| UI-7 | Upload Preview and Audit Logs share a reusable table utility where the abstractions reduce duplicated behavior. | P1 | Completed |
 
 ## 5. Non-Functional Requirements
 
@@ -210,22 +210,22 @@ operational DB mutation.
 
 ## 7. Success Criteria
 
-- [ ] Runtime last-check header and date/time values do not wrap on desktop.
-- [ ] Upload Preview long filename, path, and reason can be inspected in full.
-- [ ] Upload Preview pagination works and page size survives reload.
-- [ ] Audit Logs parameters and errors can be inspected in full.
-- [ ] Audit Logs pagination works and page size survives reload.
-- [ ] Column resize works on target tables and widths survive reload.
-- [ ] Reset column widths is available.
-- [ ] Sidebar collapsed/expanded state survives reload.
-- [ ] Mobile sidebar drawer opens/closes with button, outside click, and Escape.
-- [ ] Job Logs panel is directly below tabs and uses a substantially taller
+- [x] Runtime last-check header and date/time values do not wrap on desktop.
+- [x] Upload Preview long filename, path, and reason can be inspected in full.
+- [x] Upload Preview pagination works and page size survives reload.
+- [x] Audit Logs parameters and errors can be inspected in full.
+- [x] Audit Logs pagination works and page size survives reload.
+- [x] Column resize works on target tables and widths survive reload.
+- [x] Reset column widths is available.
+- [x] Sidebar collapsed/expanded state survives reload.
+- [x] Mobile sidebar drawer opens/closes with button, outside click, and Escape.
+- [x] Job Logs panel is directly below tabs and uses a substantially taller
       reading area.
-- [ ] Settings default page no longer surfaces unnecessary technical policy copy.
-- [ ] Browser QA covers 1920x1080, 1600x900, 1366x768, 1024x768, 768x1024,
+- [x] Settings default page no longer surfaces unnecessary technical policy copy.
+- [x] Browser QA covers 1920x1080, 1600x900, 1366x768, 1024x768, 768x1024,
       and 390x844.
-- [ ] Frontend typecheck and build pass.
-- [ ] Existing upload/delete/runtime behavior remains unchanged.
+- [x] Frontend typecheck and build pass.
+- [x] Existing upload/delete/runtime behavior remains unchanged.
 
 ## 8. Risks And Mitigations
 
@@ -288,7 +288,29 @@ cleanup remains P2.
   - Job Logs height
   - Settings copy cleanup
 
-## 11. References
+## 11. Implementation Evidence
+
+Implemented on branch `codex/operator-ui-density-navigation` as frontend-only
+UI work. No backend upload/delete/runtime logic, operational DB access,
+Supabase lifecycle action, feature gate enablement, LAN exposure, packaging
+policy, deployment, or schema migration was changed.
+
+Validation completed:
+
+- `cd frontend; npm run typecheck`
+- `cd frontend; npm run build:api`
+- `cd frontend; npm run qa:screenshots`
+- `git diff --check`
+- Changed-frontend diff marker scan for raw DB URL markers, credential header
+  markers, service role values, anon key assignments, and Windows user/source
+  paths.
+
+Browser interaction smoke additionally confirmed Upload Preview column resize
+persists only numeric UI preference data, full-value popovers open, Job Logs
+height is above the 420px desktop minimum, Audit Logs parameter detail opens,
+sidebar collapsed state persists, and the mobile drawer opens.
+
+## 12. References
 
 - `DESIGN.md`
 - `docs/00_product_scope.md`

@@ -15,10 +15,12 @@ type CaptureLog = {
 };
 
 const viewports: ViewportCase[] = [
-  { name: "1440x900", width: 1440, height: 900 },
+  { name: "1920x1080", width: 1920, height: 1080 },
+  { name: "1600x900", width: 1600, height: 900 },
   { name: "1366x768", width: 1366, height: 768 },
   { name: "1024x768", width: 1024, height: 768 },
-  { name: "720x900", width: 720, height: 900 },
+  { name: "768x1024", width: 768, height: 1024 },
+  { name: "390x844", width: 390, height: 844 },
 ];
 
 const forbiddenVisibleText = [/Inserted/i, /적재/u, /삽입/u, /새로 삽입/u];
@@ -113,6 +115,11 @@ async function gotoPage(page: Page, pageName: "dashboard" | "upload" | "logs" | 
     logs: /로그|Logs/,
     settings: /설정|Settings/,
   };
+  const mobileMenu = page.locator(".topbar__menu-button");
+  if (await mobileMenu.isVisible()) {
+    await mobileMenu.click();
+    await expect(page.locator("aside")).toHaveClass(/sidebar--open/);
+  }
   await page.locator("aside").getByRole("button", { name: labels[pageName] }).click();
   await page.locator("main").waitFor({ state: "visible" });
 }

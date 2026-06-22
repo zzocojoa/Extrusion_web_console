@@ -48,9 +48,20 @@ import {
 } from "../api/uploadPreview";
 import { localizeJobEvent, type Translate } from "../components/dashboard/localizedDashboardText";
 import { StatusBadge } from "../components/status/StatusBadge";
+import {
+  DetailCell,
+  ResizableDataTable,
+  TablePagination,
+  readStoredPageSize,
+  type DataTableColumn,
+  type TablePaginationLabels,
+} from "../components/table/ResizableDataTable";
 import type { StatusTone } from "./dashboard/dashboardTypes";
 
 const API_MODE = import.meta.env.VITE_API_MODE === "api";
+const uploadPreviewColumnStorageKey = "ewc.ui.uploadPreview.columnWidths.v1";
+const uploadPreviewPageSizeStorageKey = "ewc.ui.uploadPreview.pageSize.v1";
+const tablePageSizeOptions = [5, 15, 30, 60, 100];
 
 const statusTone: Record<PreviewItemStatus, StatusTone> = {
   target: "ready",
@@ -1064,7 +1075,7 @@ function PreviewTab(props: PreviewTabProps) {
         />
       ) : null}
 
-      <div className="panel">
+      <div className="panel preview-table-panel">
         <div className="preview-table-toolbar">
           <label className="preview-search">
             <Search size={15} aria-hidden="true" />
@@ -1616,63 +1627,207 @@ function PreviewTable({
 }) {
   const { i18n, t } = useTranslation();
   const selectedIds = new Set(selectedDeleteItemIds);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(() => readStoredPageSize(uploadPreviewPageSizeStorageKey, 15, tablePageSizeOptions));
+  const paginationLabels = useTablePaginationLabels();
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [items]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(uploadPreviewPageSizeStorageKey, String(pageSize));
+  }, [pageSize]);
+
   if (items.length === 0) {
     return <div className="panel--loading">{t("upload.empty.noRows")}</div>;
   }
+
+  const safePageIndex = Math.min(pageIndex, Math.max(0, Math.ceil(items.length / pageSize) - 1));
+  const pageRows = items.slice(safePageIndex * pageSize, safePageIndex * pageSize + pageSize);
+  const columns: Array<DataTableColumn<PreviewItem>> = [
+    {
+      id: "select",
+      header: t("upload.delete.table.select"),
+      width: 92,
+      minWidth: 84,
+      maxWidth: 130,
+      className: "preview-select-cell",
+      render: (item) =>
+        item.status === "already_in_db" ? (
+          <input
+            aria-label={t("upload.delete.table.selectRow", { filename: item.filename })}
+            checked={selectedIds.has(item.previewItemId)}
+            type="checkbox"
+            onChange={(event) => onToggleDeleteItem(item.previewItemId, event.target.checked)}
+          />
+        ) : (
+          <span aria-hidden="true">-</span>
+        ),
+    },
+    {
+      id: "status",
+      header: t("upload.table.status"),
+      width: 148,
+      minWidth: 128,
+      maxWidth: 220,
+      render: (item) => <StatusBadge tone={statusTone[item.status]} label={t(`upload.status.${item.status}`)} />,
+    },
+    {
+      id: "filename",
+      header: t("upload.table.filename"),
+      width: 280,
+      minWidth: 180,
+      maxWidth: 560,
+      render: (item) => (
+        <DetailCell
+          allowCopy
+          copyLabel={t("table.actions.copy")}
+          closeLabel={t("table.actions.close")}
+          detailLabel={t("upload.table.filename")}
+          value={`${item.filename}\n${item.folderLabel}`}
+          preview={(
+            <span className="preview-file-cell">
+              <strong>{item.filename}</strong>
+              <span>{item.folderLabel}</span>
+            </span>
+          )}
+        />
+      ),
+    },
+    {
+      id: "kind",
+      header: t("upload.table.kind"),
+      width: 112,
+      minWidth: 96,
+      maxWidth: 180,
+      render: (item) => t(`upload.kind.${item.kind}`),
+    },
+    {
+      id: "fileDate",
+      header: t("upload.table.fileDate"),
+      width: 132,
+      minWidth: 120,
+      maxWidth: 180,
+      className: "num nowrap-cell",
+      render: (item) => item.fileDate ?? "-",
+    },
+    {
+      id: "rows",
+      header: t("upload.table.rows"),
+      width: 112,
+      minWidth: 96,
+      maxWidth: 160,
+      className: "num",
+      render: (item) => formatNumber(item.rowCount),
+    },
+    {
+      id: "dbMatch",
+      header: t("upload.table.dbMatch"),
+      width: 118,
+      minWidth: 104,
+      maxWidth: 170,
+      className: "num",
+      render: (item) => formatNumber(item.dbMatchCount),
+    },
+    {
+      id: "uploadRows",
+      header: t("upload.table.uploadRows"),
+      width: 126,
+      minWidth: 112,
+      maxWidth: 180,
+      className: "num",
+      render: (item) => formatNumber(item.uploadRowEstimate),
+    },
+    {
+      id: "reason",
+      header: t("upload.table.reason"),
+      width: 340,
+      minWidth: 220,
+      maxWidth: 640,
+      render: (item) => {
+        const reason = formatPreviewReason(item.reasonCode, item.reasonText, t, (key) => i18n.exists(key));
+        return (
+          <DetailCell
+            closeLabel={t("table.actions.close")}
+            copyLabel={t("table.actions.copy")}
+            detailLabel={t("upload.table.reason")}
+            lines={3}
+            value={reason}
+          />
+        );
+      },
+    },
+    {
+      id: "modified",
+      header: t("upload.table.modified"),
+      width: 168,
+      minWidth: 148,
+      maxWidth: 220,
+      className: "num nowrap-cell",
+      render: (item) => formatDateTime(item.modifiedAt),
+    },
+    {
+      id: "path",
+      header: t("upload.table.path"),
+      width: 360,
+      minWidth: 220,
+      maxWidth: 720,
+      className: "preview-path",
+      render: (item) => (
+        <DetailCell
+          allowCopy
+          closeLabel={t("table.actions.close")}
+          copyLabel={t("table.actions.copy")}
+          detailLabel={t("upload.table.path")}
+          monospace
+          value={item.path}
+        />
+      ),
+    },
+  ];
+
   return (
-    <div className="table-scroll">
-      <table className="data-table data-table--preview">
-        <thead>
-          <tr>
-            <th>{t("upload.delete.table.select")}</th>
-            <th>{t("upload.table.status")}</th>
-            <th>{t("upload.table.filename")}</th>
-            <th>{t("upload.table.kind")}</th>
-            <th>{t("upload.table.fileDate")}</th>
-            <th>{t("upload.table.rows")}</th>
-            <th>{t("upload.table.dbMatch")}</th>
-            <th>{t("upload.table.uploadRows")}</th>
-            <th>{t("upload.table.reason")}</th>
-            <th>{t("upload.table.modified")}</th>
-            <th>{t("upload.table.path")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr className={`row--${statusTone[item.status]}`} key={item.previewItemId}>
-              <td className="preview-select-cell">
-                {item.status === "already_in_db" ? (
-                  <input
-                    aria-label={t("upload.delete.table.selectRow", { filename: item.filename })}
-                    checked={selectedIds.has(item.previewItemId)}
-                    type="checkbox"
-                    onChange={(event) => onToggleDeleteItem(item.previewItemId, event.target.checked)}
-                  />
-                ) : (
-                  <span aria-hidden="true">-</span>
-                )}
-              </td>
-              <td><StatusBadge tone={statusTone[item.status]} label={t(`upload.status.${item.status}`)} /></td>
-              <td className="preview-file-cell">
-                <strong>{item.filename}</strong>
-                <span>{item.folderLabel}</span>
-              </td>
-              <td>{t(`upload.kind.${item.kind}`)}</td>
-              <td className="num">{item.fileDate ?? "-"}</td>
-              <td className="num">{formatNumber(item.rowCount)}</td>
-              <td className="num">{formatNumber(item.dbMatchCount)}</td>
-              <td className="num">{formatNumber(item.uploadRowEstimate)}</td>
-              <td className="preview-reason">
-                {formatPreviewReason(item.reasonCode, item.reasonText, t, (key) => i18n.exists(key))}
-              </td>
-              <td className="num">{formatDateTime(item.modifiedAt)}</td>
-              <td className="preview-path" title={item.path}>{item.path}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <ResizableDataTable
+        className="data-table--preview"
+        columns={columns}
+        empty={<div className="panel--loading">{t("upload.empty.noRows")}</div>}
+        getRowKey={(item) => item.previewItemId}
+        resetLabel={t("table.actions.resetColumns")}
+        rowClassName={(item) => `row--${statusTone[item.status]}`}
+        rows={pageRows}
+        storageKey={uploadPreviewColumnStorageKey}
+        tableLabel={t("upload.preview.title")}
+      />
+      <TablePagination
+        labels={paginationLabels}
+        pageIndex={safePageIndex}
+        pageSize={pageSize}
+        pageSizeOptions={tablePageSizeOptions}
+        totalItems={items.length}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={(value) => {
+          setPageSize(value);
+          setPageIndex(0);
+        }}
+      />
+    </>
   );
+}
+
+function useTablePaginationLabels(): TablePaginationLabels {
+  const { t } = useTranslation();
+  return {
+    range: (start, end, total) => t("table.pagination.range", { start, end, total }),
+    pageSize: t("table.pagination.pageSize"),
+    first: t("table.pagination.first"),
+    previous: t("table.pagination.previous"),
+    next: t("table.pagination.next"),
+    last: t("table.pagination.last"),
+    page: (current, total) => t("table.pagination.page", { current, total }),
+  };
 }
 
 function JobTab({

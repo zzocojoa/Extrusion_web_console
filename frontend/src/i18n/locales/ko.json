@@ -6,6 +6,12 @@
     "version": "v1 Core Ops",
     "language": "한국어"
   },
+  "appShell": {
+    "openNavigation": "탐색 열기",
+    "closeNavigation": "탐색 닫기",
+    "collapseNavigation": "탐색 접기",
+    "expandNavigation": "탐색 펼치기"
+  },
   "nav": {
     "dashboard": "대시보드",
     "upload": "업로드",
@@ -310,7 +316,8 @@
       "configLabel": "런타임 설정 값",
       "source": "출처",
       "commandPolicyTitle": "명령 정책",
-      "commandPolicy": "v1은 설정된 Local Supabase 프로젝트에 대해 허용된 status/start/stop 명령만 실행합니다. bootstrap, reset, 삭제, cleanup 명령은 지원하지 않습니다."
+      "supportedCommands": "상태 확인, 시작, 중지만 지원됩니다.",
+      "commandPolicy": "고급 정보: 설정된 Local Supabase 프로젝트에는 승인된 status/start/stop 명령만 사용할 수 있습니다."
     },
     "source": {
       "default": "기본값",
@@ -700,6 +707,12 @@
       "error": "작업 로그를 불러오지 못했습니다.",
       "empty": "아직 업로드 작업 이벤트가 없습니다.",
       "mockMessage": "목 데이터 작업 로그입니다. 저장된 이벤트는 API 모드에서 확인할 수 있습니다.",
+      "actions": {
+        "autoScroll": "자동",
+        "wrap": "줄바꿈",
+        "bottom": "맨 아래",
+        "copy": "복사"
+      },
       "events": {
         "jobFinished": "업로드 작업이 {{status}} 상태로 완료되었습니다.",
         "fileProgressWithName": "{{filename}} 진행: {{processed}}/{{total}}.",
@@ -756,6 +769,22 @@
         "blocked": "차단",
         "cancelled": "취소"
       }
+    }
+  },
+  "table": {
+    "actions": {
+      "resetColumns": "열 너비 초기화",
+      "copy": "복사",
+      "close": "닫기"
+    },
+    "pagination": {
+      "range": "총 {{total}}건 중 {{start}}-{{end}} 표시",
+      "pageSize": "페이지당",
+      "first": "처음",
+      "previous": "이전",
+      "next": "다음",
+      "last": "마지막",
+      "page": "{{current}} / {{total}}"
     }
   },
   "status": {
