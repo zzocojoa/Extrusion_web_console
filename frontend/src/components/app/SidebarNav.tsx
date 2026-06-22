@@ -37,14 +37,15 @@ export function SidebarNav({
       <div className="sidebar__brand">
         <img
           className="sidebar__brand-mark"
-          src="/brand/logo-mark.svg"
+          src="/brand/logo-mark.png"
           alt=""
           aria-hidden="true"
         />
-        <span className="sidebar__brand-copy">
-          <span className="sidebar__product">{t("app.name")}</span>
-          <span className="sidebar__subtitle">{t("app.subtitle")}</span>
-        </span>
+        <img
+          className="sidebar__brand-lockup"
+          src="/brand/logo-sidebar.png"
+          alt={t("app.name")}
+        />
         <button
           aria-label={collapsed ? t("appShell.expandNavigation") : t("appShell.collapseNavigation")}
           className="icon-button sidebar__collapse-button"
