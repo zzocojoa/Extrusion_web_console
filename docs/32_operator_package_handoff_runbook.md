@@ -13,6 +13,7 @@ Give a maintainer a repeatable, non-destructive handoff flow for delivering a pr
 This runbook covers:
 
 - package zip and checksum handoff
+- optional NSIS installer EXE handoff
 - extraction location
 - shortcut install
 - first launch
@@ -31,6 +32,7 @@ Before handoff, the maintainer must have:
 | --- | --- |
 | Package folder or zip | Built from a release-smoked package branch or `main` |
 | Checksum file | Adjacent SHA-256 checksum for zip handoff |
+| Optional NSIS installer | Built from the same verified package zip and checksum |
 | Final release smoke | Passed and documented |
 | Target PC | Windows operator PC with expected local runtime access |
 | Prepared runtime | Package contains `.venv/Scripts/python.exe` |
@@ -47,6 +49,21 @@ For zip handoff, deliver exactly these release artifacts:
 | --- | --- |
 | `<package-label>.zip` | Prepared operator package |
 | `<package-label>.zip.sha256` | Checksum verification |
+
+For optional NSIS installer handoff, deliver exactly these release artifacts:
+
+| Artifact | Purpose |
+| --- | --- |
+| `<package-label>-Setup.exe` | User-scope installer wrapping the prepared package zip |
+| `<package-label>-Setup.exe.sha256` | Installer checksum verification |
+| `<package-label>.zip` | Embedded payload source of truth for recovery/debugging |
+| `<package-label>.zip.sha256` | Payload checksum verification |
+
+The NSIS EXE is unsigned unless a separate signing process is completed.
+Windows may show an unknown-publisher warning. Do not treat the EXE as a
+different release artifact from the zip: the package metadata inside the
+payload must still match the approved source commit, frontend mode, runtime
+mode, and frontend build metadata state.
 
 Optional maintainer-only evidence:
 
@@ -72,6 +89,57 @@ if ($actual -ne $expected) { throw "Package checksum mismatch" }
 ```
 
 If checksum verification fails, stop the handoff. Do not extract or run the package.
+
+## Optional NSIS Installer
+
+Maintainers can build a user-scope NSIS installer from an already assembled
+API-mode package:
+
+```powershell
+.\packaging\build_nsis_installer.ps1 -PackageContainer <package-container>
+```
+
+The installer build requires `makensis.exe`. The build script searches `PATH`,
+standard NSIS install locations, Scoop, and the local electron-builder NSIS
+cache. Maintainers can pass `-MakensisPath` for an explicit compiler path. The
+script validates the adjacent package zip checksum before producing the EXE and
+records an adjacent EXE SHA-256 file. The embedded install script validates the
+payload checksum and `package-build-info.json` before installing. The required
+metadata class is:
+
+```text
+frontendMode=api
+runtimeMode=operator-ready
+frontendBuildMetadataPresent=true
+```
+
+For maintainer check-only smoke without installing:
+
+```powershell
+$env:EWC_INSTALLER_CHECK_ONLY = "1"
+$setup = ".\<package-label>-Setup.exe"
+$process = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru
+Remove-Item Env:\EWC_INSTALLER_CHECK_ONLY
+if ($process.ExitCode -ne 0) { throw "Installer check-only failed: $($process.ExitCode)" }
+```
+
+For controlled install smoke, use temporary install and shortcut directories:
+
+```powershell
+$env:EWC_INSTALL_BASE = "<temp-smoke-root>\Programs"
+$env:EWC_INSTALLER_DESKTOP_DIR = "<temp-smoke-root>\Desktop"
+$env:EWC_INSTALLER_START_MENU_DIR = "<temp-smoke-root>\StartMenu"
+$setup = ".\<package-label>-Setup.exe"
+$process = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru
+Remove-Item Env:\EWC_INSTALL_BASE,Env:\EWC_INSTALLER_DESKTOP_DIR,Env:\EWC_INSTALLER_START_MENU_DIR
+if ($process.ExitCode -ne 0) { throw "Installer smoke failed: $($process.ExitCode)" }
+```
+
+The installer must not delete AppData config, state databases, launcher logs,
+local Supabase data, Docker containers, Docker volumes, or operational CSV
+files. Installer rollback is the same package rollback model: retain the
+previous known-good package, repoint shortcuts through that package's shortcut
+installer, and preserve failed-package evidence for maintainer review.
 
 ## Extraction Location
 
