@@ -23,6 +23,11 @@ Implemented:
   `ready`, `stopped`, `missing`, `unhealthy`, or `unknown`.
 - Vector non-ready states are non-core runtime attention when API, DB, Studio,
   Edge, and required container existence gates are otherwise satisfied.
+- Runtime Start now recovers an existing stopped Vector container that Runtime
+  Stop can stop as part of local Supabase shutdown. This is limited to an
+  already-existing `supabase_vector_*` container with stopped status; missing or
+  otherwise unhealthy Vector remains non-core runtime attention and is not
+  recreated by reset, cleanup, prune, or broad container deletion.
 - Dashboard runtime checks show a separate Vector row.
 - `/api/dashboard` runtime checks include Vector as a separate observability row.
 - Package manifest smoke guidance now includes read-only
@@ -50,7 +55,8 @@ Operator-facing alert classes:
 | --- | --- | --- |
 | API, DB, Studio, or Edge is not reachable | `core_runtime_unreachable` | Stop upload mutation flow and inspect runtime readiness. |
 | Grafana is unreachable while core runtime is ready | `non_core_runtime_attention` | Continue core upload review only if Grafana is not an acceptance gate; record caveat. |
-| Vector is stopped, unhealthy, missing, or unknown while core runtime is ready | `non_core_runtime_attention` | Record only the sanitized status class and observability caveat; do not run cleanup/reset/prune as a workaround. |
+| Vector is stopped while core runtime is ready and the container already exists | `non_core_runtime_attention` | Runtime Start may restart that existing Vector container and then record sanitized status-class evidence. |
+| Vector is unhealthy, missing, or unknown while core runtime is ready | `non_core_runtime_attention` | Record only the sanitized status class and observability caveat; do not run cleanup/reset/prune as a workaround. |
 | Raw log, metric, trace, DB URL, token, JWT, source path, filename, or CSV content appears in evidence | `redaction_failure` | Stop and redact before sharing or merging evidence. |
 
 Rollback and recovery:
@@ -59,6 +65,8 @@ Rollback and recovery:
 - Do not delete local state DB evidence.
 - Do not run Supabase reset/cleanup, Docker cleanup, prune, or broad container
   deletion.
+- If stopped Vector recovery is wrong, revert the runtime-control follow-up
+  commit or fix forward. Do not use reset/cleanup/prune as rollback.
 - If the new Vector row is wrong, revert the code/docs commit or fix forward
   with sanitized status-class evidence.
 - If runtime evidence has already been recorded, preserve it and add a corrected
@@ -112,6 +120,23 @@ Read-only package HTTP smoke:
 
 Independent `$review` rerun after the Vector start-gate and Dashboard tone fixes:
 `No actionable findings.`
+
+Follow-up validation for stopped Vector recovery:
+
+- Targeted runtime-control test selection:
+  `test_start_recovers_stopped_vector_non_core_attention`,
+  `test_start_times_out_when_started_vector_stays_unhealthy`,
+  `test_start_noops_when_runtime_core_is_already_ready`, and
+  `test_start_blocks_when_required_container_missing_and_never_runs_supabase_start`:
+  `4 passed, 1 warning`
+- `git diff --check`: passed
+- `.\.venv\Scripts\python -m pytest tests\backend\test_runtime_control.py tests\backend\test_runtime_api.py tests\backend\test_health.py`:
+  `35 passed, 2 warnings`
+- `.\.venv\Scripts\python -m pytest tests\backend`: `362 passed, 18 warnings`
+- `.\packaging\assemble_operator_package.ps1 -FrontendMode api`: passed
+- Independent `$review`: first pass requested changes for unhealthy started
+  Vector readiness; after requiring started containers to be both running and
+  `ready`, rerun reported `No actionable findings.`
 
 ## Security Notes
 

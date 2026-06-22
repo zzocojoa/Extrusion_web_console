@@ -518,7 +518,7 @@ def test_start_noops_when_runtime_core_is_already_ready(tmp_path: Path) -> None:
     assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
 
 
-def test_start_blocks_non_core_attention_without_noop_success(tmp_path: Path) -> None:
+def test_start_recovers_stopped_vector_non_core_attention(tmp_path: Path) -> None:
     app_settings = settings(tmp_path)
     vector_name = f"supabase_vector_{app_settings.local_supabase_project_id}"
     status = runtime_status(
@@ -548,6 +548,33 @@ def test_start_blocks_non_core_attention_without_noop_success(tmp_path: Path) ->
         else container
         for container in status.containers
     ]
+    ready_status = runtime_status(
+        api=RuntimeServiceStatus.ready,
+        db=RuntimeServiceStatus.ready,
+        studio=RuntimeServiceStatus.ready,
+        edge=RuntimeServiceStatus.ready,
+    )
+    ready_status.overall_status = RuntimeOverallStatus.ready
+    ready_status.reason_code = "runtime_ready"
+    ready_status.reason_text = "Local Supabase runtime is ready."
+    ready_status.vector = RuntimeProbeStatus(
+        name="Vector",
+        status=RuntimeServiceStatus.ready,
+        detail="Vector container is running.",
+    )
+    ready_status.containers = [
+        RuntimeContainerStatus(
+            name=container.name,
+            required=False,
+            exists=True,
+            running=True,
+            status=RuntimeServiceStatus.ready,
+            status_text="Up",
+        )
+        if container.name == vector_name
+        else container
+        for container in ready_status.containers
+    ]
     runtime = RuntimeRepository(app_settings.state_db_path)
     service = RuntimeControlService(
         settings=app_settings,
@@ -556,21 +583,104 @@ def test_start_blocks_non_core_attention_without_noop_success(tmp_path: Path) ->
         upload_repository=UploadJobRepository(app_settings.state_db_path),
         runner=FakeRunner(docker_ps_output=all_containers_output(running=True)),
     )
-    service.readiness = StaticReadiness(status, required_ready=True)  # type: ignore[assignment]
+    service.readiness = SequenceReadiness([status, ready_status], required_ready=True)  # type: ignore[assignment]
     operation_id = service.queue_operation(RuntimeOperationKind.start)
 
     service.run_operation(operation_id)
 
     row = runtime.get_operation(operation_id)
     assert row is not None
-    assert row["status"] == "blocked"
-    assert row["error_code"] == "non_core_runtime_attention"
-    assert ("docker", "start", vector_name) not in service.runner.commands  # type: ignore[attr-defined]
-    assert not any(command[:2] == ("docker", "start") for command in service.runner.commands)  # type: ignore[attr-defined]
+    assert row["status"] == "succeeded"
+    assert ("docker", "start", vector_name) in service.runner.commands  # type: ignore[attr-defined]
+    assert ("supabase", "start") not in service.runner.commands  # type: ignore[attr-defined]
     audit = latest_audit(runtime)
     assert audit["action"] == "runtime.start"
-    assert audit["result"] == "blocked"
-    assert audit["error_code"] == "non_core_runtime_attention"
+    assert audit["result"] == "success"
+
+
+def test_start_times_out_when_started_vector_stays_unhealthy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app_settings = settings(tmp_path)
+    vector_name = f"supabase_vector_{app_settings.local_supabase_project_id}"
+    status = runtime_status(
+        api=RuntimeServiceStatus.ready,
+        db=RuntimeServiceStatus.ready,
+        studio=RuntimeServiceStatus.ready,
+        edge=RuntimeServiceStatus.ready,
+    )
+    status.overall_status = RuntimeOverallStatus.attention
+    status.reason_code = "non_core_runtime_attention"
+    status.reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+    status.vector = RuntimeProbeStatus(
+        name="Vector",
+        status=RuntimeServiceStatus.stopped,
+        detail="Vector container status class is stopped.",
+    )
+    status.containers = [
+        RuntimeContainerStatus(
+            name=container.name,
+            required=False,
+            exists=True,
+            running=False,
+            status=RuntimeServiceStatus.stopped,
+            status_text="Exited (0)",
+        )
+        if container.name == vector_name
+        else container
+        for container in status.containers
+    ]
+    unhealthy_status = runtime_status(
+        api=RuntimeServiceStatus.ready,
+        db=RuntimeServiceStatus.ready,
+        studio=RuntimeServiceStatus.ready,
+        edge=RuntimeServiceStatus.ready,
+    )
+    unhealthy_status.overall_status = RuntimeOverallStatus.attention
+    unhealthy_status.reason_code = "non_core_runtime_attention"
+    unhealthy_status.reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+    unhealthy_status.vector = RuntimeProbeStatus(
+        name="Vector",
+        status=RuntimeServiceStatus.unhealthy,
+        detail="Vector container status class is unhealthy.",
+    )
+    unhealthy_status.containers = [
+        RuntimeContainerStatus(
+            name=container.name,
+            required=False,
+            exists=True,
+            running=True,
+            status=RuntimeServiceStatus.unhealthy,
+            status_text="Up 10 seconds (unhealthy)",
+        )
+        if container.name == vector_name
+        else container
+        for container in unhealthy_status.containers
+    ]
+    runtime = RuntimeRepository(app_settings.state_db_path)
+    service = RuntimeControlService(
+        settings=app_settings,
+        runtime_repository=runtime,
+        preview_repository=PreviewRepository(app_settings.state_db_path),
+        upload_repository=UploadJobRepository(app_settings.state_db_path),
+        runner=FakeRunner(docker_ps_output=all_containers_output(running=True)),
+    )
+    service.readiness = SequenceReadiness([status, unhealthy_status], required_ready=True)  # type: ignore[assignment]
+    monotonic_values = iter([0.0, 0.5, 2.0])
+    monkeypatch.setattr("backend.app.services.runtime_control.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("backend.app.services.runtime_control.time.sleep", lambda _: None)
+    operation_id = service.queue_operation(RuntimeOperationKind.start)
+
+    service.run_operation(operation_id)
+
+    row = runtime.get_operation(operation_id)
+    assert row is not None
+    assert row["status"] == "timed_out"
+    assert row["error_code"] == "readiness_timeout"
+    assert ("docker", "start", vector_name) in service.runner.commands  # type: ignore[attr-defined]
+    assert ("supabase", "start") not in service.runner.commands  # type: ignore[attr-defined]
+    audit = latest_audit(runtime)
+    assert audit["action"] == "runtime.start"
+    assert audit["result"] == "failure"
+    assert audit["error_code"] == "readiness_timeout"
 
 
 @pytest.mark.parametrize("failed_probe", ["api", "db", "studio", "edge"])

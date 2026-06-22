@@ -8,7 +8,14 @@ from backend.app.core.settings import Settings
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.db.runtime_repository import RuntimeRepository
 from backend.app.db.upload_job_repository import UploadJobRepository
-from backend.app.schemas.runtime import RuntimeOperationDto, RuntimeOperationKind, RuntimeOperationStatus, RuntimeStatusResponse
+from backend.app.schemas.runtime import (
+    RuntimeContainerStatus,
+    RuntimeOperationDto,
+    RuntimeOperationKind,
+    RuntimeOperationStatus,
+    RuntimeServiceStatus,
+    RuntimeStatusResponse,
+)
 from backend.app.services.command_runner import AllowedCommandRunner
 from backend.app.services.runtime_readiness import RuntimeReadinessService
 
@@ -101,20 +108,24 @@ class RuntimeControlService:
 
     def _run_start(self, operation_id: str) -> None:
         status = self.readiness.check_status()
-        blocker = start_precheck_blocker(status)
+        blocker = start_precheck_blocker(status, allow_non_core_attention=True)
         if blocker is not None:
             error_code, message = blocker
             self._finish_blocked(operation_id, "runtime.start", error_code, message)
             return
 
         ready, missing, containers = self.readiness.required_containers_exist()
+        stopped = startable_container_names(containers)
+        if status.reason_code == "non_core_runtime_attention" and not stopped:
+            self._finish_blocked(operation_id, "runtime.start", status.reason_code, status.reason_text)
+            return
+
         if not ready:
             error_code = "required_container_missing" if missing else "docker_unavailable"
             message = "Required local Supabase containers are missing." if missing else "Docker is unavailable."
             self._finish_blocked(operation_id, "runtime.start", error_code, message, data={"missingContainers": missing})
             return
 
-        stopped = [container.name for container in containers if container.required and container.exists and not container.running]
         if not stopped and runtime_core_ready(status):
             self.runtime_repository.append_event(operation_id, event_type="runtime.start.noop", level="info", message="Local Supabase runtime is already ready.")
             self._finish_success(operation_id, "runtime.start")
@@ -142,7 +153,7 @@ class RuntimeControlService:
                 self._finish_command_failure(operation_id, "runtime.start", "supabase_start_failed", result.stderr or result.stdout)
                 return
 
-        self._wait_for_readiness(operation_id, action="runtime.start", expect_running=True)
+        self._wait_for_readiness(operation_id, action="runtime.start", expect_running=True, started_containers=stopped)
 
     def _run_stop(self, operation_id: str) -> None:
         status = self.readiness.check_status()
@@ -180,8 +191,16 @@ class RuntimeControlService:
                 return
         self._wait_for_readiness(operation_id, action="runtime.stop", expect_running=False)
 
-    def _wait_for_readiness(self, operation_id: str, *, action: str, expect_running: bool) -> None:
+    def _wait_for_readiness(
+        self,
+        operation_id: str,
+        *,
+        action: str,
+        expect_running: bool,
+        started_containers: list[str] | None = None,
+    ) -> None:
         deadline = time.monotonic() + self.settings.runtime_readiness_timeout_seconds
+        started_container_names = set(started_containers or [])
         while time.monotonic() < deadline:
             status = self.readiness.check_status()
             if (
@@ -190,6 +209,7 @@ class RuntimeControlService:
                 and status.db.status.value == "ready"
                 and status.studio.status.value == "ready"
                 and status.edge_runtime.status.value == "ready"
+                and started_containers_ready(status.containers, started_container_names)
             ):
                 self._finish_success(operation_id, action)
                 return
@@ -289,7 +309,13 @@ def runtime_core_ready(status: RuntimeStatusResponse) -> bool:
     )
 
 
-def start_precheck_blocker(status: RuntimeStatusResponse) -> tuple[str, str] | None:
+def start_precheck_blocker(
+    status: RuntimeStatusResponse,
+    *,
+    allow_non_core_attention: bool = False,
+) -> tuple[str, str] | None:
+    if status.reason_code == "non_core_runtime_attention" and allow_non_core_attention:
+        return None
     if status.reason_code in {
         "project_path_missing",
         "config_toml_missing",
@@ -301,6 +327,34 @@ def start_precheck_blocker(status: RuntimeStatusResponse) -> tuple[str, str] | N
     }:
         return status.reason_code, status.reason_text
     return None
+
+
+def startable_container_names(containers: list[RuntimeContainerStatus]) -> list[str]:
+    return [
+        container.name
+        for container in containers
+        if container.exists
+        and not container.running
+        and (container.required or stopped_vector_container(container))
+    ]
+
+
+def stopped_vector_container(container: RuntimeContainerStatus) -> bool:
+    return container.name.startswith("supabase_vector_") and container.status.value == "stopped"
+
+
+def started_containers_ready(
+    containers: list[RuntimeContainerStatus],
+    started_container_names: set[str],
+) -> bool:
+    if not started_container_names:
+        return True
+    statuses = {container.name: container for container in containers}
+    for name in started_container_names:
+        container = statuses.get(name)
+        if container is None or not container.running or container.status != RuntimeServiceStatus.ready:
+            return False
+    return True
 
 
 def stop_precheck_blocker(status: RuntimeStatusResponse) -> tuple[str, str] | None:
