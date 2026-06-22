@@ -39,8 +39,9 @@ All notable changes to Extrusion Web Console are documented here.
   items 1 through 8 without approving any operational action; see that document
   for explicit exclusions.
 - Clarified the V2 completion-track readiness docs so current `main`, the
-  `codex/v2-completion-track` candidate, and latest `a80876f` package evidence
-  remain separate before PR #193 main merge review.
+  `codex/v2-completion-track` candidate, sample package evidence, and
+  approval-time `package-build-info.json` verification remain separate before
+  PR #193 main merge review.
 - Added an explicit V2 completion-track item table to `docs/165`, so the eight
   remaining V2 items are each classified as `Completed` or `Deferred` without
   implying broad V2 completion.

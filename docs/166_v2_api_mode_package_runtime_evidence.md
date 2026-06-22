@@ -17,6 +17,30 @@ cleanup, LAN exposure, deployment, or any operational data mutation.
 gate. Do not treat this package smoke as permission to replace the accepted
 mutation package unless that gate is updated by a separate reviewed change.
 
+## Package Evidence Rule
+
+Approval-time package metadata verification is canonical. Before any PR #193
+main merge approval, verify the generated package `package-build-info.json`
+directly from the package being handed off.
+
+Required approval-time checks:
+
+- `sourceCommit` must match the current PR #193 `headRefOid` short SHA, unless
+  the entry is explicitly marked as sample-only;
+- `frontendMode` must be `api`;
+- `runtimeMode` must be `operator-ready`;
+- `frontendBuildMetadataPresent` must be `true`;
+- when `zipCreated=false`, `zipSha256` is `not_applicable`;
+- when `zipCreated=true`, the zip SHA-256 must be checked against the generated
+  checksum sidecar;
+- launcher and shortcut `-CheckOnly` must pass without starting the backend or
+  writing shortcuts.
+
+Static package metadata below is historical or sample evidence. Docs-only
+follow-up commits can intentionally make a sample package `sourceCommit` older
+than the current PR head. In that case the sample remains useful as local
+validation history, but it must not be used as final approval evidence.
+
 ## Original Item 2 Source
 
 - Branch: `codex/v2-completion-track`
@@ -89,13 +113,13 @@ The smoke did not run Upload Preview, Start Upload, Retry Failed, Delete,
 Settings save, feature-gate enablement, Supabase reset/cleanup, Docker cleanup,
 LAN exposure, or deployment.
 
-## Completion-Track Package Refresh
+## Previous Completion-Track Package Refresh Sample
 
 After PR #202 and PR #203 were merged into `codex/v2-completion-track`, the
-latest completion-track package evidence was refreshed from candidate commit
+completion-track package evidence was refreshed from candidate commit
 `a80876fa5a03d021a98c588e4f4d3fabc3826e66`.
 
-Latest package metadata:
+Previous sample package metadata:
 
 - `packageLabel`: `ExtrusionWebConsole-a80876f-20260622-003633-680`
 - `sourceCommit`: `a80876f`
@@ -119,6 +143,37 @@ does not replace the accepted mutation package in
 Preview, Start Upload, Retry Failed, Delete, Settings save, feature-gate
 enablement, Supabase reset/cleanup, Docker cleanup, LAN exposure, deployment,
 or any operational DB mutation.
+
+## Latest Local Verification Sample
+
+After PR #204 was squash-merged into `codex/v2-completion-track`, PR #193
+pointed at `headRefOid=e405fcddc0161c4fde48e4e314b642ad8472a0c9`. A local
+non-mutating package validation sample was generated from that candidate.
+
+Latest sample package metadata:
+
+- `packageLabel`: `ExtrusionWebConsole-e405fcd-20260622-024709-519`
+- `sourceCommit`: `e405fcd`
+- `createdUtc`: `2026-06-22T02:47:16.2854392Z`
+- `frontendMode`: `api`
+- `runtimeMode`: `operator-ready`
+- `frontendBuildMetadataPresent`: `true`
+- `zipCreated`: `false`
+- `zipSha256`: `not_applicable`
+
+Package-local sample checks:
+
+- `launcher/start_web_console.ps1 -CheckOnly`: passed; no backend process was
+  started.
+- `launcher/install_shortcuts.ps1 -CheckOnly`: passed; no shortcuts were
+  written.
+
+This sample does not remove the approval-time verification rule above. If a
+later docs-only commit changes PR #193 `headRefOid`, rerun package assembly or
+recheck the actual handoff package metadata before approval. Do not treat this
+sample as permission for Upload Preview, Start Upload, Retry Failed, Delete,
+Settings save, feature-gate enablement, Supabase reset/cleanup, Docker cleanup,
+LAN exposure, deployment, schema migration, or operational DB mutation.
 
 ## Review
 

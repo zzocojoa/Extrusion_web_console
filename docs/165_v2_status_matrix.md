@@ -20,18 +20,29 @@ commit, push, or PR creation.
 
 - Current `main` and `origin/main` baseline:
   `baee4982d8be9f6ef8e44b4a8ca6f1a30a382222`.
-- Current `codex/v2-completion-track` and
-  `origin/codex/v2-completion-track` candidate baseline:
-  `a80876fa5a03d021a98c588e4f4d3fabc3826e66`.
+- Reviewed `codex/v2-completion-track` candidate baseline before this
+  package-evidence rule update:
+  `e405fcddc0161c4fde48e4e314b642ad8472a0c9`.
+  Re-read PR #193 `headRefOid` at approval time; docs-only follow-up commits
+  can intentionally make older package samples stale.
 - Accepted operator mutation package metadata from `docs/164`:
   - `sourceCommit`: `cb8a3c8`
   - `packageLabel`: `ExtrusionWebConsole-cb8a3c8-20260621-160038-290`
   - `frontendMode`: `api`
   - `runtimeMode`: `operator-ready`
   - `zipCreated`: `false`
-- Latest completion-track package evidence baseline:
-  - `sourceCommit`: `a80876f`
-  - `packageLabel`: `ExtrusionWebConsole-a80876f-20260622-003633-680`
+- Package evidence policy:
+  - approval-time verification from the generated package
+    `package-build-info.json` is canonical;
+  - static `sourceCommit` and `packageLabel` values in this document are
+    samples, not evergreen approval evidence;
+  - before PR #193 main merge approval, package `sourceCommit` must match the
+    current PR #193 `headRefOid` short SHA, or the package evidence remains
+    sample-only and main merge must stop.
+- Latest local verification sample, not approval-time approval evidence:
+  - `sourceCommit`: `e405fcd`
+  - `packageLabel`: `ExtrusionWebConsole-e405fcd-20260622-024709-519`
+  - `createdUtc`: `2026-06-22T02:47:16.2854392Z`
   - `frontendMode`: `api`
   - `runtimeMode`: `operator-ready`
   - `frontendBuildMetadataPresent`: `true`
@@ -89,7 +100,7 @@ commit, push, or PR creation.
 | `row_attribution_ledger` sidecar foundation | `Completed` | Backend settings and local state DB code include the default-off row attribution gate and sidecar repository paths; backend tests cover bootstrap, append-only behavior, safe hashes, and gate-on linkage. | Gate enablement and any operational evidence writes require separate approval. |
 | `db_delta_evidence` foundation | `Completed` | Backend includes append-only local state DB delta evidence and gate-on upload/delete service wiring; tests cover default-off no-write behavior, mismatch handling, and audit/delta/attribution linkage. | Operational use requires explicit mutation approval and gate-on approval. |
 | Upload readiness hardening | `Completed` | `main` includes Start/Retry readiness hardening for local DB target class, Supabase API/DB/Edge readiness, Edge auth key class, and target-only row approval counts. | Does not approve Start Upload or Retry Failed. |
-| API-mode operator package validation | `Completed` | Completion-track candidate `docs/166` records API-mode build, package assembly, zip/SHA-256 handoff metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke, plus the latest `a80876f` package metadata refresh for `ExtrusionWebConsole-a80876f-20260622-003633-680`. | This does not approve operator mutation and does not replace the `docs/164` accepted mutation package unless that gate is separately updated. |
+| API-mode operator package validation | `Completed` | Completion-track candidate `docs/166` records API-mode build, package assembly, zip/SHA-256 handoff metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke. It now treats static package metadata as samples and requires approval-time `package-build-info.json` verification; the latest local sample is `sourceCommit=e405fcd`, package `ExtrusionWebConsole-e405fcd-20260622-024709-519`. | This does not approve operator mutation and does not replace the `docs/164` accepted mutation package unless that gate is separately updated. |
 | Operator data mutation gate | `Completed` | `docs/164` records current package metadata and exact approval templates for Preview-only, Start Upload, Retry Failed, and Delete. | Each mutation still requires its own exact approval at execution time. |
 | Default-off date-scoped delete review shell | `Completed` | `docs/168` plus backend/frontend code provide a read-only gate and non-mutating Upload page shell; default settings render no normal-operator panel. | This is not an executable delete UI and does not approve gate enablement. |
 | Operator-facing executable date-scoped delete UI | `Deferred` | `docs/161` still blocks enabled operator-facing executable UI; `docs/168` documents the completed review shell only. | Actual date-scoped delete preflight/start, role enforcement, limits, fixture evidence, production approval record, rollback evidence, and gate enablement remain separate blocked work. |
@@ -111,13 +122,15 @@ The current safe statement is:
 ```text
 V2 is not complete. Current main at `baee498` contains the already-merged local
 evidence foundation, upload readiness hardening, and operator mutation gate
-baseline. The completion-track candidate at `a80876f` adds the item 2
-API-mode package evidence, item 7 Grafana/Vector observability evidence, the
-default-off non-mutating date-scoped delete review shell, and the default-off
-LAN security guard. Operational upload verification, executable date-scoped
-delete, delete expansion execution, operational DB delete verification,
-Multi-user LAN, Supabase schema attribution, and the overall V2 release remain
-deferred or excluded until separate approvals resolve them.
+baseline. The completion-track candidate adds the item 2 API-mode package
+evidence, item 7 Grafana/Vector observability evidence, the default-off
+non-mutating date-scoped delete review shell, and the default-off LAN security
+guard. Package metadata must be verified from `package-build-info.json` at PR
+#193 approval time instead of using a static sample as evergreen evidence.
+Operational upload verification, executable date-scoped delete, delete
+expansion execution, operational DB delete verification, Multi-user LAN,
+Supabase schema attribution, and the overall V2 release remain deferred or
+excluded until separate approvals resolve them.
 ```
 
 Do not say:
@@ -126,10 +139,10 @@ Do not say:
 V2 is complete.
 ```
 
-Do not use package `sourceCommit` values from older handoffs or from the latest
-completion-track package refresh when approving a mutation from the accepted
-`cb8a3c8` package unless `docs/164_operator_data_mutation_safety_gate.md` is
-separately updated.
+Do not use package `sourceCommit` values from older handoffs or local
+verification samples when approving a mutation from the accepted `cb8a3c8`
+package unless `docs/164_operator_data_mutation_safety_gate.md` is separately
+updated.
 
 ## Rollback
 
