@@ -536,6 +536,8 @@ Browser QA has been run against:
 - `docs/08_upload_job_sse_plan.md`
 - `docs/09_local_supabase_control_plan.md`
 - `docs/10_audit_logs_plan.md`
+- `docs/01-plan/features/operator-ui-density-and-navigation.plan.md`
+- `docs/02-design/features/operator-ui-density-and-navigation.design.md`
 - `docs/156_operator_already_in_db_delete_contract.md`
 - `docs/157_operator_2026-01-19_delete_execution.md`
 - `docs/158_operator_status_language_policy.md`
