@@ -1,19 +1,28 @@
+from __future__ import annotations
+
+import base64
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "brand-source" / "logo-lockup-options.png"
 BRAND_DIR = ROOT / "public" / "brand"
 PUBLIC_DIR = ROOT / "public"
 
-GRAPHITE = "#2B2F33"
-BLUE = "#1E6FB8"
-TEAL = "#00A79D"
-AMBER = "#F5A623"
 OFF_WHITE = "#F8FAFC"
 MUTED = "#6B7280"
-WHITE = "#FFFFFF"
+
+
+CROPS = {
+    "logo-horizontal": (44, 18, 622, 90),
+    "logo-stacked": (46, 238, 466, 407),
+    "logo-sidebar": (1250, 630, 1665, 726),
+    "logo-mark": (945, 198, 1142, 430),
+    "logo-horizontal-dark": (1256, 250, 1655, 405),
+    "app-icon": (586, 590, 774, 780),
+}
 
 
 def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -29,129 +38,113 @@ def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.Im
     return ImageFont.load_default(size=size)
 
 
-def scaled(points: list[tuple[float, float]], x: float, y: float, scale: float) -> list[tuple[float, float]]:
-    return [(x + px * scale, y + py * scale) for px, py in points]
+def contain(image: Image.Image, size: tuple[int, int], pad: int = 0, background=None) -> Image.Image:
+    target_w, target_h = size
+    canvas = Image.new("RGBA", size, background or (0, 0, 0, 0))
+    fit_w = target_w - pad * 2
+    fit_h = target_h - pad * 2
+    scale = min(fit_w / image.width, fit_h / image.height)
+    resized = image.resize((round(image.width * scale), round(image.height * scale)), Image.Resampling.LANCZOS)
+    x = (target_w - resized.width) // 2
+    y = (target_h - resized.height) // 2
+    canvas.alpha_composite(resized, (x, y))
+    return canvas
 
 
-def draw_mark(draw: ImageDraw.ImageDraw, x: float, y: float, scale: float, dark: bool = False) -> None:
-    ink = WHITE if dark else GRAPHITE
-    db_fill = None if dark else WHITE
-    arrow_inner = "#111820" if dark else WHITE
-    blue = "#6BB6FF" if dark else BLUE
-    teal = "#22D3C5" if dark else TEAL
-    amber = "#F7B23B" if dark else AMBER
+def crop_source(source: Image.Image, name: str) -> Image.Image:
+    return source.crop(CROPS[name])
 
-    sw6 = max(2, int(6 * scale))
-    sw7 = max(2, int(7 * scale))
-    sw10 = max(3, int(10 * scale))
 
-    draw.rounded_rectangle(
-        [x + 72 * scale, y + 32 * scale, x + 160 * scale, y + 61 * scale],
-        radius=5 * scale,
-        fill=ink,
-        outline=ink,
-        width=sw6,
+def save_png(image: Image.Image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path, optimize=True)
+
+
+def png_data_uri(path: Path) -> str:
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{data}"
+
+
+def write_svg_wrapper(svg_path: Path, png_path: Path, width: int, height: int, title: str) -> None:
+    href = png_data_uri(png_path)
+    svg_path.write_text(
+        "\n".join(
+            [
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-label="{title}">',
+                f'  <image href="{href}" width="{width}" height="{height}" preserveAspectRatio="xMidYMid meet"/>',
+                "</svg>",
+                "",
+            ]
+        ),
+        encoding="utf-8",
     )
-    draw.line([x + 58 * scale, y + 76 * scale, x + 174 * scale, y + 76 * scale], fill=ink, width=sw10)
-    draw.polygon(
-        scaled([(86, 91), (147, 91), (132, 111), (132, 124), (107, 124), (107, 111)], x, y, scale),
-        fill=ink,
+
+
+def save_logo_assets(source: Image.Image) -> None:
+    horizontal = crop_source(source, "logo-horizontal")
+    stacked = crop_source(source, "logo-stacked")
+    sidebar = crop_source(source, "logo-sidebar")
+    mark = crop_source(source, "logo-mark")
+    mono = crop_source(source, "logo-horizontal-dark")
+
+    save_png(contain(horizontal, (1156, 144), pad=0, background=(255, 255, 255, 255)), BRAND_DIR / "logo-horizontal.png")
+    save_png(contain(stacked, (840, 338), pad=0, background=(255, 255, 255, 255)), BRAND_DIR / "logo-stacked.png")
+    save_png(contain(sidebar, (830, 192), pad=0, background=(255, 255, 255, 255)), BRAND_DIR / "logo-sidebar.png")
+    save_png(contain(mark, (512, 512), pad=0, background=(255, 255, 255, 255)), BRAND_DIR / "logo-mark.png")
+    save_png(contain(mono, (1024, 398), pad=0, background=(255, 255, 255, 255)), BRAND_DIR / "logo-horizontal-dark.png")
+
+    write_svg_wrapper(BRAND_DIR / "logo-horizontal.svg", BRAND_DIR / "logo-horizontal.png", 1156, 144, "Extrusion Console logo")
+    write_svg_wrapper(BRAND_DIR / "logo-stacked.svg", BRAND_DIR / "logo-stacked.png", 840, 338, "Extrusion Console stacked logo")
+    write_svg_wrapper(BRAND_DIR / "logo-sidebar.svg", BRAND_DIR / "logo-sidebar.png", 830, 192, "Extrusion Console sidebar logo")
+    write_svg_wrapper(BRAND_DIR / "logo-mark.svg", BRAND_DIR / "logo-mark.png", 512, 512, "Extrusion Console logo mark")
+    write_svg_wrapper(
+        BRAND_DIR / "logo-horizontal-dark.svg",
+        BRAND_DIR / "logo-horizontal-dark.png",
+        1024,
+        398,
+        "Extrusion Console monochrome logo",
     )
 
-    left, top, right, bottom = x + 72 * scale, y + 152 * scale, x + 176 * scale, y + 224 * scale
-    draw.rectangle([left, top + 15 * scale, right, bottom - 15 * scale], fill=db_fill)
-    draw.ellipse([left, top, right, top + 34 * scale], fill=db_fill, outline=ink, width=sw7)
-    draw.line([left, top + 17 * scale, left, bottom - 17 * scale], fill=ink, width=sw7)
-    draw.line([right, top + 17 * scale, right, bottom - 17 * scale], fill=ink, width=sw7)
-    draw.arc([left, bottom - 34 * scale, right, bottom], 0, 180, fill=ink, width=sw7)
-    for yy in (176, 198):
-        draw.arc([left, y + (yy - 17) * scale, right, y + (yy + 17) * scale], 0, 180, fill=ink, width=sw7)
 
-    for cx, cy, color in [
-        (154, 181, teal),
-        (154, 207, teal),
-        (96, 135, blue),
-        (118, 134, teal),
-        (108, 114, blue),
-        (130, 116, teal),
-        (96, 157, blue),
-        (120, 157, teal),
-    ]:
-        r = 5 * scale
-        draw.ellipse([x + cx * scale - r, y + cy * scale - r, x + cx * scale + r, y + cy * scale + r], fill=color)
+def save_app_icons(source: Image.Image) -> None:
+    icon_source = crop_source(source, "app-icon").convert("RGBA")
 
-    r = 18 * scale
-    cx = x + 194 * scale
-    cy = y + 136 * scale
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=teal)
-    draw.line([cx, y + 146 * scale, cx, y + 124 * scale], fill=arrow_inner, width=sw7)
-    draw.line([x + 184 * scale, y + 134 * scale, cx, y + 124 * scale, x + 204 * scale, y + 134 * scale], fill=arrow_inner, width=sw7)
-    draw.arc([x + 202 * scale, y + 94 * scale, x + 250 * scale, y + 198 * scale], -62, 62, fill=amber, width=sw7)
-    draw.arc([x + 199 * scale, y + 109 * scale, x + 230 * scale, y + 183 * scale], -62, 62, fill=amber, width=sw7)
+    for size in (180, 192, 512):
+        icon = contain(icon_source, (size, size), pad=0, background=(255, 255, 255, 255))
+        save_png(icon, BRAND_DIR / f"app-icon-{size}.png")
 
+    save_png(contain(icon_source, (512, 512), pad=0, background=(255, 255, 255, 255)), BRAND_DIR / "app-icon.png")
+    write_svg_wrapper(BRAND_DIR / "app-icon.svg", BRAND_DIR / "app-icon-512.png", 512, 512, "Extrusion Console app icon")
 
-def save_app_icon(size: int, filename: str) -> None:
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    margin = int(size * 0.047)
-    draw.rounded_rectangle(
-        [margin, margin, size - margin, size - margin],
-        radius=int(size * 0.168),
-        fill=OFF_WHITE,
-        outline=BLUE,
-        width=max(3, int(size * 0.035)),
-    )
-    draw_mark(draw, size * 0.17, size * 0.16, size / 350)
-    image.save(BRAND_DIR / filename)
-
-
-def save_logo_mark_png(size: int, filename: str) -> None:
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw_mark(draw, 0, 0, size / 256)
-    image.save(BRAND_DIR / filename)
-
-
-def save_horizontal_logo(filename: str, dark: bool = False) -> None:
-    image = Image.new("RGBA", (1520, 360), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw_mark(draw, 24, 36, 0.5625, dark=dark)
-    draw.line([368, 76, 368, 284], fill="#8A929A", width=6)
-    draw.text((444, 64), "EXTRUSION", fill=WHITE if dark else GRAPHITE, font=font(100, True))
-    draw.text((444, 164), "CONSOLE", fill="#6BB6FF" if dark else BLUE, font=font(100, True))
-    image.save(BRAND_DIR / filename)
+    favicon = contain(icon_source, (256, 256), pad=0, background=(255, 255, 255, 255))
+    sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    favicon.save(PUBLIC_DIR / "favicon.ico", sizes=sizes)
 
 
 def save_splash() -> None:
+    logo = Image.open(BRAND_DIR / "logo-sidebar.png").convert("RGBA")
     image = Image.new("RGB", (1600, 900), OFF_WHITE)
+    logo_fit = contain(logo, (640, 150), pad=0)
+    image.paste(logo_fit, ((1600 - logo_fit.width) // 2, 328), logo_fit)
+
     draw = ImageDraw.Draw(image)
-    draw_mark(draw, 514, 254, 190 / 256)
-    draw.line([754, 299, 754, 404], fill="#8A929A", width=3)
-    draw.text((799, 288), "EXTRUSION", fill=GRAPHITE, font=font(64, True))
-    draw.text((799, 354), "CONSOLE", fill=BLUE, font=font(64, True))
     subtitle = "Local upload operations console"
-    text_box = draw.textbbox((0, 0), subtitle, font=font(24))
-    draw.text(((1600 - (text_box[2] - text_box[0])) / 2, 560), subtitle, fill=MUTED, font=font(24))
-    image.save(BRAND_DIR / "splash.png")
-
-
-def save_favicon() -> None:
-    base = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(base)
-    draw_mark(draw, 0, 0, 1)
-    base.save(PUBLIC_DIR / "favicon.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
+    subtitle_font = font(24)
+    bbox = draw.textbbox((0, 0), subtitle, font=subtitle_font)
+    draw.text(((1600 - (bbox[2] - bbox[0])) / 2, 548), subtitle, fill=MUTED, font=subtitle_font)
+    image.save(BRAND_DIR / "splash.png", optimize=True)
+    write_svg_wrapper(BRAND_DIR / "splash.svg", BRAND_DIR / "splash.png", 1600, 900, "Extrusion Console splash image")
 
 
 def main() -> None:
+    if not SOURCE.exists():
+        raise FileNotFoundError(f"Missing brand source image: {SOURCE}")
+
     BRAND_DIR.mkdir(parents=True, exist_ok=True)
-    save_logo_mark_png(256, "logo-mark.png")
-    save_app_icon(180, "app-icon-180.png")
-    save_app_icon(192, "app-icon-192.png")
-    save_app_icon(512, "app-icon-512.png")
-    save_horizontal_logo("logo-horizontal.png")
-    save_horizontal_logo("logo-horizontal-dark.png", dark=True)
+    source = Image.open(SOURCE).convert("RGBA")
+    save_logo_assets(source)
+    save_app_icons(source)
     save_splash()
-    save_favicon()
 
 
 if __name__ == "__main__":

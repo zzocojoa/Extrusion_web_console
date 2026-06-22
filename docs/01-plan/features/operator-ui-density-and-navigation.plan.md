@@ -310,6 +310,38 @@ persists only numeric UI preference data, full-value popovers open, Job Logs
 height is above the 420px desktop minimum, Audit Logs parameter detail opens,
 sidebar collapsed state persists, and the mobile drawer opens.
 
+### 11.1 Brand Sidebar Resume Evidence
+
+The resumed brand/sidebar branch keeps the change frontend-only. It updates
+brand assets, favicon output, `generate_brand_assets.py`, `SidebarNav.tsx`, and
+sidebar layout CSS. It also fixes a desktop visibility issue where the mobile
+drawer close button could appear because the generic `.icon-button` display rule
+overrode `.sidebar__mobile-close`.
+
+Validation completed for this resume:
+
+- `git diff --check`
+- `cd frontend; npm run typecheck`
+- `cd frontend; npm run build:api`
+- `cd frontend; npm run qa:screenshots` with `failureCount=0`
+- Brand/sidebar browser QA for desktop expanded, desktop collapsed, and
+  `390x844` mobile drawer states, with console and network failure counts at
+  `0`.
+
+Asset size caveat:
+
+- `frontend/public/brand` is about `2.72 MB`.
+- `frontend/brand-source/logo-lockup-options.png` is about `1.13 MB`.
+- The generated SVG files are PNG-backed wrappers. This is acceptable for the
+  local operator console, but should be revisited if package size becomes a
+  constraint.
+
+Rollback before commit is `git restore` for the changed frontend brand/sidebar
+files. After commit, use normal `git revert`. This UI work does not approve
+Upload Preview, Start Upload, Retry Failed, Delete, Settings save, Supabase
+lifecycle work, feature gate enablement, LAN exposure, deployment, or
+operational DB mutation.
+
 ## 12. References
 
 - `DESIGN.md`
