@@ -28,6 +28,21 @@ function Write-ShortcutStatus {
   Write-Host "[shortcut] $Message"
 }
 
+function Quote-ShortcutArgument {
+  param([string]$Value)
+
+  if ($Value -notmatch '[\s"]') {
+    return $Value
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Join-ShortcutArguments {
+  param([string[]]$Parts)
+
+  return (($Parts | ForEach-Object { Quote-ShortcutArgument -Value $_ }) -join " ")
+}
+
 function Assert-SafeShortcutName {
   param([string]$Name)
 
@@ -60,6 +75,8 @@ function Set-Shortcut {
     [Parameter(Mandatory = $true)]
     [string]$TargetPath,
     [Parameter(Mandatory = $true)]
+    [string]$Arguments,
+    [Parameter(Mandatory = $true)]
     [string]$WorkingDirectory,
     [Parameter(Mandatory = $true)]
     [string]$Description,
@@ -75,22 +92,59 @@ function Set-Shortcut {
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($ShortcutPath)
   $shortcut.TargetPath = $TargetPath
+  $shortcut.Arguments = $Arguments
   $shortcut.WorkingDirectory = $WorkingDirectory
   $shortcut.Description = $Description
   $shortcut.IconLocation = $IconLocation
-  $shortcut.WindowStyle = 1
+  $shortcut.WindowStyle = 7
   $shortcut.Save()
 }
 
 $repoRoot = Get-RepoRoot
-$targetPath = Join-Path $repoRoot "launcher\start_web_console.bat"
+$powerShellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
 $iconPath = Join-Path $repoRoot "launcher\assets\extrusion-console.ico"
+$shortcutSpecs = @(
+  [pscustomobject]@{
+    Action = "Start"
+    Name = $ShortcutName
+    RelativeScript = "launcher\start_web_console.ps1"
+    Description = "Start or open the local Extrusion Web Console on 127.0.0.1."
+  },
+  [pscustomobject]@{
+    Action = "Stop"
+    Name = "$ShortcutName Stop"
+    RelativeScript = "launcher\stop_web_console.ps1"
+    Description = "Stop the verified local Extrusion Web Console backend."
+  },
+  [pscustomobject]@{
+    Action = "Restart"
+    Name = "$ShortcutName Restart"
+    RelativeScript = "launcher\restart_web_console.ps1"
+    Description = "Restart the local Extrusion Web Console backend and reopen the browser."
+  }
+)
 
 Assert-SafeShortcutName -Name $ShortcutName
+foreach ($shortcutSpec in $shortcutSpecs) {
+  Assert-SafeShortcutName -Name $shortcutSpec.Name
+}
 
-if (-not (Test-Path -LiteralPath $targetPath)) {
-  Write-Error "Shortcut target is missing: launcher\start_web_console.bat"
-  exit 1
+foreach ($shortcutSpec in $shortcutSpecs) {
+  $scriptPath = Join-Path $repoRoot $shortcutSpec.RelativeScript
+  if (-not (Test-Path -LiteralPath $scriptPath)) {
+    Write-Error "Shortcut script is missing: $($shortcutSpec.RelativeScript)"
+    exit 1
+  }
+  $shortcutSpec | Add-Member -NotePropertyName ScriptPath -NotePropertyValue $scriptPath
+  $shortcutSpec | Add-Member -NotePropertyName ShortcutArguments -NotePropertyValue (Join-ShortcutArguments -Parts @(
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-WindowStyle",
+      "Hidden",
+      "-File",
+      $scriptPath
+    ))
 }
 if (-not (Test-Path -LiteralPath $iconPath)) {
   Write-Error "Shortcut icon is missing: launcher\assets\extrusion-console.ico"
@@ -104,21 +158,26 @@ if ([string]::IsNullOrWhiteSpace($StartMenuDirectory)) {
   $StartMenuDirectory = Get-DefaultStartMenuDirectory
 }
 
-$description = "Start the local Extrusion Web Console on 127.0.0.1."
-$shortcutFileName = "$ShortcutName.lnk"
 $plannedShortcuts = @()
 
-if (-not $SkipDesktop) {
-  $plannedShortcuts += [pscustomobject]@{
-    Scope = "Desktop"
-    Path = Join-Path $DesktopDirectory $shortcutFileName
+foreach ($shortcutSpec in $shortcutSpecs) {
+  $shortcutFileName = "$($shortcutSpec.Name).lnk"
+  if (-not $SkipDesktop) {
+    $plannedShortcuts += [pscustomobject]@{
+      Action = $shortcutSpec.Action
+      Scope = "Desktop"
+      Path = Join-Path $DesktopDirectory $shortcutFileName
+      Spec = $shortcutSpec
+    }
   }
-}
 
-if (-not $SkipStartMenu) {
-  $plannedShortcuts += [pscustomobject]@{
-    Scope = "Start menu"
-    Path = Join-Path $StartMenuDirectory $shortcutFileName
+  if (-not $SkipStartMenu) {
+    $plannedShortcuts += [pscustomobject]@{
+      Action = $shortcutSpec.Action
+      Scope = "Start menu"
+      Path = Join-Path $StartMenuDirectory $shortcutFileName
+      Spec = $shortcutSpec
+    }
   }
 }
 
@@ -127,19 +186,22 @@ if ($plannedShortcuts.Count -eq 0) {
   exit 0
 }
 
-Write-ShortcutStatus "Target: launcher\start_web_console.bat"
+Write-ShortcutStatus "Target executable: powershell.exe"
+Write-ShortcutStatus "Target mode: -WindowStyle Hidden"
 Write-ShortcutStatus "Icon: launcher\assets\extrusion-console.ico"
 Write-ShortcutStatus "Working directory: package root"
 Write-ShortcutStatus "Policy: updates shortcuts in place; does not delete AppData config, state, logs, Docker data, database data, or operational CSV files."
 
 foreach ($planned in $plannedShortcuts) {
-  Write-ShortcutStatus "$($planned.Scope): $($planned.Path)"
+  Write-ShortcutStatus "$($planned.Action) shortcut $($planned.Scope): $($planned.Path)"
+  Write-ShortcutStatus "$($planned.Action) script: $($planned.Spec.RelativeScript)"
   if (-not $CheckOnly) {
     Set-Shortcut `
       -ShortcutPath $planned.Path `
-      -TargetPath $targetPath `
+      -TargetPath $powerShellPath `
+      -Arguments $planned.Spec.ShortcutArguments `
       -WorkingDirectory $repoRoot `
-      -Description $description `
+      -Description $planned.Spec.Description `
       -IconLocation $iconPath
   }
 }

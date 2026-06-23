@@ -9,6 +9,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LAUNCHER_PS1 = REPO_ROOT / "launcher" / "start_web_console.ps1"
 LAUNCHER_BAT = REPO_ROOT / "launcher" / "start_web_console.bat"
+STOP_PS1 = REPO_ROOT / "launcher" / "stop_web_console.ps1"
+RESTART_PS1 = REPO_ROOT / "launcher" / "restart_web_console.ps1"
 EDGE_RUNTIME_PS1 = REPO_ROOT / "launcher" / "start_edge_runtime.ps1"
 SHORTCUT_PS1 = REPO_ROOT / "launcher" / "install_shortcuts.ps1"
 SHORTCUT_BAT = REPO_ROOT / "launcher" / "install_shortcuts.bat"
@@ -17,6 +19,8 @@ SHORTCUT_BAT = REPO_ROOT / "launcher" / "install_shortcuts.bat"
 def test_launcher_scripts_exist_and_wrapper_targets_powershell() -> None:
     assert LAUNCHER_PS1.exists()
     assert LAUNCHER_BAT.exists()
+    assert STOP_PS1.exists()
+    assert RESTART_PS1.exists()
     assert EDGE_RUNTIME_PS1.exists()
     assert SHORTCUT_PS1.exists()
     assert SHORTCUT_BAT.exists()
@@ -121,6 +125,39 @@ def test_launcher_existing_backend_reuse_requires_lan_safe_health() -> None:
     assert re.search(r"if \(\$null -eq \$lanSecurity\)\s*\{\s*return \$false\s*\}", script)
     assert "return ($lanSecurity.status -eq \"localhost_only\" -and $lanSecurity.shared_local_token_allowed -eq $false)" in script
     assert "does not report localhost-only LAN-safe status" in script
+
+
+def test_stop_launcher_only_stops_verified_local_api_backend() -> None:
+    script = STOP_PS1.read_text(encoding="utf-8")
+    lowered = script.lower()
+
+    assert "Get-Health" in script
+    assert "extrusion-web-console-api" in script
+    assert "localhost_only" in script
+    assert "process_id" in script
+    assert "Get-CimInstance" in script
+    assert "Win32_Process" in script
+    assert "Assert-BackendProcessMatchesHealth" in script
+    assert "backend.app.main:app" in script
+    assert "uvicorn" in script
+    assert "--port" in script
+    assert "Stop-Process -Id $processId" in script
+    assert "Port $BackendPort is open but did not return a verified Extrusion Web Console health response." in script
+
+    forbidden_fragments = [
+        "taskkill",
+        "Stop-Process -Name",
+        "Get-NetTCPConnection",
+        "Remove-Item",
+        "supabase db reset",
+        "docker rm",
+        "docker volume",
+        "docker prune",
+        "docker compose down",
+        "Invoke-Expression",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment.lower() not in lowered
 
 
 def test_launcher_check_only_sets_package_independent_target_defaults_without_raw_values(tmp_path: Path) -> None:
@@ -254,6 +291,27 @@ def test_launcher_powershell_syntax_parses() -> None:
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.parametrize("script_path", [STOP_PS1, RESTART_PS1])
+def test_lifecycle_powershell_syntax_parses(script_path: Path) -> None:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    command = (
+        "$tokens=$null; $errors=$null; "
+        f"[System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw -LiteralPath '{script_path}'), [ref]$errors) | Out-Null; "
+        "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }"
+    )
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_edge_runtime_launcher_uses_supported_supabase_serve_path() -> None:
     script = EDGE_RUNTIME_PS1.read_text(encoding="utf-8")
     lowered = script.lower()
@@ -319,10 +377,18 @@ def test_shortcut_script_keeps_update_policy_safe() -> None:
     script = SHORTCUT_PS1.read_text(encoding="utf-8")
     lowered = script.lower()
 
-    assert "start_web_console.bat" in script
+    assert "start_web_console.bat" not in script
+    assert "powershell.exe" in script
+    assert "-WindowStyle" in script
+    assert "Hidden" in script
+    assert "ShortcutArguments" in script
+    assert "start_web_console.ps1" in script
+    assert "stop_web_console.ps1" in script
+    assert "restart_web_console.ps1" in script
     assert "GetFolderPath(\"Desktop\")" in script
     assert "GetFolderPath(\"Programs\")" in script
     assert "CreateShortcut" in script
+    assert "Arguments = $Arguments" in script
     assert "WorkingDirectory = $WorkingDirectory" in script
     assert "CheckOnly" in script
     assert "Assert-SafeShortcutName" in script
@@ -396,7 +462,15 @@ def test_shortcut_install_check_only_reports_expected_paths(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
     assert "Desktop" in result.stdout
     assert "Start menu" in result.stdout
-    assert "start_web_console.bat" in result.stdout
+    assert "Start shortcut" in result.stdout
+    assert "Stop shortcut" in result.stdout
+    assert "Restart shortcut" in result.stdout
+    assert "powershell.exe" in result.stdout
+    assert "-WindowStyle Hidden" in result.stdout
+    assert "start_web_console.ps1" in result.stdout
+    assert "stop_web_console.ps1" in result.stdout
+    assert "restart_web_console.ps1" in result.stdout
+    assert "start_web_console.bat" not in result.stdout
     assert "CheckOnly completed" in result.stdout
     assert not list(tmp_path.rglob("*.lnk"))
 
@@ -429,15 +503,15 @@ def test_shortcut_install_is_idempotent_and_targets_repo_launcher(tmp_path: Path
 
     desktop_shortcuts = list(desktop.glob("*.lnk"))
     start_menu_shortcuts = list(start_menu.glob("*.lnk"))
-    assert len(desktop_shortcuts) == 1
-    assert len(start_menu_shortcuts) == 1
+    assert len(desktop_shortcuts) == 3
+    assert len(start_menu_shortcuts) == 3
 
-    expected_target = REPO_ROOT / "launcher" / "start_web_console.bat"
     inspect_command = (
         "$shell = New-Object -ComObject WScript.Shell; "
-        f"$shortcut = $shell.CreateShortcut('{desktop_shortcuts[0]}'); "
-        "Write-Output $shortcut.TargetPath; "
-        "Write-Output $shortcut.WorkingDirectory"
+        f"Get-ChildItem -LiteralPath '{desktop}' -Filter '*.lnk' | Sort-Object Name | ForEach-Object {{ "
+        "$shortcut = $shell.CreateShortcut($_.FullName); "
+        "Write-Output ($_.Name + '|' + $shortcut.TargetPath + '|' + $shortcut.Arguments + '|' + $shortcut.WorkingDirectory) "
+        "}"
     )
     inspected = subprocess.run(
         [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", inspect_command],
@@ -448,8 +522,23 @@ def test_shortcut_install_is_idempotent_and_targets_repo_launcher(tmp_path: Path
 
     assert inspected.returncode == 0, inspected.stderr
     lines = [line.strip() for line in inspected.stdout.splitlines() if line.strip()]
-    assert Path(lines[0]) == expected_target
-    assert Path(lines[1]) == REPO_ROOT
+    assert len(lines) == 3
+    by_name = {line.split("|", 1)[0]: line.split("|") for line in lines}
+    assert set(by_name) == {
+        "Extrusion Web Console.lnk",
+        "Extrusion Web Console Restart.lnk",
+        "Extrusion Web Console Stop.lnk",
+    }
+    for parts in by_name.values():
+        assert Path(parts[1]).name.lower() == "powershell.exe"
+        assert "-NoProfile" in parts[2]
+        assert "-ExecutionPolicy Bypass" in parts[2]
+        assert "-WindowStyle Hidden" in parts[2]
+        assert Path(parts[3]) == REPO_ROOT
+    assert "start_web_console.ps1" in by_name["Extrusion Web Console.lnk"][2]
+    assert "restart_web_console.ps1" in by_name["Extrusion Web Console Restart.lnk"][2]
+    assert "stop_web_console.ps1" in by_name["Extrusion Web Console Stop.lnk"][2]
+    assert "start_web_console.bat" not in inspected.stdout
 
 
 @pytest.mark.parametrize(

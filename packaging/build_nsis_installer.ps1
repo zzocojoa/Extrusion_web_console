@@ -330,7 +330,7 @@ try {
   if (`$shortcutCheckOnly) {
     Write-InstallerStatus 'Shortcut installer check-only completed; no shortcuts were written.'
   } else {
-    Write-InstallerStatus 'Desktop and Start menu shortcuts have been created or refreshed.'
+    Write-InstallerStatus 'Desktop and Start menu Start/Stop/Restart shortcuts have been created or refreshed.'
   }
 } catch {
   if (Test-Path -LiteralPath `$staging) {

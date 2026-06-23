@@ -196,7 +196,8 @@ Then run:
 
 Expected result:
 
-- Desktop and Start menu shortcut targets are shown
+- Desktop and Start menu Start, Stop, and Restart shortcut targets are shown
+- shortcut targets use hidden PowerShell execution, not direct `.bat` targets
 - working directory is the package root
 - no shortcut is written in check-only mode
 - AppData config, state, logs, Docker data, database data, and operational CSV data are not deleted
@@ -214,7 +215,11 @@ After check-only passes, install or refresh shortcuts:
 This creates or updates:
 
 - Desktop shortcut: `Extrusion Web Console`
+- Desktop shortcut: `Extrusion Web Console Stop`
+- Desktop shortcut: `Extrusion Web Console Restart`
 - Start menu shortcut: `Extrusion Web Console`
+- Start menu shortcut: `Extrusion Web Console Stop`
+- Start menu shortcut: `Extrusion Web Console Restart`
 
 Shortcut install is idempotent. Re-running updates existing shortcuts instead of creating duplicates.
 
@@ -230,20 +235,60 @@ Extrusion Web Console desktop shortcut
 
 or:
 
-```text
-launcher\start_web_console.bat
+```powershell
+.\launcher\start_web_console.ps1
 ```
 
 Expected first-launch behavior:
 
 - backend binds to `127.0.0.1`
 - browser opens the local web console
+- no command window remains on screen when launched from the shortcut
 - frontend is served from the package
 - mutating APIs are protected by a per-run local token
 - token is not printed or placed in the URL
 - API docs routes are disabled in operator mode
 
 The operator should see the Dashboard first. If the browser does not open, the maintainer can open the localhost URL reported by the launcher log without copying any token values.
+
+## Stop And Restart
+
+Use the installed shortcut:
+
+```text
+Extrusion Web Console Stop
+```
+
+or run:
+
+```powershell
+.\launcher\stop_web_console.ps1
+```
+
+Expected stop behavior:
+
+- `/api/health` reports `service=extrusion-web-console-api`
+- `/api/health` reports localhost-only status
+- `/api/health` reports a process id
+- the OS process matches the expected Python uvicorn backend command for the selected port
+- only that verified backend process is stopped
+- port `8000` closes after stop
+
+If port `8000` is open but `/api/health` is missing, reports a different service, is not localhost-only, or points to a non-matching process, the stop script must refuse to stop anything and log the reason.
+
+Restart through:
+
+```text
+Extrusion Web Console Restart
+```
+
+or:
+
+```powershell
+.\launcher\restart_web_console.ps1
+```
+
+Restart runs the same safe stop path before starting the backend and opening the browser again.
 
 ## Settings Verification
 
@@ -314,7 +359,7 @@ Rollback means returning the operator shortcut to the previous known-good packag
 Recommended rollback flow:
 
 1. Close the browser tab.
-2. Stop the current launcher/backend window if it is still running.
+2. Run `Extrusion Web Console Stop`, or `.\launcher\stop_web_console.ps1`, for the current package.
 3. Keep the failed package folder for maintainer inspection.
 4. Point shortcuts back to the previous known-good package folder by running that folder's shortcut installer.
 5. Launch the previous package.
@@ -368,9 +413,13 @@ Support notes must not include secret values, DB URLs, local API tokens, authori
 | Zip checksum verified |  |
 | Package extracted into stable folder |  |
 | `launcher\start_web_console.ps1 -CheckOnly` passed |  |
+| `launcher\stop_web_console.ps1 -CheckOnly` passed |  |
+| `launcher\restart_web_console.ps1 -CheckOnly` passed |  |
 | `launcher\install_shortcuts.ps1 -CheckOnly` passed |  |
 | Shortcuts installed or refreshed |  |
 | First launch opened Dashboard |  |
+| Stop closed the verified backend port |  |
+| Restart reopened Dashboard |  |
 | Settings loaded |  |
 | Logs page loaded |  |
 | Secret values hidden in UI |  |
@@ -380,9 +429,9 @@ Support notes must not include secret values, DB URLs, local API tokens, authori
 ## Out Of Scope
 
 - feature implementation
-- package assembly changes
-- launcher behavior changes
-- shortcut installer behavior changes
+- package assembly policy changes
+- launcher behavior outside the documented Start/Stop/Restart lifecycle
+- shortcut installer behavior outside hidden Start/Stop/Restart shortcut refresh
 - production deploy
 - database reset/delete/cleanup/prune
 - Docker volume/container delete or prune

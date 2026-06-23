@@ -8,6 +8,8 @@
     "frontend/dist/index.html",
     "launcher/start_web_console.ps1",
     "launcher/start_web_console.bat",
+    "launcher/stop_web_console.ps1",
+    "launcher/restart_web_console.ps1",
     "launcher/install_shortcuts.ps1",
     "launcher/install_shortcuts.bat",
     "launcher/assets/extrusion-console.ico",
@@ -164,6 +166,8 @@
     "frontend/dist/index.html",
     ".venv/Scripts/python.exe",
     "launcher/start_web_console.ps1",
+    "launcher/stop_web_console.ps1",
+    "launcher/restart_web_console.ps1",
     "launcher/install_shortcuts.ps1"
   ],
   "redactionChecks": [
@@ -180,7 +184,10 @@
   "smokeChecks": [
     "packaged .venv python imports backend.app.main",
     "launcher/start_web_console.ps1 -CheckOnly",
+    "launcher/stop_web_console.ps1 -CheckOnly",
+    "launcher/restart_web_console.ps1 -CheckOnly",
     "launcher/install_shortcuts.ps1 -CheckOnly",
+    "Start -> GET /api/health 200 -> Stop -> port 8000 closed -> Restart -> GET /api/health 200",
     "GET /",
     "GET /upload",
     "GET /logs",
