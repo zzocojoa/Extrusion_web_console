@@ -30,12 +30,17 @@ def _client_with_dist(
         monkeypatch.setenv("EWC_LOCAL_TOKEN_MODE", local_token_mode)
     if dist_exists:
         assets_path = dist_path / "assets"
+        brand_path = dist_path / "brand"
         assets_path.mkdir(parents=True)
+        brand_path.mkdir(parents=True)
         (dist_path / "index.html").write_text(
             '<!doctype html><html><head><script type="module" src="/assets/app.js"></script></head><body>web console shell</body></html>',
             encoding="utf-8",
         )
         (assets_path / "app.js").write_text("console.log('app shell');", encoding="utf-8")
+        (brand_path / "logo-sidebar.png").write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+        (brand_path / "logo-mark.png").write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+        (dist_path / "site.webmanifest").write_text('{"name":"Extrusion Web Console"}\n', encoding="utf-8")
     get_settings.cache_clear()
     app = create_app()
     return TestClient(app)
@@ -52,6 +57,18 @@ def test_static_frontend_serves_root_routes_and_assets(tmp_path: Path, monkeypat
     asset_response = client.get("/assets/app.js")
     assert asset_response.status_code == 200
     assert "app shell" in asset_response.text
+
+    for brand_route in ["/brand/logo-sidebar.png", "/brand/logo-mark.png"]:
+        brand_response = client.get(brand_route)
+        assert brand_response.status_code == 200
+        assert brand_response.headers["content-type"].startswith("image/png")
+        assert brand_response.content.startswith(b"\x89PNG")
+        assert "web console shell" not in brand_response.text
+
+    manifest_response = client.get("/site.webmanifest")
+    assert manifest_response.status_code == 200
+    assert manifest_response.headers["content-type"].startswith("application/manifest+json")
+    assert "Extrusion Web Console" in manifest_response.text
 
     get_settings.cache_clear()
 
