@@ -17,6 +17,7 @@ LAUNCHER_ASSET_DIR = REPO_ROOT / "launcher" / "assets"
 PACKAGING_ASSET_DIR = REPO_ROOT / "packaging" / "assets"
 
 WHITE = (255, 255, 255, 255)
+TRANSPARENT = (0, 0, 0, 0)
 SPLASH_BG = WHITE
 MUTED = "#6B7280"
 
@@ -35,7 +36,7 @@ def save_png(image: Image.Image, path: Path) -> None:
     image.save(path, optimize=True)
 
 
-def contain(image: Image.Image, size: tuple[int, int], background: tuple[int, int, int, int] = WHITE) -> Image.Image:
+def contain(image: Image.Image, size: tuple[int, int], background: tuple[int, int, int, int] = TRANSPARENT) -> Image.Image:
     target_w, target_h = size
     canvas = Image.new("RGBA", size, background)
     scale = min(target_w / image.width, target_h / image.height)
@@ -44,6 +45,44 @@ def contain(image: Image.Image, size: tuple[int, int], background: tuple[int, in
     y = (target_h - resized.height) // 2
     canvas.alpha_composite(resized, (x, y))
     return canvas
+
+
+def is_background_pixel(pixel: tuple[int, int, int, int], threshold: int) -> bool:
+    r, g, b, a = pixel
+    return a == 0 or (a > 0 and r >= threshold and g >= threshold and b >= threshold)
+
+
+def remove_edge_background(image: Image.Image, threshold: int = 246) -> Image.Image:
+    rgba = image.convert("RGBA")
+    pixels = rgba.load()
+    width, height = rgba.size
+    visited: set[tuple[int, int]] = set()
+    stack: list[tuple[int, int]] = []
+
+    for x in range(width):
+        stack.append((x, 0))
+        stack.append((x, height - 1))
+    for y in range(height):
+        stack.append((0, y))
+        stack.append((width - 1, y))
+
+    while stack:
+        x, y = stack.pop()
+        if x < 0 or y < 0 or x >= width or y >= height or (x, y) in visited:
+            continue
+        if not is_background_pixel(pixels[x, y], threshold):
+            continue
+
+        visited.add((x, y))
+        stack.append((x + 1, y))
+        stack.append((x - 1, y))
+        stack.append((x, y + 1))
+        stack.append((x, y - 1))
+
+    for x, y in visited:
+        pixels[x, y] = TRANSPARENT
+
+    return rgba
 
 
 def crop_near_white(image: Image.Image, threshold: int = 245, padding: int = 36) -> Image.Image:
@@ -78,7 +117,7 @@ def write_embedded_svg(svg_path: Path, png_path: Path, width: int, height: int, 
 
 
 def save_logo_assets(logo_master: Image.Image) -> None:
-    logo = crop_near_white(logo_master, padding=48)
+    logo = remove_edge_background(crop_near_white(logo_master, padding=48))
 
     variants = {
         "logo-horizontal": logo,
@@ -94,7 +133,7 @@ def save_logo_assets(logo_master: Image.Image) -> None:
 
 
 def save_icon_assets(icon_master: Image.Image) -> None:
-    icon = icon_master.convert("RGBA")
+    icon = remove_edge_background(icon_master)
     save_png(icon, BRAND_DIR / "app-icon.png")
 
     for size in (180, 192, 512):
@@ -124,7 +163,7 @@ def save_icon_assets(icon_master: Image.Image) -> None:
 
 
 def save_splash(logo_master: Image.Image) -> None:
-    logo = crop_near_white(logo_master, padding=48)
+    logo = remove_edge_background(crop_near_white(logo_master, padding=48))
     image = Image.new("RGBA", (1600, 900), SPLASH_BG)
     logo_fit = contain(logo, (980, 250), background=(0, 0, 0, 0))
     image.alpha_composite(logo_fit, ((image.width - logo_fit.width) // 2, 314))
