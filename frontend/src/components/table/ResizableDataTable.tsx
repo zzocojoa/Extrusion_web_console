@@ -215,6 +215,7 @@ export function DetailCell({
   monospace = false,
 }: DetailCellProps) {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
   const text = value?.trim() || "-";
 
   useEffect(() => {
@@ -222,8 +223,17 @@ export function DetailCell({
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
+    function closeOnOutsidePointerDown(event: PointerEvent) {
+      const root = rootRef.current;
+      if (!root || !(event.target instanceof Node)) return;
+      if (!root.contains(event.target)) setOpen(false);
+    }
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointerDown);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
+    };
   }, [open]);
 
   async function copyValue() {
@@ -232,7 +242,7 @@ export function DetailCell({
   }
 
   return (
-    <span className={`detail-cell detail-cell--lines-${lines} ${monospace ? "detail-cell--mono" : ""} ${className ?? ""}`.trim()}>
+    <span ref={rootRef} className={`detail-cell detail-cell--lines-${lines} ${monospace ? "detail-cell--mono" : ""} ${className ?? ""}`.trim()}>
       <button className="detail-cell__trigger" title={text} type="button" onClick={() => setOpen(true)}>
         {preview ?? text}
       </button>

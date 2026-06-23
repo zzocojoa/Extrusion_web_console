@@ -171,7 +171,7 @@
 
 .data-table--runtime,
 .data-table--warning {
-  --table-min-width: 560px;
+  --table-min-width: 520px;
 }
 
 .data-table--audit {
@@ -183,7 +183,7 @@
 }
 
 .data-table--preview {
-  --table-min-width: 1500px;
+  --table-min-width: 1420px;
 }
 
 .data-table--job-files {
@@ -325,17 +325,17 @@
 
 .data-table--runtime th:nth-child(1),
 .data-table--runtime td:nth-child(1) {
-  width: 150px;
+  width: 140px;
 }
 
 .data-table--runtime th:nth-child(2),
 .data-table--runtime td:nth-child(2) {
-  width: 104px;
+  width: 96px;
 }
 
 .data-table--runtime th:nth-child(4),
 .data-table--runtime td:nth-child(4) {
-  width: 132px;
+  width: 144px;
   white-space: nowrap;
 }
 

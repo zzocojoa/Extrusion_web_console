@@ -150,6 +150,8 @@
   border-left: 4px solid var(--color-blocked);
   border-color: #d9aaa8;
   background: var(--color-blocked-soft);
+  max-height: none;
+  padding-block: var(--space-4) var(--space-5);
 }
 
 .safety-summary__icon {
@@ -194,6 +196,7 @@
 .safety-summary p {
   margin: 0;
   font-size: var(--text-sm);
+  line-height: var(--line-normal);
   color: var(--color-text-muted);
   overflow: hidden;
   white-space: nowrap;
