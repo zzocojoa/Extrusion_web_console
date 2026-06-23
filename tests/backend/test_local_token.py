@@ -33,7 +33,11 @@ def test_mutating_api_missing_token_is_blocked_and_audited(tmp_path: Path, monke
     response = client.put("/api/config", json={"values": {"grafanaUrl": "http://127.0.0.1:3001"}})
 
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "local_token_required"
+    detail = response.json()["detail"]
+    assert detail["code"] == "local_token_required"
+    assert detail["reason"] == "local_token_missing"
+    assert detail["recovery"] == "open_from_tray_or_restart_launcher"
+    assert LOCAL_GUARD_VALUE not in str(detail)
     page = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save"))
     assert page.total_items == 1
     row = page.rows[0]
@@ -61,7 +65,12 @@ def test_mutating_api_invalid_token_is_blocked(tmp_path: Path, monkeypatch) -> N
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "local_token_required"
+    detail = response.json()["detail"]
+    assert detail["code"] == "local_token_required"
+    assert detail["reason"] == "local_token_invalid"
+    assert "old local console session" in detail["message"]
+    assert detail["recovery"] == "open_from_tray_or_restart_launcher"
+    assert "wrong-local-guard-value" not in str(detail)
     row = audit_repository.list_audit_logs(AuditLogFilters(action="settings.save")).rows[0]
     assert row["error_code"] == "local_token_invalid"
     params = decode_params_json(row["params_json_redacted"])
@@ -118,6 +127,7 @@ def test_protected_route_groups_block_without_token(tmp_path: Path, monkeypatch)
         response = client.request(method, path, json={})
         assert response.status_code == 403, path
         assert response.json()["detail"]["code"] == "local_token_required"
+        assert response.json()["detail"]["reason"] == "local_token_missing"
 
     actions = {row["action"] for row in audit_repository.list_audit_logs(AuditLogFilters()).rows}
     assert {

@@ -43,6 +43,20 @@ function Join-ShortcutArguments {
   return (($Parts | ForEach-Object { Quote-ShortcutArgument -Value $_ }) -join " ")
 }
 
+function Test-PathInsideDirectory {
+  param(
+    [string]$BaseDirectory,
+    [string]$CandidatePath
+  )
+
+  $baseFullPath = [System.IO.Path]::GetFullPath($BaseDirectory)
+  if (-not $baseFullPath.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+    $baseFullPath = $baseFullPath + [System.IO.Path]::DirectorySeparatorChar
+  }
+  $candidateFullPath = [System.IO.Path]::GetFullPath($CandidatePath)
+  return $candidateFullPath.StartsWith($baseFullPath, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Assert-SafeShortcutName {
   param([string]$Name)
 
@@ -105,28 +119,23 @@ $powerShellPath = (Get-Command powershell.exe -ErrorAction Stop).Source
 $iconPath = Join-Path $repoRoot "launcher\assets\extrusion-console.ico"
 $shortcutSpecs = @(
   [pscustomobject]@{
-    Action = "Start"
+    Action = "Open"
     Name = $ShortcutName
-    RelativeScript = "launcher\start_web_console.ps1"
-    Description = "Start or open the local Extrusion Web Console on 127.0.0.1."
-  },
-  [pscustomobject]@{
-    Action = "Stop"
-    Name = "$ShortcutName Stop"
-    RelativeScript = "launcher\stop_web_console.ps1"
-    Description = "Stop the verified local Extrusion Web Console backend."
-  },
-  [pscustomobject]@{
-    Action = "Restart"
-    Name = "$ShortcutName Restart"
-    RelativeScript = "launcher\restart_web_console.ps1"
-    Description = "Restart the local Extrusion Web Console backend and reopen the browser."
+    RelativeScript = "launcher\tray_supervisor.ps1"
+    Description = "Open the local Extrusion Web Console tray supervisor on 127.0.0.1."
   }
+)
+$legacyShortcutNames = @(
+  "$ShortcutName Stop",
+  "$ShortcutName Restart"
 )
 
 Assert-SafeShortcutName -Name $ShortcutName
 foreach ($shortcutSpec in $shortcutSpecs) {
   Assert-SafeShortcutName -Name $shortcutSpec.Name
+}
+foreach ($legacyShortcutName in $legacyShortcutNames) {
+  Assert-SafeShortcutName -Name $legacyShortcutName
 }
 
 foreach ($shortcutSpec in $shortcutSpecs) {
@@ -140,6 +149,7 @@ foreach ($shortcutSpec in $shortcutSpecs) {
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
+      "-STA",
       "-WindowStyle",
       "Hidden",
       "-File",
@@ -187,10 +197,10 @@ if ($plannedShortcuts.Count -eq 0) {
 }
 
 Write-ShortcutStatus "Target executable: powershell.exe"
-Write-ShortcutStatus "Target mode: -WindowStyle Hidden"
+Write-ShortcutStatus "Target mode: -STA -WindowStyle Hidden"
 Write-ShortcutStatus "Icon: launcher\assets\extrusion-console.ico"
 Write-ShortcutStatus "Working directory: package root"
-Write-ShortcutStatus "Policy: updates shortcuts in place; does not delete AppData config, state, logs, Docker data, database data, or operational CSV files."
+Write-ShortcutStatus "Policy: updates the single tray shortcut in place; removes only legacy Stop/Restart .lnk files in selected shortcut scopes; does not delete AppData config, state, logs, Docker data, database data, or operational CSV files."
 
 foreach ($planned in $plannedShortcuts) {
   Write-ShortcutStatus "$($planned.Action) shortcut $($planned.Scope): $($planned.Path)"
@@ -203,6 +213,30 @@ foreach ($planned in $plannedShortcuts) {
       -WorkingDirectory $repoRoot `
       -Description $planned.Spec.Description `
       -IconLocation $iconPath
+  }
+}
+
+foreach ($scope in @(
+    [pscustomobject]@{ Name = "Desktop"; Directory = $DesktopDirectory; Skipped = [bool]$SkipDesktop },
+    [pscustomobject]@{ Name = "Start menu"; Directory = $StartMenuDirectory; Skipped = [bool]$SkipStartMenu }
+  )) {
+  if ($scope.Skipped) {
+    continue
+  }
+  foreach ($legacyShortcutName in $legacyShortcutNames) {
+    $legacyPath = Join-Path $scope.Directory "$legacyShortcutName.lnk"
+    if (-not (Test-PathInsideDirectory -BaseDirectory $scope.Directory -CandidatePath $legacyPath)) {
+      Write-Error "Legacy shortcut cleanup path escaped the selected $($scope.Name) directory."
+      exit 1
+    }
+    if ($CheckOnly) {
+      Write-ShortcutStatus "Legacy shortcut cleanup $($scope.Name): $legacyPath"
+      continue
+    }
+    if (Test-Path -LiteralPath $legacyPath) {
+      Remove-Item -LiteralPath $legacyPath -Force
+      Write-ShortcutStatus "Removed legacy shortcut $($scope.Name): $legacyPath"
+    }
   }
 }
 

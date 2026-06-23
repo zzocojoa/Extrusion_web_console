@@ -238,6 +238,9 @@ export function localizeDiagnosticMessage(message: string | null | undefined, t:
     "Preview run exceeded the configured time limit.": "upload.reason.timeout",
     "Configured source folder is missing.": "upload.reason.source_missing",
     "Local console token is missing or invalid. Restart the web console from the launcher.": "settings.save.reason.local_token_required",
+    "Local console session is not valid. Open the console from the tray or restart it from the launcher.": "settings.save.reason.local_token_required",
+    "Local console token is missing. Open the console from the tray or restart it from the launcher.": "settings.save.reason.local_token_missing",
+    "This browser tab is using an old local console session. Open the console from the tray or restart it from the launcher.": "settings.save.reason.local_token_invalid",
     "No persisted upload job found in the active state store.": "dashboard.messages.noPersistedUploadJob",
     "No failed files in the latest job.": "dashboard.warnings.rows.failed_retry.empty",
     "Retry review is needed.": "dashboard.warnings.rows.failed_retry.impact",
@@ -246,6 +249,7 @@ export function localizeDiagnosticMessage(message: string | null | undefined, t:
     "Local Supabase core runtime is not reachable.": "dashboard.warnings.rows.supabase_unreachable.impact",
     "Runtime gate is not blocking Dashboard review.": "dashboard.warnings.rows.supabase_unreachable.empty",
     "Docker is not reachable from the backend process.": "runtime.reason.docker_unreachable",
+    "Supabase API, DB, Studio, or Edge is not reachable.": "runtime.reason.core_runtime_unreachable",
     "Edge route probe timed out.": "runtime.reason.edge_probe_timeout",
   };
   const key = simpleMappings[message];

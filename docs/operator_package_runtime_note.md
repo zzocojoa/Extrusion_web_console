@@ -4,15 +4,15 @@ This prepared folder is the operator handoff build for the local web console.
 
 ## Run
 
-Use the `Extrusion Web Console` Desktop or Start menu shortcut after the maintainer installs shortcuts, or run `launcher\start_web_console.ps1` from PowerShell.
+Use the `Extrusion Web Console` Desktop or Start menu shortcut after the maintainer installs shortcuts, or run `launcher\tray_supervisor.ps1` from PowerShell.
 
-The launcher starts the localhost backend, serves the built frontend, opens the browser, and keeps write APIs protected by a per-run local guard.
+The tray supervisor starts or reuses the localhost backend, serves the built frontend, opens the browser, and keeps write APIs protected by a per-run local guard. Closing the browser does not stop the tray supervisor.
 
 ## Shortcuts
 
-Maintainers can run `launcher\install_shortcuts.ps1` to create or refresh Desktop and Start menu Start, Stop, and Restart shortcuts for this prepared folder.
+Maintainers can run `launcher\install_shortcuts.ps1` to create or refresh one Desktop shortcut and one Start menu shortcut for this prepared folder.
 
-The Start shortcut uses hidden PowerShell execution, so normal operator launch opens the browser without leaving a command window on screen. The Stop shortcut verifies `/api/health` reports `service=extrusion-web-console-api`, localhost-only status, and a matching backend process before it stops anything. The Restart shortcut runs the same safe stop path before starting again.
+The shortcut uses hidden PowerShell execution with the tray supervisor, so normal operator launch opens the browser without leaving a command window on screen. The tray menu provides `Open` and `Exit`. `Exit` verifies `/api/health` reports `service=extrusion-web-console-api`, localhost-only status, and a matching backend process before it stops anything.
 
 Use `-CheckOnly` on launcher and shortcut scripts when validating a package without starting or writing anything.
 
@@ -30,7 +30,7 @@ Normal operator launch does not require Node or npm.
 
 The launcher does not run database reset, database cleanup, Docker cleanup, package deletion, or AppData deletion.
 
-The stop/restart lifecycle scripts do not stop arbitrary port 8000 processes. They stop only the verified localhost Extrusion Web Console API backend reported by `/api/health`.
+The tray `Exit` action and maintainer stop/restart lifecycle scripts do not stop arbitrary port 8000 processes. They stop only the verified localhost Extrusion Web Console API backend reported by `/api/health`.
 
 The package does not bootstrap, reset, migrate, or start Supabase by itself. Maintainer-approved runtime setup remains separate from normal operator launch.
 

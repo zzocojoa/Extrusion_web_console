@@ -93,7 +93,7 @@ export async function saveConfig(values: ConfigSaveValues): Promise<ConfigSaveRe
     }, { mutating: true });
   } catch (error) {
     if (isLocalTokenApiError(error)) {
-      throw new ConfigApiError(error.message, error.status, error.code, []);
+      throw new ConfigApiError(error.message, error.status, error.reason, []);
     }
     throw error;
   }

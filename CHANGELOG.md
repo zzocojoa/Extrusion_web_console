@@ -7,10 +7,11 @@ All notable changes to Extrusion Web Console are documented here.
 ### Changed
 
 - Updated the operator launcher shortcut lifecycle: installed shortcuts now use
-  hidden PowerShell Start/Stop/Restart entries, Stop verifies
-  `service=extrusion-web-console-api`, localhost-only health, process id, and
-  the expected uvicorn backend command before terminating anything, and
-  Restart reuses the same safe stop path before starting again.
+  a single hidden PowerShell tray supervisor entry with `Open` and `Exit`.
+  `Exit` reuses safe stop verification for `service=extrusion-web-console-api`,
+  localhost-only health, process id, and the expected uvicorn backend command
+  before terminating anything; maintainer stop/restart scripts remain available
+  without exposing separate operator shortcuts.
 - Added maintainer tooling and handoff guidance for wrapping a verified
   API-mode operator package zip in an unsigned user-scope NSIS installer EXE
   without changing Upload Preview, Start Upload, Retry Failed, Delete,
