@@ -102,16 +102,16 @@ npm run build:api
 
 Both build commands write `frontend/dist/frontend-build-info.json`. The package assembly step records this as `frontendMode` in `package-build-info.json`.
 
-Then double-click:
-
-```text
-launcher\start_web_console.bat
-```
-
-Or run from PowerShell:
+Then start from PowerShell:
 
 ```powershell
 .\launcher\start_web_console.ps1
+```
+
+The batch wrapper remains available for manual diagnostics:
+
+```text
+launcher\start_web_console.bat
 ```
 
 Maintainers can install or refresh Windows shortcuts from the prepared operator folder:
@@ -120,7 +120,7 @@ Maintainers can install or refresh Windows shortcuts from the prepared operator 
 .\launcher\install_shortcuts.ps1
 ```
 
-This creates or updates one Desktop shortcut and one Start menu shortcut named `Extrusion Web Console`. Re-running the script is idempotent: it updates the existing shortcuts instead of creating duplicates. The shortcuts target the repo-local `launcher\start_web_console.bat` and use the prepared folder as the working directory. `ShortcutName` is validated as a file name only: empty names, path separators, `..` traversal markers, Windows invalid filename characters, and absolute paths are rejected before any shortcut is written. A batch wrapper is also available:
+This creates or updates Desktop and Start menu shortcuts for `Extrusion Web Console`, `Extrusion Web Console Stop`, and `Extrusion Web Console Restart`. Re-running the script is idempotent: it updates the existing shortcuts instead of creating duplicates. The shortcuts target `powershell.exe -WindowStyle Hidden -File <lifecycle-script>` and use the prepared folder as the working directory, so normal Start/Stop/Restart flows do not leave a command window on screen. `ShortcutName` is validated as a file name only: empty names, path separators, `..` traversal markers, Windows invalid filename characters, and absolute paths are rejected before any shortcut is written. A batch wrapper is also available:
 
 ```text
 launcher\install_shortcuts.bat
@@ -168,6 +168,18 @@ Launcher logs are written under:
 ```
 
 The launcher reuses an already healthy Extrusion Web Console backend on the selected port. If another process owns the port, it stops and reports the conflict; it does not kill unknown processes.
+
+The stop lifecycle script is separate:
+
+```powershell
+.\launcher\stop_web_console.ps1
+```
+
+It calls `GET /api/health` and stops only a verified `service=extrusion-web-console-api`, localhost-only backend process whose OS command line matches the expected uvicorn backend on the requested port. If port 8000 is open but the health response is missing or does not match, the script refuses to stop the process. Restart uses the same safe stop path before starting:
+
+```powershell
+.\launcher\restart_web_console.ps1
+```
 
 Launcher phase 2 does not run local Supabase bootstrap, reset, cleanup, prune, Docker create/delete, or volume operations. Local Supabase status/start/stop remains inside the web console runtime API and existing command allowlist policy.
 

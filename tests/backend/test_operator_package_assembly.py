@@ -56,9 +56,13 @@ def _create_minimal_repo(
             )
 
     (repo_root / "launcher").mkdir()
+    (repo_root / "launcher" / "assets").mkdir()
+    (repo_root / "launcher" / "assets" / "extrusion-console.ico").write_bytes(b"icon")
     for name in [
         "start_web_console.ps1",
         "start_web_console.bat",
+        "stop_web_console.ps1",
+        "restart_web_console.ps1",
         "install_shortcuts.ps1",
         "install_shortcuts.bat",
     ]:
@@ -205,7 +209,11 @@ def test_manifest_json_contract_is_valid() -> None:
     assert manifest["packageRoot"] == "ExtrusionWebConsole"
     assert "backend/app" in manifest["requiredPaths"]
     assert "frontend/dist/index.html" in manifest["requiredPaths"]
+    assert "launcher/stop_web_console.ps1" in manifest["requiredPaths"]
+    assert "launcher/restart_web_console.ps1" in manifest["requiredPaths"]
     assert ".venv/Scripts/python.exe" in manifest["operatorReadyChecks"]
+    assert "launcher/stop_web_console.ps1" in manifest["operatorReadyChecks"]
+    assert "launcher/restart_web_console.ps1" in manifest["operatorReadyChecks"]
     assert "supabase/config.toml" in manifest["requiredPaths"]
     assert "supabase/functions/upload-metrics/index.ts" in manifest["requiredPaths"]
     assert "supabase/migrations/20260608000001_create_all_metrics_upload_contract.sql" in manifest["requiredPaths"]
@@ -234,6 +242,9 @@ def test_manifest_json_contract_is_valid() -> None:
     venv_entry = next(entry for entry in manifest["includeAllowlist"] if entry["source"] == ".venv")
     assert ".agents" in venv_entry["exclude"]
     assert "package and zip .agents entries count is 0" in manifest["smokeChecks"]
+    assert "launcher/stop_web_console.ps1 -CheckOnly" in manifest["smokeChecks"]
+    assert "launcher/restart_web_console.ps1 -CheckOnly" in manifest["smokeChecks"]
+    assert "Start -> GET /api/health 200 -> Stop -> port 8000 closed -> Restart -> GET /api/health 200" in manifest["smokeChecks"]
     assert manifest["buildMetadata"]["frontendMode"] == "filled-by-assembly"
     assert manifest["buildMetadata"]["frontendBuildInfoPath"] == "frontend/dist/frontend-build-info.json"
     assert "api" in manifest["buildMetadata"]["supportedFrontendModes"]

@@ -4,15 +4,17 @@ This prepared folder is the operator handoff build for the local web console.
 
 ## Run
 
-Double-click `launcher\start_web_console.bat`, or run `launcher\start_web_console.ps1` from PowerShell.
+Use the `Extrusion Web Console` Desktop or Start menu shortcut after the maintainer installs shortcuts, or run `launcher\start_web_console.ps1` from PowerShell.
 
 The launcher starts the localhost backend, serves the built frontend, opens the browser, and keeps write APIs protected by a per-run local guard.
 
 ## Shortcuts
 
-Maintainers can run `launcher\install_shortcuts.ps1` to create or refresh Desktop and Start menu shortcuts for this prepared folder.
+Maintainers can run `launcher\install_shortcuts.ps1` to create or refresh Desktop and Start menu Start, Stop, and Restart shortcuts for this prepared folder.
 
-Use `-CheckOnly` on either launcher script when validating a package without starting or writing anything.
+The Start shortcut uses hidden PowerShell execution, so normal operator launch opens the browser without leaving a command window on screen. The Stop shortcut verifies `/api/health` reports `service=extrusion-web-console-api`, localhost-only status, and a matching backend process before it stops anything. The Restart shortcut runs the same safe stop path before starting again.
+
+Use `-CheckOnly` on launcher and shortcut scripts when validating a package without starting or writing anything.
 
 ## Package Contents
 
@@ -27,6 +29,8 @@ The package intentionally does not include repository history, developer fronten
 Normal operator launch does not require Node or npm.
 
 The launcher does not run database reset, database cleanup, Docker cleanup, package deletion, or AppData deletion.
+
+The stop/restart lifecycle scripts do not stop arbitrary port 8000 processes. They stop only the verified localhost Extrusion Web Console API backend reported by `/api/health`.
 
 The package does not bootstrap, reset, migrate, or start Supabase by itself. Maintainer-approved runtime setup remains separate from normal operator launch.
 
