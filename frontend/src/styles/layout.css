@@ -41,8 +41,8 @@
 }
 
 .sidebar__brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 40px;
   flex: 0 0 auto;
   object-fit: contain;
   display: none;

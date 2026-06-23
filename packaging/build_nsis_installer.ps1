@@ -172,6 +172,7 @@ $resolvedMakensisPath = Resolve-MakensisPath -ExplicitPath $MakensisPath
 $buildDir = Join-Path $outputRootFull "$packageLabel-nsis-build"
 $setupPath = Join-Path $outputRootFull "$packageLabel-Setup.exe"
 $setupChecksumPath = "$setupPath.sha256"
+$installerIconPath = Join-Path $repoRoot "packaging\assets\installer.ico"
 
 if (Test-Path -LiteralPath $buildDir) {
   throw "Installer build output already exists: $buildDir"
@@ -179,10 +180,14 @@ if (Test-Path -LiteralPath $buildDir) {
 if ((Test-Path -LiteralPath $setupPath) -or (Test-Path -LiteralPath $setupChecksumPath)) {
   throw "Installer output already exists for package label: $packageLabel"
 }
+if (-not (Test-Path -LiteralPath $installerIconPath)) {
+  throw "Installer icon is missing: packaging\assets\installer.ico"
+}
 
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
 Copy-Item -LiteralPath $zipPath -Destination (Join-Path $buildDir (Split-Path -Leaf $zipPath))
 Copy-Item -LiteralPath $checksumPath -Destination (Join-Path $buildDir (Split-Path -Leaf $checksumPath))
+Copy-Item -LiteralPath $installerIconPath -Destination (Join-Path $buildDir "installer.ico")
 
 $installScriptPath = Join-Path $buildDir "install_operator_package.ps1"
 $installScript = @"
@@ -345,10 +350,18 @@ Unicode true
 
 Name "Extrusion Web Console"
 OutFile "$(Escape-NsisString $setupPath)"
+Icon "installer.ico"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 InstallDir "`$LOCALAPPDATA\Programs\ExtrusionWebConsole\$packageLabel"
 ShowInstDetails show
+
+Function .onInit
+  ReadEnvStr `$0 "EWC_INSTALLER_CHECK_ONLY"
+  `$`{If`} `$0 == "1"
+    SetSilent silent
+  `$`{EndIf`}
+FunctionEnd
 
 Section "Install"
   InitPluginsDir

@@ -37,13 +37,13 @@ export function SidebarNav({
       <div className="sidebar__brand">
         <img
           className="sidebar__brand-mark"
-          src="/brand/logo-mark.png"
+          src="/brand/logo-mark.svg"
           alt=""
           aria-hidden="true"
         />
         <img
           className="sidebar__brand-lockup"
-          src="/brand/logo-sidebar.png"
+          src="/brand/logo-sidebar.svg"
           alt={t("app.name")}
         />
         <button
