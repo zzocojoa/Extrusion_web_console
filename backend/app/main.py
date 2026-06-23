@@ -53,9 +53,12 @@ def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
     dist_path = Path(frontend_dist_path)
     index_path = dist_path / "index.html"
     assets_path = dist_path / "assets"
+    brand_path = dist_path / "brand"
 
     if assets_path.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+    if brand_path.exists():
+        app.mount("/brand", StaticFiles(directory=str(brand_path)), name="brand")
 
     @app.get("/")
     async def serve_frontend_root():
@@ -74,6 +77,10 @@ def configure_frontend_static(app: FastAPI, frontend_dist_path: str) -> None:
             favicon_path = dist_path / "favicon.ico"
             if favicon_path.exists():
                 return FileResponse(favicon_path)
+        if path == "site.webmanifest":
+            manifest_path = dist_path / "site.webmanifest"
+            if manifest_path.exists():
+                return FileResponse(manifest_path, media_type="application/manifest+json")
         if path.startswith(f"{API_PREFIX_SEGMENT}/") or path == API_PREFIX_SEGMENT:
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
         if index_path.exists():
