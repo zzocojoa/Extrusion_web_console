@@ -10,6 +10,7 @@
     "launcher/start_web_console.bat",
     "launcher/install_shortcuts.ps1",
     "launcher/install_shortcuts.bat",
+    "launcher/assets/extrusion-console.ico",
     "supabase/config.toml",
     "supabase/README.md",
     "supabase/.gitignore",

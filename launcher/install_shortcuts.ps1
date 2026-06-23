@@ -62,7 +62,9 @@ function Set-Shortcut {
     [Parameter(Mandatory = $true)]
     [string]$WorkingDirectory,
     [Parameter(Mandatory = $true)]
-    [string]$Description
+    [string]$Description,
+    [Parameter(Mandatory = $true)]
+    [string]$IconLocation
   )
 
   $parent = Split-Path -Parent $ShortcutPath
@@ -75,17 +77,23 @@ function Set-Shortcut {
   $shortcut.TargetPath = $TargetPath
   $shortcut.WorkingDirectory = $WorkingDirectory
   $shortcut.Description = $Description
+  $shortcut.IconLocation = $IconLocation
   $shortcut.WindowStyle = 1
   $shortcut.Save()
 }
 
 $repoRoot = Get-RepoRoot
 $targetPath = Join-Path $repoRoot "launcher\start_web_console.bat"
+$iconPath = Join-Path $repoRoot "launcher\assets\extrusion-console.ico"
 
 Assert-SafeShortcutName -Name $ShortcutName
 
 if (-not (Test-Path -LiteralPath $targetPath)) {
   Write-Error "Shortcut target is missing: launcher\start_web_console.bat"
+  exit 1
+}
+if (-not (Test-Path -LiteralPath $iconPath)) {
+  Write-Error "Shortcut icon is missing: launcher\assets\extrusion-console.ico"
   exit 1
 }
 
@@ -120,6 +128,7 @@ if ($plannedShortcuts.Count -eq 0) {
 }
 
 Write-ShortcutStatus "Target: launcher\start_web_console.bat"
+Write-ShortcutStatus "Icon: launcher\assets\extrusion-console.ico"
 Write-ShortcutStatus "Working directory: package root"
 Write-ShortcutStatus "Policy: updates shortcuts in place; does not delete AppData config, state, logs, Docker data, database data, or operational CSV files."
 
@@ -130,7 +139,8 @@ foreach ($planned in $plannedShortcuts) {
       -ShortcutPath $planned.Path `
       -TargetPath $targetPath `
       -WorkingDirectory $repoRoot `
-      -Description $description
+      -Description $description `
+      -IconLocation $iconPath
   }
 }
 
