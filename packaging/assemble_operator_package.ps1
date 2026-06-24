@@ -570,8 +570,8 @@ if ($zipPath) {
   Write-AssemblyInfo "zip output: $zipPath"
 }
 Write-AssemblyInfo "smoke guidance:"
-Write-AssemblyInfo "  1. Run launcher/start_web_console.ps1 -CheckOnly from the package root."
-Write-AssemblyInfo "  2. Run launcher/stop_web_console.ps1 -CheckOnly and launcher/restart_web_console.ps1 -CheckOnly from the package root."
-Write-AssemblyInfo "  3. Run launcher/install_shortcuts.ps1 -CheckOnly from the package root and verify hidden PowerShell Start/Stop/Restart targets."
-Write-AssemblyInfo "  4. Start the package with launcher/start_web_console.ps1 -NoBrowser and smoke /, /upload, /logs, /settings, /api/health, /api/config, /api/audit?limit=1, and /api/runtime/local-supabase recording only overallStatus, grafana.status, vector.status, and vector.detail."
-Write-AssemblyInfo "  5. Verify Start -> health 200 -> Stop -> port closed -> Restart -> health 200 on the selected backend port."
+Write-AssemblyInfo "  1. Run launcher/tray_supervisor.ps1 -CheckOnly from the package root."
+Write-AssemblyInfo "  2. Run launcher/start_web_console.ps1 -CheckOnly, launcher/stop_web_console.ps1 -CheckOnly, and launcher/restart_web_console.ps1 -CheckOnly from the package root."
+Write-AssemblyInfo "  3. Run launcher/install_shortcuts.ps1 -CheckOnly from the package root and verify a single hidden PowerShell tray supervisor shortcut."
+Write-AssemblyInfo "  4. Start the package with launcher/tray_supervisor.ps1, use tray Open, and smoke /, /upload, /logs, /settings, /api/health, /api/config, /api/audit?limit=1, and /api/runtime/local-supabase recording only overallStatus, grafana.status, vector.status, and vector.detail."
+Write-AssemblyInfo "  5. Verify browser close leaves the tray supervisor alive, then tray Exit safely stops the verified backend and closes the selected backend port."

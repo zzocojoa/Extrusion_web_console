@@ -177,11 +177,14 @@ Do not extract into:
 From the extracted `ExtrusionWebConsole` folder, run:
 
 ```powershell
+.\launcher\tray_supervisor.ps1 -CheckOnly
 .\launcher\start_web_console.ps1 -CheckOnly
 ```
 
 Expected result:
 
+- tray supervisor prerequisites are present
+- tray menu is `Open` and `Exit`
 - package prerequisites are present
 - local token policy is required in operator mode
 - API docs policy is disabled in operator mode
@@ -196,9 +199,10 @@ Then run:
 
 Expected result:
 
-- Desktop and Start menu Start, Stop, and Restart shortcut targets are shown
-- shortcut targets use hidden PowerShell execution, not direct `.bat` targets
+- Desktop and Start menu each show one `Extrusion Web Console` shortcut target
+- shortcut targets use hidden PowerShell tray execution, not direct `.bat` targets
 - working directory is the package root
+- legacy Stop/Restart shortcut cleanup is listed for the selected shortcut scopes
 - no shortcut is written in check-only mode
 - AppData config, state, logs, Docker data, database data, and operational CSV data are not deleted
 
@@ -215,13 +219,9 @@ After check-only passes, install or refresh shortcuts:
 This creates or updates:
 
 - Desktop shortcut: `Extrusion Web Console`
-- Desktop shortcut: `Extrusion Web Console Stop`
-- Desktop shortcut: `Extrusion Web Console Restart`
 - Start menu shortcut: `Extrusion Web Console`
-- Start menu shortcut: `Extrusion Web Console Stop`
-- Start menu shortcut: `Extrusion Web Console Restart`
 
-Shortcut install is idempotent. Re-running updates existing shortcuts instead of creating duplicates.
+Shortcut install is idempotent. Re-running updates existing shortcuts instead of creating duplicates. It also removes only legacy `Extrusion Web Console Stop` and `Extrusion Web Console Restart` `.lnk` files from the selected Desktop/Start menu shortcut directories.
 
 Do not manually edit the shortcut target unless instructed by the maintainer.
 
@@ -236,11 +236,12 @@ Extrusion Web Console desktop shortcut
 or:
 
 ```powershell
-.\launcher\start_web_console.ps1
+.\launcher\tray_supervisor.ps1
 ```
 
 Expected first-launch behavior:
 
+- tray supervisor stays running after the browser is opened
 - backend binds to `127.0.0.1`
 - browser opens the local web console
 - no command window remains on screen when launched from the shortcut
@@ -249,17 +250,17 @@ Expected first-launch behavior:
 - token is not printed or placed in the URL
 - API docs routes are disabled in operator mode
 
-The operator should see the Dashboard first. If the browser does not open, the maintainer can open the localhost URL reported by the launcher log without copying any token values.
+The operator should see the Dashboard first. If the browser is closed, use the tray `Open` action to reopen it. If the browser does not open, the maintainer can open the localhost URL reported by the launcher log without copying any token values.
 
 ## Stop And Restart
 
-Use the installed shortcut:
+Use the tray menu:
 
 ```text
-Extrusion Web Console Stop
+Exit
 ```
 
-or run:
+or run the maintainer stop script:
 
 ```powershell
 .\launcher\stop_web_console.ps1
@@ -276,19 +277,13 @@ Expected stop behavior:
 
 If port `8000` is open but `/api/health` is missing, reports a different service, is not localhost-only, or points to a non-matching process, the stop script must refuse to stop anything and log the reason.
 
-Restart through:
-
-```text
-Extrusion Web Console Restart
-```
-
-or:
+Maintainer restart remains script-only:
 
 ```powershell
 .\launcher\restart_web_console.ps1
 ```
 
-Restart runs the same safe stop path before starting the backend and opening the browser again.
+Restart runs the same safe stop path before starting the backend and opening the browser again. It is not exposed as a separate operator shortcut.
 
 ## Settings Verification
 
@@ -359,7 +354,7 @@ Rollback means returning the operator shortcut to the previous known-good packag
 Recommended rollback flow:
 
 1. Close the browser tab.
-2. Run `Extrusion Web Console Stop`, or `.\launcher\stop_web_console.ps1`, for the current package.
+2. Use tray `Exit`, or run `.\launcher\stop_web_console.ps1`, for the current package.
 3. Keep the failed package folder for maintainer inspection.
 4. Point shortcuts back to the previous known-good package folder by running that folder's shortcut installer.
 5. Launch the previous package.
@@ -412,14 +407,16 @@ Support notes must not include secret values, DB URLs, local API tokens, authori
 | --- | --- |
 | Zip checksum verified |  |
 | Package extracted into stable folder |  |
+| `launcher\tray_supervisor.ps1 -CheckOnly` passed |  |
 | `launcher\start_web_console.ps1 -CheckOnly` passed |  |
 | `launcher\stop_web_console.ps1 -CheckOnly` passed |  |
 | `launcher\restart_web_console.ps1 -CheckOnly` passed |  |
 | `launcher\install_shortcuts.ps1 -CheckOnly` passed |  |
-| Shortcuts installed or refreshed |  |
+| Single Desktop/Start menu tray shortcuts installed or refreshed |  |
 | First launch opened Dashboard |  |
-| Stop closed the verified backend port |  |
-| Restart reopened Dashboard |  |
+| Browser close left tray supervisor alive |  |
+| Tray Exit closed the verified backend port |  |
+| Maintainer restart script reopened Dashboard when tested |  |
 | Settings loaded |  |
 | Logs page loaded |  |
 | Secret values hidden in UI |  |
@@ -430,8 +427,8 @@ Support notes must not include secret values, DB URLs, local API tokens, authori
 
 - feature implementation
 - package assembly policy changes
-- launcher behavior outside the documented Start/Stop/Restart lifecycle
-- shortcut installer behavior outside hidden Start/Stop/Restart shortcut refresh
+- launcher behavior outside the documented tray Open/Exit lifecycle
+- shortcut installer behavior outside hidden single tray shortcut refresh
 - production deploy
 - database reset/delete/cleanup/prune
 - Docker volume/container delete or prune

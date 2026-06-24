@@ -186,7 +186,7 @@ def create_app() -> FastAPI:
         failure = validate_local_token(request, current_settings)
         if failure is not None:
             await audit_local_token_failure(request, current_settings, failure)
-            return local_token_error_response()
+            return local_token_error_response(failure)
         return await call_next(request)
 
     app.include_router(health_router)

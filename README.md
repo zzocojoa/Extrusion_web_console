@@ -120,7 +120,7 @@ Maintainers can install or refresh Windows shortcuts from the prepared operator 
 .\launcher\install_shortcuts.ps1
 ```
 
-This creates or updates Desktop and Start menu shortcuts for `Extrusion Web Console`, `Extrusion Web Console Stop`, and `Extrusion Web Console Restart`. Re-running the script is idempotent: it updates the existing shortcuts instead of creating duplicates. The shortcuts target `powershell.exe -WindowStyle Hidden -File <lifecycle-script>` and use the prepared folder as the working directory, so normal Start/Stop/Restart flows do not leave a command window on screen. `ShortcutName` is validated as a file name only: empty names, path separators, `..` traversal markers, Windows invalid filename characters, and absolute paths are rejected before any shortcut is written. A batch wrapper is also available:
+This creates or updates a single Desktop shortcut and a single Start menu shortcut named `Extrusion Web Console`. The shortcut targets `powershell.exe -STA -WindowStyle Hidden -File launcher\tray_supervisor.ps1`, so normal launch opens the tray supervisor and browser without leaving a command window on screen. Re-running the script is idempotent: it updates the current shortcut and removes only legacy `Extrusion Web Console Stop` / `Extrusion Web Console Restart` `.lnk` files from the selected shortcut scopes. `ShortcutName` is validated as a file name only: empty names, path separators, `..` traversal markers, Windows invalid filename characters, and absolute paths are rejected before any shortcut is written. A batch wrapper is also available:
 
 ```text
 launcher\install_shortcuts.bat
@@ -134,7 +134,7 @@ Use `-CheckOnly` to preview the shortcut paths without writing shortcuts:
 
 The shortcut installer does not delete AppData config, state databases, launcher logs, Docker data, database data, or operational CSV files.
 
-The launcher starts the backend on `127.0.0.1:8000`, waits for `/api/health`, then opens:
+The tray supervisor provides an `Open` action and an `Exit` action. `Open` starts or reuses the backend on `127.0.0.1:8000`, waits for `/api/health`, then opens:
 
 ```text
 http://127.0.0.1:8000/
@@ -142,7 +142,7 @@ http://127.0.0.1:8000/
 
 Operator mode does not start Vite. FastAPI serves `frontend/dist` and the frontend calls same-origin `/api/*`.
 
-The launcher generates a per-run local API token, passes it to the backend through process environment, and never puts it in the browser URL. FastAPI injects the token into the served app shell at response time, and the frontend keeps it in memory only. Protected writes such as Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, Upload Delete preflight/start/reconcile, and Local Supabase start/stop send `X-EWC-Local-Token`. Read-only APIs such as `/api/health`, `GET /api/config`, `GET /api/audit`, and upload/job status reads remain token-free. `OPTIONS` requests are not blocked by the local token guard; route-level method handling may still return the normal API response. Missing or invalid tokens return `403 local_token_required`, while valid-token requests proceed through the existing API validation. Operator launcher mode disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes instead of token-gating them.
+The launcher generates a per-run local API token, passes it to the backend through process environment, and never puts it in the browser URL. FastAPI injects the token into the served app shell at response time, and the frontend keeps it in memory only. Protected writes such as Settings save, Upload Preview start/cancel, Upload Job start/retry/pause/resume/cancel, Upload Delete preflight/start/reconcile, and Local Supabase start/stop send `X-EWC-Local-Token`. Read-only APIs such as `/api/health`, `GET /api/config`, `GET /api/audit`, and upload/job status reads remain token-free. `OPTIONS` requests are not blocked by the local token guard; route-level method handling may still return the normal API response. Missing or stale browser tokens return `403 local_token_required` with safe `local_token_missing` or `local_token_invalid` reason codes and no token value. Operator launcher mode disables `/api/docs`, `/api/openapi.json`, and ReDoc-style docs routes instead of token-gating them.
 
 The local API token must not be stored or copied into URL query strings, `localStorage`, `sessionStorage`, launcher logs, backend logs, audit params, screenshots, generated `.gstack` artifacts, or `frontend/dist`. Development with Vite should use explicit `EWC_LOCAL_TOKEN_MODE=dev-disabled` when the backend is not serving the token bootstrap. Dev/test API docs can be retained with `EWC_API_DOCS_MODE=enabled`; this override is for developer and test use only. If a developer sets only `EWC_LOCAL_API_TOKEN` on the backend while using the Vite dev shell, mutating API calls can fail because the Vite page does not receive the backend-served bootstrap token.
 
@@ -169,13 +169,13 @@ Launcher logs are written under:
 
 The launcher reuses an already healthy Extrusion Web Console backend on the selected port. If another process owns the port, it stops and reports the conflict; it does not kill unknown processes.
 
-The stop lifecycle script is separate:
+The tray remains alive if the browser is closed. Use tray `Open` to reopen the console. Use tray `Exit` to stop the verified backend and close the tray supervisor. The stop lifecycle script remains available for maintainer diagnostics:
 
 ```powershell
 .\launcher\stop_web_console.ps1
 ```
 
-It calls `GET /api/health` and stops only a verified `service=extrusion-web-console-api`, localhost-only backend process whose OS command line matches the expected uvicorn backend on the requested port. If port 8000 is open but the health response is missing or does not match, the script refuses to stop the process. Restart uses the same safe stop path before starting:
+It calls `GET /api/health` and stops only a verified `service=extrusion-web-console-api`, localhost-only backend process whose OS command line matches the expected uvicorn backend on the requested port. If port 8000 is open but the health response is missing or does not match, the script refuses to stop the process. The maintainer restart script uses the same safe stop path before starting:
 
 ```powershell
 .\launcher\restart_web_console.ps1

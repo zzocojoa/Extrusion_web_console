@@ -105,6 +105,46 @@ def test_runtime_status_serializes_vector_container_as_non_required(tmp_path: Pa
     assert vector_container["status"] == "missing"
 
 
+def test_runtime_status_surfaces_core_runtime_unreachable_reason(tmp_path: Path) -> None:
+    checked_at = datetime(2026, 6, 22, 9, 0, tzinfo=timezone.utc)
+
+    class StaticRuntimeService:
+        def status(self) -> RuntimeStatusResponse:
+            return RuntimeStatusResponse(
+                overall_status=RuntimeOverallStatus.blocked,
+                reason_code="core_runtime_unreachable",
+                reason_text="Supabase API, DB, Studio, or Edge is not reachable.",
+                checked_at=checked_at,
+                project_path=str(tmp_path / "runtime"),
+                project_id="Extrusion_web_console",
+                docker=RuntimeProbeStatus(name="Docker", status=RuntimeServiceStatus.ready, detail="ready"),
+                wsl=RuntimeProbeStatus(name="WSL", status=RuntimeServiceStatus.ready, detail="ready"),
+                supabase_cli=RuntimeProbeStatus(name="Supabase CLI", status=RuntimeServiceStatus.ready, detail="ready"),
+                api=RuntimePortStatus(name="Supabase API", port=55321, status=RuntimeServiceStatus.unreachable, detail="connection refused"),
+                db=RuntimePortStatus(name="Supabase DB", port=25433, status=RuntimeServiceStatus.unreachable, detail="connection refused"),
+                studio=RuntimePortStatus(name="Supabase Studio", port=55323, status=RuntimeServiceStatus.unreachable, detail="connection refused"),
+                edge_runtime=RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.unreachable, detail="connection refused"),
+                grafana=RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.unreachable, detail="connection refused"),
+                vector=RuntimeProbeStatus(name="Vector", status=RuntimeServiceStatus.unknown, detail="Vector container status class is unknown."),
+                containers=[],
+                config=[],
+            )
+
+    app.dependency_overrides[get_runtime_service] = lambda: StaticRuntimeService()
+    client = TestClient(app)
+
+    try:
+        response = client.get("/api/runtime/local-supabase")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["overallStatus"] == "blocked"
+    assert payload["reasonCode"] == "core_runtime_unreachable"
+    assert payload["reasonText"] == "Supabase API, DB, Studio, or Edge is not reachable."
+
+
 def test_runtime_start_blocks_active_preview_via_api(tmp_path: Path) -> None:
     from backend.app.db.preview_repository import PreviewRepository
 

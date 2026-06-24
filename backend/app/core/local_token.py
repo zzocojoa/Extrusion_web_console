@@ -14,7 +14,10 @@ from backend.app.schemas.audit import AuditResult
 
 LOCAL_TOKEN_HEADER = "X-EWC-Local-Token"
 LOCAL_TOKEN_REQUIRED_CODE = "local_token_required"
-LOCAL_TOKEN_MESSAGE = "Local console token is missing or invalid. Restart the web console from the launcher."
+LOCAL_TOKEN_MESSAGE = "Local console session is not valid. Open the console from the tray or restart it from the launcher."
+LOCAL_TOKEN_MISSING_MESSAGE = "Local console token is missing. Open the console from the tray or restart it from the launcher."
+LOCAL_TOKEN_INVALID_MESSAGE = "This browser tab is using an old local console session. Open the console from the tray or restart it from the launcher."
+LOCAL_TOKEN_RECOVERY = "open_from_tray_or_restart_launcher"
 AUDIT_RATE_LIMIT_SECONDS = 10.0
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,13 +70,23 @@ def validate_local_token(request: Request, settings: Settings) -> LocalTokenFail
     return None
 
 
-def local_token_error_response() -> JSONResponse:
+def local_token_message_for_failure(failure: LocalTokenFailure) -> str:
+    if failure.reason_code == "local_token_invalid":
+        return LOCAL_TOKEN_INVALID_MESSAGE
+    if failure.reason_code == "local_token_missing":
+        return LOCAL_TOKEN_MISSING_MESSAGE
+    return LOCAL_TOKEN_MESSAGE
+
+
+def local_token_error_response(failure: LocalTokenFailure) -> JSONResponse:
     return JSONResponse(
         status_code=403,
         content={
             "detail": {
                 "code": LOCAL_TOKEN_REQUIRED_CODE,
-                "message": LOCAL_TOKEN_MESSAGE,
+                "reason": failure.reason_code,
+                "message": local_token_message_for_failure(failure),
+                "recovery": LOCAL_TOKEN_RECOVERY,
             }
         },
     )

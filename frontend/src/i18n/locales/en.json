@@ -237,7 +237,7 @@
     },
     "reason": {
       "ready": "Local Supabase core runtime is ready.",
-      "core_runtime_unreachable": "Core runtime is blocked because API, DB, Studio, or Edge is not reachable.",
+      "core_runtime_unreachable": "Local Supabase API, DB, Studio, or Edge is stopped or unreachable. This is a blocked local Supabase core runtime, not a Web Console backend failure.",
       "non_core_runtime_attention": "Core runtime is ready. Non-core Grafana or Vector needs attention.",
       "docker_unreachable": "Docker is not reachable from the backend process.",
       "edge_probe_timeout": "Edge route probe timed out.",
@@ -311,7 +311,9 @@
         "config_unknown_key": "Unknown setting key: {{keys}}",
         "config_file_invalid": "The local config file is not valid JSON.",
         "config_write_failed": "The local config file could not be written.",
-        "local_token_required": "Local console session is no longer valid. Restart the web console from the launcher."
+        "local_token_required": "Local console session is not valid. Open the console from the tray or restart it from the launcher.",
+        "local_token_missing": "Local console session is not connected. Open the console from the tray or restart it from the launcher.",
+        "local_token_invalid": "This browser tab is using an old local console session. Open the console from the tray or restart it from the launcher."
       }
     },
     "runtime": {
