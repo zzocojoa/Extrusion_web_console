@@ -373,7 +373,7 @@ interface UploadPageProps {
 export function UploadPage({ requestedTab }: UploadPageProps) {
   const { i18n, t } = useTranslation();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<UploadPageTab>("preview");
+  const [activeTab, setActiveTab] = useState<UploadPageTab>(() => requestedTab ?? "preview");
   const [rangeMode, setRangeMode] = useState<PreviewRangeMode>(() => readStoredPreviewRangeMode());
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
