@@ -603,22 +603,28 @@
     },
     "delete": {
       "panel": {
-        "title": "Already-in-DB delete state",
-        "eyebrow": "Already in DB hard delete",
-        "selected": "{{count}} item selected",
-        "latestJob": "Latest delete job: {{status}}, expected {{expected}}, deleted {{deleted}}.",
-        "lastResult": "Delete result: {{status}}, {{rows}} rows deleted.",
-        "reason": "Reason: {{reason}}"
+        "title": "DB에 있는 항목 삭제 상태",
+        "eyebrow": "DB에 있는 항목 삭제",
+        "selected": "{{count}}개 선택됨",
+        "latestJob": "최근 삭제 작업: {{status}}, 예상 {{expected}}, 삭제됨 {{deleted}}.",
+        "lastResult": "삭제 결과: {{status}}, {{rows}}행 삭제됨.",
+        "latestJobLabel": "최근 삭제 작업",
+        "lastResultLabel": "삭제 결과",
+        "fieldStatus": "상태",
+        "fieldExpected": "예상",
+        "fieldDeleted": "삭제됨",
+        "fieldRowsDeleted": "삭제된 행",
+        "reason": "사유: {{reason}}"
       },
       "actions": {
-        "reviewDelete": "Review delete ({{count}})",
-        "preflighting": "Checking delete",
-        "clearSelection": "Clear selection",
-        "preflightDisabled": "Delete preflight requires a succeeded Preview, reachable DB, and only already-in-DB rows selected.",
-        "apiModeRequired": "Delete is available only in API mode.",
-        "noSelection": "Select already-in-DB rows before delete preflight.",
-        "reconcile": "Reconcile delete",
-        "reconciling": "Reconciling"
+        "reviewDelete": "삭제 검토 ({{count}})",
+        "preflighting": "삭제 확인 중",
+        "clearSelection": "선택 해제",
+        "preflightDisabled": "삭제 검토는 성공한 미리보기, 연결 가능한 DB, DB에 있는 항목만 선택된 상태에서 가능합니다.",
+        "apiModeRequired": "삭제는 API 모드에서만 사용할 수 있습니다.",
+        "noSelection": "삭제 검토 전에 DB에 있는 항목을 선택하세요.",
+        "reconcile": "삭제 대조",
+        "reconciling": "대조 중"
       },
       "dateScoped": {
         "title": "기간 지정 삭제 검토",
@@ -634,29 +640,29 @@
         "disabledAction": "기간 지정 삭제 사용 불가"
       },
       "table": {
-        "select": "Delete",
-        "selectRow": "Select {{filename}} for already-in-DB delete"
+        "select": "삭제",
+        "selectRow": "{{filename}}을 DB 항목 삭제 대상으로 선택"
       },
-      "preflightError": "Delete preflight failed",
-      "startError": "Delete start failed",
-      "reconcileError": "Delete reconcile failed",
-      "latestError": "Latest delete job could not be loaded",
+      "preflightError": "삭제 사전 확인 실패",
+      "startError": "삭제 시작 실패",
+      "reconcileError": "삭제 대조 실패",
+      "latestError": "최근 삭제 작업을 불러오지 못했습니다",
       "guard": {
-        "passed": "Passed",
-        "blocked": "Blocked"
+        "passed": "통과",
+        "blocked": "차단"
       },
       "status": {
-        "preparing": "Preparing",
-        "running": "Running",
-        "finalizing": "Finalizing",
-        "blocked": "Blocked",
-        "failed": "Failed",
-        "succeeded": "Succeeded",
-        "commit_unknown": "Commit unknown",
-        "reconciling": "Reconciling",
-        "reconciled_succeeded": "Reconciled succeeded",
-        "reconciled_rolled_back": "Reconciled rolled back",
-        "reconciliation_failed": "Reconciliation failed"
+        "preparing": "준비 중",
+        "running": "실행 중",
+        "finalizing": "마무리 중",
+        "blocked": "차단됨",
+        "failed": "실패",
+        "succeeded": "완료",
+        "commit_unknown": "완료 상태 불명",
+        "reconciling": "대조 중",
+        "reconciled_succeeded": "대조 완료",
+        "reconciled_rolled_back": "롤백 대조 완료",
+        "reconciliation_failed": "대조 실패"
       },
       "review": {
         "eyebrow": "Destructive delete confirmation",

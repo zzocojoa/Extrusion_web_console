@@ -6,7 +6,6 @@ import { StatusChipGroup } from "../status/StatusChipGroup";
 interface TopStatusBarProps {
   sidebarCollapsed: boolean;
   title: string;
-  subtitle: string;
   onOpenMobileNavigation: () => void;
   onToggleSidebarCollapsed: () => void;
 }
@@ -14,7 +13,6 @@ interface TopStatusBarProps {
 export function TopStatusBar({
   sidebarCollapsed,
   title,
-  subtitle,
   onOpenMobileNavigation,
   onToggleSidebarCollapsed,
 }: TopStatusBarProps) {
@@ -44,7 +42,6 @@ export function TopStatusBar({
       </div>
       <div className="topbar__title">
         <h1 id="dashboard-title">{title}</h1>
-        <p>{subtitle}</p>
       </div>
       <StatusChipGroup chips={data?.topbarChips ?? []} stateContext={data?.stateContext} />
     </header>

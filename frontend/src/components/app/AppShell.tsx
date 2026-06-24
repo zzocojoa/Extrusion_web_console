@@ -58,7 +58,6 @@ export function AppShell({ activePage, onNavigate, children }: AppShellProps) {
       <TopStatusBar
         sidebarCollapsed={sidebarCollapsed}
         title={t(`nav.${activePage}`)}
-        subtitle={t(`pageSubtitle.${activePage}`)}
         onOpenMobileNavigation={() => setMobileSidebarOpen(true)}
         onToggleSidebarCollapsed={() => setSidebarCollapsed((value) => !value)}
       />

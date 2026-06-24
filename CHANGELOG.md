@@ -6,6 +6,17 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Tightened backend-served responsive containment for the topbar status chips,
+  Dashboard status matrix, Upload action buttons, and compact table pagination
+  at 390-1440px widths without changing backend contracts or operator
+  mutations.
+- Added backend-served scroll-position screenshot QA for Dashboard, Upload
+  Preview, Upload Job, Logs Job, Audit Logs, and Settings at 390-1440px widths;
+  removed the topbar page subtitles and tightened Upload Job metric cards so
+  progress counts stay inside the viewport.
+- Hardened backend-served responsive QA request-failure handling so expected
+  navigation aborts are reported separately and unexpected network failures
+  fail the QA run.
 - Persisted the Upload Preview range selector as a frontend-only UI preference
   and tightened the Audit Logs panel surface so the toolbar, summary, resizable
   table, and pagination render inside one continuous panel background. Only the
