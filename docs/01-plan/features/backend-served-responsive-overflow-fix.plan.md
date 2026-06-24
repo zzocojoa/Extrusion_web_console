@@ -53,6 +53,9 @@ Out of scope:
 - `npm run qa:backend-served-screenshots` captures `126` backend-served images
   covering `7` viewports, `6` pages/tabs, and `3` scroll stops, and reports
   `layoutIssueCount: 0`.
+- The screenshot QA default output directory is under Node's `os.tmpdir()` so
+  it is portable across Windows users, CI, and developer machines; callers may
+  override it with `EWC_RESPONSIVE_SCREENSHOT_DIR`.
 - Backend-served QA separates expected navigation aborts into
   `ignoredFailedRequests` and fails on any non-empty `unexpectedFailedRequests`.
 - Horizontal scroll remains allowed for dense data tables, but page controls

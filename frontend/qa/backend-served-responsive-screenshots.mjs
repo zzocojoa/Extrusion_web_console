@@ -1,11 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
 
 const baseUrl = process.env.EWC_BACKEND_SERVED_QA_URL ?? "http://127.0.0.1:8000/";
 const outputDir =
   process.env.EWC_RESPONSIVE_SCREENSHOT_DIR ??
-  "C:/Users/user/AppData/Local/Temp/ewc-responsive-scroll-screenshots";
+  path.join(os.tmpdir(), "ewc-responsive-scroll-screenshots");
 
 const viewports = [
   { width: 390, height: 844 },

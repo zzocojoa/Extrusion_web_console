@@ -79,7 +79,9 @@ the run.
 Preview, Upload Job, Logs Job, Audit Logs, and Settings at top, middle, and
 bottom scroll positions for every target width. The expected output is `126`
 screenshots plus a `summary.json` with `layoutIssueCount: 0` and
-`unexpectedFailedRequests: []`.
+`unexpectedFailedRequests: []`. By default, artifacts are written below
+Node's `os.tmpdir()`; `EWC_RESPONSIVE_SCREENSHOT_DIR` may override the output
+directory for handoff or CI.
 
 ## Non-Goals
 

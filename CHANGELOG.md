@@ -17,6 +17,8 @@ All notable changes to Extrusion Web Console are documented here.
 - Hardened backend-served responsive QA request-failure handling so expected
   navigation aborts are reported separately and unexpected network failures
   fail the QA run.
+- Made backend-served screenshot QA write to a portable `os.tmpdir()` default
+  instead of a machine-specific user path.
 - Persisted the Upload Preview range selector as a frontend-only UI preference
   and tightened the Audit Logs panel surface so the toolbar, summary, resizable
   table, and pagination render inside one continuous panel background. Only the
