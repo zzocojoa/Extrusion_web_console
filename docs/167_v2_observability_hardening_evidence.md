@@ -36,6 +36,9 @@ Implemented:
   `vector.status`, and `vector.detail`, not the full JSON response.
 - The operator package runtime note records that Grafana and Vector evidence
   must remain sanitized and that Grafana iframe embedding remains excluded.
+- Docker Desktop `Expose daemon on tcp://localhost:2375 without TLS` is
+  documented as a default-off maintainer diagnostic setting, not an operator
+  runtime requirement.
 
 Not implemented by design:
 
@@ -47,6 +50,29 @@ Not implemented by design:
 - Grafana iframe embedding;
 - LAN exposure or non-loopback bind changes.
 
+## Docker Desktop 2375 Policy
+
+Docker Desktop's `Expose daemon on tcp://localhost:2375 without TLS` setting
+must stay off for normal operator use, package handoff, and routine runtime
+smoke. It is a developer/maintainer diagnostic exception only.
+
+Temporary enablement is allowed only for:
+
+- developer diagnostics;
+- release validation;
+- failure reproduction when sanitized Docker or Vector log evidence is needed
+  and cannot be collected through the normal status-class probes.
+
+After the diagnostic evidence is captured, return the setting to off and record
+that it was returned off in the validation note. Do not treat port `2375` as a
+package prerequisite, operator setup step, or LAN access mechanism.
+
+Vector `attention` or `needs-check` remains a non-core observability caveat
+when Supabase API, DB, Edge, Upload Preview, and Audit evidence are normal. It
+does not approve Upload Preview, Start Upload, Retry Failed, Delete, Settings
+save, Supabase reset/cleanup, Docker cleanup, LAN exposure, deployment, or any
+operational DB mutation.
+
 ## Alert And Runbook Classes
 
 Operator-facing alert classes:
@@ -55,8 +81,8 @@ Operator-facing alert classes:
 | --- | --- | --- |
 | API, DB, Studio, or Edge is not reachable | `core_runtime_unreachable` | Stop upload mutation flow and inspect runtime readiness. |
 | Grafana is unreachable while core runtime is ready | `non_core_runtime_attention` | Continue core upload review only if Grafana is not an acceptance gate; record caveat. |
-| Vector is stopped while core runtime is ready and the container already exists | `non_core_runtime_attention` | Runtime Start may restart that existing Vector container and then record sanitized status-class evidence. |
-| Vector is unhealthy, missing, or unknown while core runtime is ready | `non_core_runtime_attention` | Record only the sanitized status class and observability caveat; do not run cleanup/reset/prune as a workaround. |
+| Vector is stopped while core runtime is ready and the container already exists | `non_core_runtime_attention` | Runtime Start may restart that existing Vector container and then record sanitized status-class evidence. Do not turn Docker Desktop `2375` on unless a maintainer diagnostic needs sanitized log evidence. |
+| Vector is unhealthy, missing, or unknown while core runtime is ready | `non_core_runtime_attention` | Record only the sanitized status class and observability caveat; do not run cleanup/reset/prune or keep Docker Desktop `2375` enabled as a workaround. |
 | Raw log, metric, trace, DB URL, token, JWT, source path, filename, or CSV content appears in evidence | `redaction_failure` | Stop and redact before sharing or merging evidence. |
 
 Rollback and recovery:
@@ -65,6 +91,8 @@ Rollback and recovery:
 - Do not delete local state DB evidence.
 - Do not run Supabase reset/cleanup, Docker cleanup, prune, or broad container
   deletion.
+- Do not leave Docker Desktop `Expose daemon on tcp://localhost:2375 without
+  TLS` enabled after a bounded maintainer diagnostic.
 - If stopped Vector recovery is wrong, revert the runtime-control follow-up
   commit or fix forward. Do not use reset/cleanup/prune as rollback.
 - If the new Vector row is wrong, revert the code/docs commit or fix forward

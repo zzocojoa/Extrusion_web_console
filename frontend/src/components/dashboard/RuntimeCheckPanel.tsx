@@ -188,7 +188,7 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
       id: "vector",
       label: t("runtime.services.vector"),
       tone: toneForObservabilityService(runtimeStatus.vector.status),
-      detail: runtimeServiceDetail(runtimeStatus.vector, t),
+      detail: vectorRuntimeDetail(runtimeStatus.vector, t),
       lastCheckedAt: checkedAt,
     },
     {
@@ -254,6 +254,12 @@ function containerDetail(containers: RuntimeStatusResponse["containers"], t: Tra
   return problemCount > 0
     ? t("runtime.containers.detailWithProblems", { running, total: containers.length, problemCount })
     : t("runtime.containers.detail", { running, total: containers.length });
+}
+
+function vectorRuntimeDetail(vector: RuntimeStatusResponse["vector"], t: Translate): string {
+  const detail = runtimeServiceDetail(vector, t);
+  if (vector.status === "ready") return detail;
+  return t("runtime.observability.vectorCaveat", { detail });
 }
 
 type RuntimeAction = "start" | "stop";

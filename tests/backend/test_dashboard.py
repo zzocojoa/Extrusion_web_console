@@ -42,10 +42,23 @@ def ready_runtime(
         and studio == RuntimeServiceStatus.ready
         and edge == RuntimeServiceStatus.ready
     )
+    non_core_ready = grafana == RuntimeServiceStatus.ready and vector == RuntimeServiceStatus.ready
+    if core_ready and non_core_ready:
+        overall_status = RuntimeOverallStatus.ready
+        reason_code = "runtime_ready"
+        reason_text = "Runtime ready."
+    elif not core_ready:
+        overall_status = RuntimeOverallStatus.blocked
+        reason_code = "core_runtime_unreachable"
+        reason_text = "Core runtime unreachable."
+    else:
+        overall_status = RuntimeOverallStatus.attention
+        reason_code = "non_core_runtime_attention"
+        reason_text = "Core runtime is reachable. Grafana or Vector needs attention as a non-core observability caveat."
     return RuntimeStatusResponse(
-        overall_status=RuntimeOverallStatus.ready if core_ready and grafana == RuntimeServiceStatus.ready and vector == RuntimeServiceStatus.ready else RuntimeOverallStatus.blocked if not core_ready else RuntimeOverallStatus.attention,
-        reason_code="runtime_ready" if core_ready and grafana == RuntimeServiceStatus.ready and vector == RuntimeServiceStatus.ready else "core_runtime_unreachable" if not core_ready else "non_core_runtime_attention",
-        reason_text="Runtime ready." if core_ready else "Core runtime unreachable.",
+        overall_status=overall_status,
+        reason_code=reason_code,
+        reason_text=reason_text,
         checked_at=checked_at,
         project_path=str(tmp_path / "runtime"),
         project_id="Extrusion_web_console",
@@ -223,10 +236,15 @@ def test_dashboard_exposes_vector_as_non_core_observability_check(tmp_path: Path
     assert response.status_code == 200
     data = response.json()
     vector_row = next(item for item in data["runtimeChecks"] if item["id"] == "vector")
+    runtime_chip = next(item for item in data["topbarChips"] if item["id"] == "supabase")
     runtime_warning = next(item for item in data["warningQueue"] if item["id"] == "supabase_unreachable")
+    assert data["overall"]["state"] == "ready"
+    assert runtime_chip["tone"] == "ready"
+    assert runtime_chip["value"] == "Core runtime OK"
     assert vector_row["tone"] == "attention"
     assert vector_row["detail"] == "Vector container status class is stopped."
     assert runtime_warning["tone"] == "ready"
+    assert runtime_warning["count"] == 0
 
 
 def test_dashboard_summary_endpoint_uses_same_real_state_contract(tmp_path: Path) -> None:

@@ -324,6 +324,23 @@ For handoff acceptance, check these pages:
 
 If Upload Preview or Upload Job requires local Supabase, verify local Supabase readiness separately using the operator site's runtime status. Do not run database reset, cleanup, prune, Docker cleanup, or destructive repair as part of handoff.
 
+## Docker Desktop 2375 Diagnostic Exception
+
+The Docker Desktop setting `Expose daemon on tcp://localhost:2375 without TLS`
+must remain off for normal operator handoff and package smoke. Do not make it an
+operator prerequisite.
+
+Maintainers may enable it only temporarily for developer diagnostics, release
+validation, or failure reproduction when sanitized Docker or Vector log evidence
+is required and the normal runtime status probes are insufficient. After the
+evidence is captured, turn the setting off again and record that it was returned
+off.
+
+Vector or Grafana `attention` is a non-core observability caveat when Supabase
+API, DB, Edge, Upload Preview, and Audit evidence are normal. It should be
+recorded for support, but it must not trigger Docker cleanup/reset, Supabase
+reset/cleanup, LAN exposure, or a bypass of the upload approval gates.
+
 ## Log Locations
 
 Launcher logs are stored under:

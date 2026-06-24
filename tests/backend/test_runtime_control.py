@@ -529,7 +529,7 @@ def test_start_recovers_stopped_vector_non_core_attention(tmp_path: Path) -> Non
     )
     status.overall_status = RuntimeOverallStatus.attention
     status.reason_code = "non_core_runtime_attention"
-    status.reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+    status.reason_text = "Core runtime is reachable. Grafana or Vector needs attention as a non-core observability caveat."
     status.vector = RuntimeProbeStatus(
         name="Vector",
         status=RuntimeServiceStatus.stopped,
@@ -609,7 +609,7 @@ def test_start_times_out_when_started_vector_stays_unhealthy(tmp_path: Path, mon
     )
     status.overall_status = RuntimeOverallStatus.attention
     status.reason_code = "non_core_runtime_attention"
-    status.reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+    status.reason_text = "Core runtime is reachable. Grafana or Vector needs attention as a non-core observability caveat."
     status.vector = RuntimeProbeStatus(
         name="Vector",
         status=RuntimeServiceStatus.stopped,
@@ -636,7 +636,7 @@ def test_start_times_out_when_started_vector_stays_unhealthy(tmp_path: Path, mon
     )
     unhealthy_status.overall_status = RuntimeOverallStatus.attention
     unhealthy_status.reason_code = "non_core_runtime_attention"
-    unhealthy_status.reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+    unhealthy_status.reason_text = "Core runtime is reachable. Grafana or Vector needs attention as a non-core observability caveat."
     unhealthy_status.vector = RuntimeProbeStatus(
         name="Vector",
         status=RuntimeServiceStatus.unhealthy,

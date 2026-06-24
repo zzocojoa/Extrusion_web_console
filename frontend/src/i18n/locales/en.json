@@ -214,9 +214,12 @@
       "stoppingActive": "Supabase stop is in progress.",
       "alreadyReady": "Local Supabase is already ready.",
       "alreadyStopped": "Local Supabase containers are already stopped.",
-      "nonCoreAttention": "Core runtime is already ready. Review Grafana or Vector attention separately.",
+      "nonCoreAttention": "Core runtime is already ready. Grafana or Vector attention is a non-core observability caveat.",
       "requiredContainerMissing": "Required containers are missing. v1 does not create a new stack.",
       "dockerUnavailable": "Docker is unavailable."
+    },
+    "observability": {
+      "vectorCaveat": "{{detail}} Non-core observability caveat only; core upload is not blocked when API, DB, Edge, Preview, and Audit are normal."
     },
     "stateContext": {
       "detail": "{{contextClass}} / {{storageStatus}}"
@@ -238,7 +241,7 @@
     "reason": {
       "ready": "Local Supabase core runtime is ready.",
       "core_runtime_unreachable": "Local Supabase API, DB, Studio, or Edge is stopped or unreachable. This is a blocked local Supabase core runtime, not a Web Console backend failure.",
-      "non_core_runtime_attention": "Core runtime is ready. Non-core Grafana or Vector needs attention.",
+      "non_core_runtime_attention": "Core runtime is ready. Grafana or Vector attention is a non-core observability caveat.",
       "docker_unreachable": "Docker is not reachable from the backend process.",
       "edge_probe_timeout": "Edge route probe timed out.",
       "required_container_missing": "Required runtime containers are missing."
