@@ -129,8 +129,14 @@ export function RuntimeCheckPanel({
               <tr className={`row--${row.tone}`} key={row.id}>
                 <td>{row.label}</td>
                 <td><StatusBadge tone={row.tone} /></td>
-                <td className="endpoint truncate">
-                  {row.href ? <a href={row.href} target="_blank" rel="noreferrer">{row.detail}</a> : row.detail}
+                <td className="endpoint runtime-detail-cell" title={row.detail}>
+                  {row.href ? (
+                    <a className="runtime-detail-cell__content" href={row.href} target="_blank" rel="noreferrer">
+                      {row.detail}
+                    </a>
+                  ) : (
+                    <span className="runtime-detail-cell__content">{row.detail}</span>
+                  )}
                 </td>
                 <td><time className="timestamp" dateTime={row.lastCheckedAt}>{formatKstTime(row.lastCheckedAt, i18n.language)}</time></td>
               </tr>
@@ -180,7 +186,7 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
       id: "grafana",
       label: t("runtime.services.grafana"),
       tone: toneForObservabilityService(runtimeStatus.grafana.status),
-      detail: runtimeStatus.grafana.url ?? runtimeServiceDetail(runtimeStatus.grafana, t),
+      detail: observabilityRuntimeDetail(runtimeStatus.grafana, runtimeStatus, t),
       href: runtimeStatus.grafana.url ?? undefined,
       lastCheckedAt: checkedAt,
     },
@@ -188,7 +194,7 @@ function runtimeRows(runtimeStatus: RuntimeStatusResponse, t: Translate): Runtim
       id: "vector",
       label: t("runtime.services.vector"),
       tone: toneForObservabilityService(runtimeStatus.vector.status),
-      detail: vectorRuntimeDetail(runtimeStatus.vector, t),
+      detail: observabilityRuntimeDetail(runtimeStatus.vector, runtimeStatus, t),
       lastCheckedAt: checkedAt,
     },
     {
@@ -256,9 +262,20 @@ function containerDetail(containers: RuntimeStatusResponse["containers"], t: Tra
     : t("runtime.containers.detail", { running, total: containers.length });
 }
 
-function vectorRuntimeDetail(vector: RuntimeStatusResponse["vector"], t: Translate): string {
-  const detail = runtimeServiceDetail(vector, t);
-  if (vector.status === "ready") return detail;
+type ObservabilityRuntimeProbe = RuntimeStatusResponse["grafana"] | RuntimeStatusResponse["vector"];
+
+function coreRuntimeReady(runtimeStatus: RuntimeStatusResponse): boolean {
+  return (
+    runtimeStatus.api.status === "ready"
+    && runtimeStatus.db.status === "ready"
+    && runtimeStatus.studio.status === "ready"
+    && runtimeStatus.edgeRuntime.status === "ready"
+  );
+}
+
+function observabilityRuntimeDetail(service: ObservabilityRuntimeProbe, runtimeStatus: RuntimeStatusResponse, t: Translate): string {
+  const detail = runtimeServiceDetail(service, t);
+  if (service.status === "ready" || !coreRuntimeReady(runtimeStatus)) return detail;
   return t("runtime.observability.vectorCaveat", { detail });
 }
 

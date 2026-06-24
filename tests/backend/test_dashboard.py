@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.dashboard import (
+    NON_CORE_OBSERVABILITY_CAVEAT,
     get_dashboard_audit_repository,
     get_dashboard_runtime_status,
     get_dashboard_upload_repository,
@@ -215,9 +216,13 @@ def test_dashboard_keeps_grafana_failure_as_non_core_caveat(tmp_path: Path) -> N
     data = response.json()
     runtime_chip = next(item for item in data["topbarChips"] if item["id"] == "supabase")
     grafana_chip = next(item for item in data["topbarChips"] if item["id"] == "grafana")
+    grafana_matrix = next(item for item in data["statusMatrix"] if item["id"] == "grafana")
+    grafana_row = next(item for item in data["runtimeChecks"] if item["id"] == "grafana")
     runtime_warning = next(item for item in data["warningQueue"] if item["id"] == "supabase_unreachable")
     assert runtime_chip["tone"] == "ready"
     assert grafana_chip["tone"] == "attention"
+    assert grafana_matrix["detail"] == f"HTTP 200 {NON_CORE_OBSERVABILITY_CAVEAT}"
+    assert grafana_row["detail"] == f"HTTP 200 {NON_CORE_OBSERVABILITY_CAVEAT}"
     assert runtime_warning["tone"] == "ready"
     assert runtime_warning["count"] == 0
 
@@ -242,7 +247,7 @@ def test_dashboard_exposes_vector_as_non_core_observability_check(tmp_path: Path
     assert runtime_chip["tone"] == "ready"
     assert runtime_chip["value"] == "Core runtime OK"
     assert vector_row["tone"] == "attention"
-    assert vector_row["detail"] == "Vector container status class is stopped."
+    assert vector_row["detail"] == f"Vector container status class is stopped. {NON_CORE_OBSERVABILITY_CAVEAT}"
     assert runtime_warning["tone"] == "ready"
     assert runtime_warning["count"] == 0
 

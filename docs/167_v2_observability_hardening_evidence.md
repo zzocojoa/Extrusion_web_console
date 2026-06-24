@@ -58,10 +58,12 @@ smoke. It is a developer/maintainer diagnostic exception only.
 
 Temporary enablement is allowed only for:
 
-- developer diagnostics;
-- release validation;
+- a bounded developer or maintainer diagnostic; or
 - failure reproduction when sanitized Docker or Vector log evidence is needed
   and cannot be collected through the normal status-class probes.
+
+Normal package validation, routine release checks, and operator handoff must keep
+the setting off.
 
 After the diagnostic evidence is captured, return the setting to off and record
 that it was returned off in the validation note. Do not treat port `2375` as a

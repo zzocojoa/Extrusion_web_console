@@ -330,11 +330,12 @@ The Docker Desktop setting `Expose daemon on tcp://localhost:2375 without TLS`
 must remain off for normal operator handoff and package smoke. Do not make it an
 operator prerequisite.
 
-Maintainers may enable it only temporarily for developer diagnostics, release
-validation, or failure reproduction when sanitized Docker or Vector log evidence
-is required and the normal runtime status probes are insufficient. After the
-evidence is captured, turn the setting off again and record that it was returned
-off.
+Maintainers may enable it only temporarily for a bounded developer/maintainer
+diagnostic or failure reproduction when sanitized Docker or Vector log evidence
+is required and the normal runtime status probes are insufficient. Normal
+package validation, routine release checks, and operator handoff must keep the
+setting off. After the evidence is captured, turn the setting off again and
+record that it was returned off.
 
 Vector or Grafana `attention` is a non-core observability caveat when Supabase
 API, DB, Edge, Upload Preview, and Audit evidence are normal. It should be
