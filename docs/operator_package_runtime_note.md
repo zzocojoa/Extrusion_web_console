@@ -50,3 +50,15 @@ content.
 
 Grafana remains a status/link target only. The package does not embed Grafana in
 an iframe and does not widen web-console LAN access.
+
+Docker Desktop's `Expose daemon on tcp://localhost:2375 without TLS` setting is
+not an operator package requirement and should stay off. A maintainer may enable
+it only temporarily for a bounded diagnostic or failure reproduction when
+sanitized Docker/Vector evidence is needed and normal status probes are
+insufficient, then must turn it off again. Normal package validation, routine
+release checks, and operator handoff keep it off.
+
+Vector or Grafana attention is a non-core observability caveat when Supabase
+API, DB, Edge, Upload Preview, and Audit evidence are normal. It does not
+approve Docker cleanup/reset, Supabase reset/cleanup, LAN exposure, or upload
+gate bypass.

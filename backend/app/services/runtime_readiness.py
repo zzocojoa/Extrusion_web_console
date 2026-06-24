@@ -119,7 +119,10 @@ class RuntimeReadinessService:
         elif grafana.status != RuntimeServiceStatus.ready or vector.status != RuntimeServiceStatus.ready:
             overall = RuntimeOverallStatus.attention
             reason_code = "non_core_runtime_attention"
-            reason_text = "Core runtime is reachable, but non-core Grafana or Vector needs attention."
+            reason_text = (
+                "Core runtime is reachable. Grafana or Vector needs attention "
+                "as a non-core observability caveat."
+            )
         else:
             overall = RuntimeOverallStatus.ready
             reason_code = "runtime_ready"

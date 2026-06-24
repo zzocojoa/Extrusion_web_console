@@ -214,9 +214,12 @@
       "stoppingActive": "Supabase 중지 작업이 진행 중입니다.",
       "alreadyReady": "Local Supabase가 이미 준비되었습니다.",
       "alreadyStopped": "Local Supabase 컨테이너가 이미 중지되었습니다.",
-      "nonCoreAttention": "Core runtime은 이미 준비되었습니다. Grafana 또는 Vector 확인은 별도로 진행하세요.",
+      "nonCoreAttention": "Core runtime은 이미 준비되었습니다. Grafana 또는 Vector 확인은 non-core 관측 주의입니다.",
       "requiredContainerMissing": "필수 컨테이너가 없습니다. v1은 새 스택을 생성하지 않습니다.",
       "dockerUnavailable": "Docker를 사용할 수 없습니다."
+    },
+    "observability": {
+      "vectorCaveat": "{{detail}} non-core 관측 주의입니다. API, DB, Edge, Preview, Audit이 정상일 때 Core 업로드는 이 경고로 차단되지 않습니다."
     },
     "stateContext": {
       "detail": "{{contextClass}} / {{storageStatus}}"
@@ -238,7 +241,7 @@
     "reason": {
       "ready": "Local Supabase core runtime이 준비되었습니다.",
       "core_runtime_unreachable": "Local Supabase API, DB, Studio, Edge 중 하나가 중지되었거나 응답하지 않습니다. Web Console 백엔드 고장이 아니라 로컬 Supabase core runtime 차단 상태입니다.",
-      "non_core_runtime_attention": "Core runtime은 준비되었습니다. non-core Grafana 또는 Vector 확인이 필요합니다.",
+      "non_core_runtime_attention": "Core runtime은 준비되었습니다. Grafana 또는 Vector 확인은 non-core 관측 주의입니다.",
       "docker_unreachable": "백엔드 프로세스에서 Docker에 연결할 수 없습니다.",
       "edge_probe_timeout": "Edge route probe가 시간 초과되었습니다.",
       "required_container_missing": "필수 런타임 컨테이너가 없습니다."

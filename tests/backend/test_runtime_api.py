@@ -65,7 +65,7 @@ def test_runtime_status_serializes_vector_container_as_non_required(tmp_path: Pa
             return RuntimeStatusResponse(
                 overall_status=RuntimeOverallStatus.attention,
                 reason_code="non_core_runtime_attention",
-                reason_text="Core runtime is reachable, but non-core Grafana or Vector needs attention.",
+                reason_text="Core runtime is reachable. Grafana or Vector needs attention as a non-core observability caveat.",
                 checked_at=checked_at,
                 project_path=str(tmp_path / "runtime"),
                 project_id="Extrusion_web_console",

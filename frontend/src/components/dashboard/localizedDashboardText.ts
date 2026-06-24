@@ -250,6 +250,7 @@ export function localizeDiagnosticMessage(message: string | null | undefined, t:
     "Runtime gate is not blocking Dashboard review.": "dashboard.warnings.rows.supabase_unreachable.empty",
     "Docker is not reachable from the backend process.": "runtime.reason.docker_unreachable",
     "Supabase API, DB, Studio, or Edge is not reachable.": "runtime.reason.core_runtime_unreachable",
+    "Core runtime is reachable. Grafana or Vector needs attention as a non-core observability caveat.": "runtime.reason.non_core_runtime_attention",
     "Edge route probe timed out.": "runtime.reason.edge_probe_timeout",
   };
   const key = simpleMappings[message];

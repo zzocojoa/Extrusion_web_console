@@ -28,6 +28,10 @@ from backend.app.services.runtime_readiness import RuntimeReadinessService
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
+NON_CORE_OBSERVABILITY_CAVEAT = (
+    "Non-core observability caveat only; core upload is not blocked when API, DB, Edge, Preview, and Audit are normal."
+)
+
 
 def get_dashboard_upload_repository(settings: Settings = Depends(get_settings)) -> UploadJobRepository | None:
     if not Path(settings.state_db_path).exists():
@@ -272,12 +276,7 @@ def _runtime_summary(runtime_status: RuntimeStatusResponse | None, settings: Set
             "grafana_value": "unknown",
             "grafana_detail": settings.grafana_url,
         }
-    core_ready = (
-        runtime_status.api.status == RuntimeServiceStatus.ready
-        and runtime_status.db.status == RuntimeServiceStatus.ready
-        and runtime_status.studio.status == RuntimeServiceStatus.ready
-        and runtime_status.edge_runtime.status == RuntimeServiceStatus.ready
-    )
+    core_ready = _core_runtime_ready(runtime_status)
     supabase_tone = "ready" if core_ready else "blocked"
     storage_ready = runtime_status.docker.status == RuntimeServiceStatus.ready and runtime_status.wsl.status == RuntimeServiceStatus.ready
     grafana_tone = _observability_tone(runtime_status.grafana.status)
@@ -290,8 +289,23 @@ def _runtime_summary(runtime_status: RuntimeStatusResponse | None, settings: Set
         "storage_detail": f"WSL {runtime_status.wsl.status.value}, CLI {runtime_status.supabase_cli.status.value}.",
         "grafana_tone": grafana_tone,
         "grafana_value": runtime_status.grafana.status.value,
-        "grafana_detail": runtime_status.grafana.detail,
+        "grafana_detail": _non_core_observability_detail(runtime_status.grafana.detail, runtime_status.grafana.status, core_ready),
     }
+
+
+def _core_runtime_ready(runtime_status: RuntimeStatusResponse) -> bool:
+    return (
+        runtime_status.api.status == RuntimeServiceStatus.ready
+        and runtime_status.db.status == RuntimeServiceStatus.ready
+        and runtime_status.studio.status == RuntimeServiceStatus.ready
+        and runtime_status.edge_runtime.status == RuntimeServiceStatus.ready
+    )
+
+
+def _non_core_observability_detail(detail: str, status: RuntimeServiceStatus, core_ready: bool) -> str:
+    if core_ready and status != RuntimeServiceStatus.ready:
+        return f"{detail} {NON_CORE_OBSERVABILITY_CAVEAT}"
+    return detail
 
 
 def _runtime_tone(status: RuntimeServiceStatus) -> str:
@@ -330,6 +344,7 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
             RuntimeCheckRow(id="state_context", label="State Context", tone="ready" if state_context.storage_status == "present" else "muted", detail=_state_context_detail(state_context), last_checked_at=now),
         ]
     checked_at = runtime_status.checked_at.isoformat()
+    core_ready = _core_runtime_ready(runtime_status)
     return [
         RuntimeCheckRow(
             id="supabase",
@@ -356,7 +371,7 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
             id="grafana",
             label="Grafana",
             tone=_observability_tone(runtime_status.grafana.status),
-            detail=runtime_status.grafana.detail,
+            detail=_non_core_observability_detail(runtime_status.grafana.detail, runtime_status.grafana.status, core_ready),
             last_checked_at=checked_at,
             href=settings.grafana_url,
         ),
@@ -364,7 +379,7 @@ def _runtime_checks(runtime_status: RuntimeStatusResponse | None, settings: Sett
             id="vector",
             label="Vector",
             tone=_observability_tone(runtime_status.vector.status),
-            detail=runtime_status.vector.detail,
+            detail=_non_core_observability_detail(runtime_status.vector.detail, runtime_status.vector.status, core_ready),
             last_checked_at=checked_at,
         ),
         RuntimeCheckRow(
