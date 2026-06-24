@@ -165,12 +165,6 @@
       "developmentUploadRunningDetail": "Development upload scenario is running. This is not an operator job."
     }
   },
-  "pageSubtitle": {
-    "dashboard": "Upload, DB, and runtime status",
-    "upload": "Upload preview and job status",
-    "logs": "Job logs and audit history",
-    "settings": "Local runtime and upload configuration"
-  },
   "placeholder": {
     "upload": "The Upload screen is being prepared. Check the Dashboard for current status.",
     "logs": "The Logs screen is being prepared. Check the Dashboard for recent failures and audit summary.",

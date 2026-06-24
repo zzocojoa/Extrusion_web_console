@@ -72,6 +72,7 @@ const previewRangeModes: PreviewRangeMode[] = [
   "folder_all",
   "custom",
 ];
+export type UploadPageTab = "preview" | "job";
 
 const statusTone: Record<PreviewItemStatus, StatusTone> = {
   target: "ready",
@@ -365,10 +366,14 @@ function writeStoredPreviewRangeMode(rangeMode: PreviewRangeMode) {
   }
 }
 
-export function UploadPage() {
+interface UploadPageProps {
+  requestedTab?: UploadPageTab;
+}
+
+export function UploadPage({ requestedTab }: UploadPageProps) {
   const { i18n, t } = useTranslation();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"preview" | "job">("preview");
+  const [activeTab, setActiveTab] = useState<UploadPageTab>(() => requestedTab ?? "preview");
   const [rangeMode, setRangeMode] = useState<PreviewRangeMode>(() => readStoredPreviewRangeMode());
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
@@ -391,6 +396,10 @@ export function UploadPage() {
   useEffect(() => {
     writeStoredPreviewRangeMode(rangeMode);
   }, [rangeMode]);
+
+  useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   const queryParams: PreviewQueryParams = useMemo(
     () => ({

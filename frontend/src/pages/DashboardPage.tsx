@@ -9,10 +9,15 @@ import { RuntimeCheckPanel } from "../components/dashboard/RuntimeCheckPanel";
 import { SafetySummaryBanner } from "../components/dashboard/SafetySummaryBanner";
 import { WarningQueuePanel } from "../components/dashboard/WarningQueuePanel";
 import { useDashboardQuery } from "./dashboard/dashboardQuery";
+import type { DashboardOverallAction } from "./dashboard/dashboardTypes";
 
 const useApiRuntime = import.meta.env.VITE_API_MODE === "api";
 
-export function DashboardPage() {
+interface DashboardPageProps {
+  onSafetyAction?: (action: DashboardOverallAction) => void;
+}
+
+export function DashboardPage({ onSafetyAction }: DashboardPageProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useDashboardQuery();
@@ -53,7 +58,7 @@ export function DashboardPage() {
 
   return (
     <main className="dashboard-page" aria-labelledby="dashboard-title">
-      <SafetySummaryBanner overall={data.overall} />
+      <SafetySummaryBanner overall={data.overall} onAction={onSafetyAction} />
       <DashboardStatusMatrix items={data.statusMatrix} stateContext={data.stateContext} />
       <RecentJobsPanel jobs={data.recentJobs} currentJob={data.currentJob} stateContext={data.stateContext} />
       <section className="dashboard-lower-grid" aria-label={t("a11y.dashboardDetailSummaries")}>

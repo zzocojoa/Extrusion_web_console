@@ -49,6 +49,8 @@ export interface DashboardOverall {
     | null;
 }
 
+export type DashboardOverallAction = NonNullable<DashboardOverall["action"]>;
+
 export interface TopbarStatusChip {
   id: "supabase" | "upload" | "grafana" | "state_store";
   label: string;
