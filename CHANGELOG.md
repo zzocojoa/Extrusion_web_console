@@ -10,6 +10,10 @@ All notable changes to Extrusion Web Console are documented here.
   Dashboard status matrix, Upload action buttons, and compact table pagination
   at 390-1440px widths without changing backend contracts or operator
   mutations.
+- Wired the Dashboard safety summary action button to navigation-only targets:
+  Upload Preview, Upload Job, or Logs, and removed the remaining unused page
+  subtitle strings without changing Upload Preview, Start Upload, Retry Failed,
+  Delete, Settings save, or runtime mutation behavior.
 - Added backend-served scroll-position screenshot QA for Dashboard, Upload
   Preview, Upload Job, Logs Job, Audit Logs, and Settings at 390-1440px widths;
   removed the topbar page subtitles and tightened Upload Job metric cards so

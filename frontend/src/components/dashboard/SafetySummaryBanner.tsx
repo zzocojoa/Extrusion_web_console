@@ -1,7 +1,11 @@
 import { Activity, CheckCircle, OctagonAlert, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { DashboardOverall, OverallSystemState } from "../../pages/dashboard/dashboardTypes";
+import type {
+  DashboardOverall,
+  DashboardOverallAction,
+  OverallSystemState,
+} from "../../pages/dashboard/dashboardTypes";
 import { StatusBadge } from "../status/StatusBadge";
 import { dashboardOverallMessage, dashboardOverallTitle, type Translate } from "./localizedDashboardText";
 
@@ -14,9 +18,10 @@ const overallIcon: Record<OverallSystemState, typeof CheckCircle> = {
 
 interface SafetySummaryBannerProps {
   overall: DashboardOverall;
+  onAction?: (action: DashboardOverallAction) => void;
 }
 
-export function SafetySummaryBanner({ overall }: SafetySummaryBannerProps) {
+export function SafetySummaryBanner({ overall, onAction }: SafetySummaryBannerProps) {
   const { t } = useTranslation();
   const translate: Translate = (key, options) => String(t(key, options));
   const Icon = overallIcon[overall.state];
@@ -44,7 +49,13 @@ export function SafetySummaryBanner({ overall }: SafetySummaryBannerProps) {
         <p>{dashboardOverallMessage(overall, translate)}</p>
       </div>
       {actionLabel ? (
-        <button className="button button--secondary" type="button">
+        <button
+          className="button button--secondary"
+          type="button"
+          onClick={() => {
+            if (overall.action) onAction?.(overall.action);
+          }}
+        >
           {actionLabel}
         </button>
       ) : null}
