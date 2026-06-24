@@ -428,6 +428,10 @@
       "today": "Today",
       "yesterday": "Yesterday",
       "last2Days": "Last 2 days",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "folderAll": "Folder all",
+      "folderAllNote": "Preview-only folder scan. Checks top-level CSV candidates in the configured source folder; Start Upload still needs separate approval.",
       "custom": "Custom"
     },
     "filters": {

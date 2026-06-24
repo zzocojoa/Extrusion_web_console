@@ -6,6 +6,12 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Added Upload Preview range options for Last 7 days, Last 30 days, and
+  Folder All. The new modes keep the backend/frontend range contract
+  fail-closed through approval scope, keep Folder All as Preview-only
+  top-level CSV candidate selection, and do not change Start Upload, Retry
+  Failed, Delete, Settings save, Supabase cleanup, Docker cleanup, LAN, deploy,
+  or operational DB mutation behavior.
 - Updated the operator launcher shortcut lifecycle: installed shortcuts now use
   a single hidden PowerShell tray supervisor entry with `Open` and `Exit`.
   `Exit` reuses safe stop verification for `service=extrusion-web-console-api`,

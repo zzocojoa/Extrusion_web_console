@@ -230,8 +230,9 @@ Response `202`:
 
 Validation rules:
 
-- `rangeMode`: `today | yesterday | last_2_days | custom`.
+- `rangeMode`: `today | yesterday | last_2_days | last_7_days | last_30_days | folder_all | custom`.
 - `custom` requires `startDate` and `endDate`.
+- `folder_all` requires no dates and expands only the Preview candidate scan.
 - `sources` initially supports `plc`; `temperature` is allowed only when configured and implemented.
 - Paths are resolved from backend config. The request must not accept arbitrary filesystem paths.
 - `maxRunSeconds`, `maxFileSeconds`, `maxFiles`, and `chunkRows` are clamped to backend limits.
@@ -338,6 +339,9 @@ class PreviewRangeMode(str, Enum):
     today = "today"
     yesterday = "yesterday"
     last_2_days = "last_2_days"
+    last_7_days = "last_7_days"
+    last_30_days = "last_30_days"
+    folder_all = "folder_all"
     custom = "custom"
 
 class PreviewSource(str, Enum):
@@ -545,9 +549,13 @@ Date range decision:
 - `today`: KST today only.
 - `yesterday`: KST yesterday only.
 - `last_2_days`: KST yesterday through today inclusive.
+- `last_7_days`: KST current day inclusive, from current day minus 6 through current day.
+- `last_30_days`: KST current day inclusive, from current day minus 29 through current day.
+- `folder_all`: configured source folder top-level CSV candidates after file-date metadata parses; no date-window exclusion.
 - `custom`: inclusive KST start/end dates.
 
 This intentionally avoids the legacy ambiguity where a `today` mode could include all dates up to today.
+`folder_all` is a Preview-only candidate expansion. It is non-recursive and still uses configured source folders only, stable lag, `maxFiles`, file lock checks, timeout budgets, and file-date metadata parsing. It does not approve Start Upload, Retry Failed, Delete, or any operational DB mutation.
 
 ## CSV Sample And Full Scan Rules
 

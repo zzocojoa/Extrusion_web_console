@@ -14,6 +14,9 @@ class PreviewRangeMode(str, Enum):
     today = "today"
     yesterday = "yesterday"
     last_2_days = "last_2_days"
+    last_7_days = "last_7_days"
+    last_30_days = "last_30_days"
+    folder_all = "folder_all"
     custom = "custom"
 
 

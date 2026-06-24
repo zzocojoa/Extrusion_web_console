@@ -248,6 +248,47 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_large_date_r
     assert options["maxFileSeconds"] == 300
 
 
+def test_upload_preview_create_auto_applies_large_source_budget_for_folder_all(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "folder_all",
+                "sources": ["plc"],
+                "options": {"profile": "default"},
+                "approvalScope": approval_scope(
+                    range_mode="folder_all",
+                    applied_profile="large_source_operational",
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    row = repository.get_run(response.json()["previewRunId"])
+    assert row is not None
+    assert row["range_mode"] == "folder_all"
+    assert row["start_date"] is None
+    assert row["end_date"] is None
+    options = json.loads(row["options_json"])
+    assert options["profile"] == "large_source_operational"
+    assert options["maxRunSeconds"] == 900
+    assert options["maxFileSeconds"] == 300
+
+
 def test_upload_preview_create_keeps_default_budget_for_small_local_source(
     tmp_path,
     monkeypatch,
@@ -281,6 +322,45 @@ def test_upload_preview_create_keeps_default_budget_for_small_local_source(
     assert options["profile"] == "default"
     assert options["maxRunSeconds"] == 120
     assert options["maxFileSeconds"] == 30
+
+
+def test_upload_preview_create_rejects_new_range_mode_scope_mismatch_before_run_creation(
+    tmp_path,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "folder_all",
+                "sources": ["plc"],
+                "options": {"profile": "default"},
+                "approvalScope": approval_scope(
+                    range_mode="last_30_days",
+                    applied_profile="large_source_operational",
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["reason"] == "preview_approval_scope_mismatch"
+    assert detail["mismatchFields"] == ["rangeMode"]
+    assert repository.get_latest_run() is None
+    row = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
+    params = decode_params_json(row["params_json_redacted"])
+    assert row["result"] == "blocked"
+    assert params["approvalScope"]["expected"]["rangeMode"] == "last_30_days"
+    assert params["approvalScope"]["actual"]["rangeMode"] == "folder_all"
 
 
 def test_upload_preview_create_rejects_missing_approval_scope_before_run_creation(tmp_path) -> None:

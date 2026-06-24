@@ -41,7 +41,12 @@ executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-preview"
 
 
 def is_large_preview_range(request: PreviewCreateRequest) -> bool:
-    if request.range_mode == PreviewRangeMode.last_2_days:
+    if request.range_mode in {
+        PreviewRangeMode.last_2_days,
+        PreviewRangeMode.last_7_days,
+        PreviewRangeMode.last_30_days,
+        PreviewRangeMode.folder_all,
+    }:
         return True
     if request.range_mode == PreviewRangeMode.custom and request.start_date and request.end_date:
         return (request.end_date - request.start_date).days >= 1

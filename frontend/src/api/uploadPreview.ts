@@ -1,6 +1,13 @@
 import { apiFetch } from "./client";
 
-export type PreviewRangeMode = "today" | "yesterday" | "last_2_days" | "custom";
+export type PreviewRangeMode =
+  | "today"
+  | "yesterday"
+  | "last_2_days"
+  | "last_7_days"
+  | "last_30_days"
+  | "folder_all"
+  | "custom";
 export type PreviewSource = "plc" | "temperature";
 export type PreviewProfile =
   | "default"
