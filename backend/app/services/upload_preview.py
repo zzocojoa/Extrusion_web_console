@@ -138,7 +138,7 @@ def parse_temperature_file_date(filename: str) -> date | None:
         return None
 
 
-def date_window(request: PreviewCreateRequest, now: datetime | None = None) -> tuple[date, date]:
+def date_window(request: PreviewCreateRequest, now: datetime | None = None) -> tuple[date | None, date | None]:
     current = (now or datetime.now(KST)).astimezone(KST).date()
     if request.range_mode.value == "today":
         return current, current
@@ -147,6 +147,12 @@ def date_window(request: PreviewCreateRequest, now: datetime | None = None) -> t
         return previous, previous
     if request.range_mode.value == "last_2_days":
         return current - timedelta(days=1), current
+    if request.range_mode.value == "last_7_days":
+        return current - timedelta(days=6), current
+    if request.range_mode.value == "last_30_days":
+        return current - timedelta(days=29), current
+    if request.range_mode.value == "folder_all":
+        return None, None
     if request.start_date is None or request.end_date is None:
         raise ValueError("custom range requires startDate and endDate")
     return request.start_date, request.end_date
@@ -247,7 +253,11 @@ class CandidateScanner:
                         stat,
                     )
                     continue
-                if file_date < start_date or file_date > end_date:
+                if (
+                    start_date is not None
+                    and end_date is not None
+                    and (file_date < start_date or file_date > end_date)
+                ):
                     self._append_issue(
                         local_issues,
                         request.options.max_files,

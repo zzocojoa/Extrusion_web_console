@@ -396,6 +396,10 @@
       "today": "오늘",
       "yesterday": "어제",
       "last2Days": "최근 2일",
+      "last7Days": "최근 7일",
+      "last30Days": "최근 30일",
+      "folderAll": "폴더 전체",
+      "folderAllNote": "미리보기 전용 폴더 검사입니다. 설정된 원본 폴더의 최상위 CSV 후보만 확인하며, 업로드 시작은 별도 승인이 필요합니다.",
       "custom": "직접 지정"
     },
     "filters": {

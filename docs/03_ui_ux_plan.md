@@ -146,8 +146,9 @@ Upload
 
 Header controls:
 
-- Range selector: Today, Yesterday, Last 2 Days, Custom.
+- Range selector: Today, Yesterday, Last 2 Days, Last 7 Days, Last 30 Days, Folder All, Custom.
 - Custom start/end date fields when Custom is selected.
+- Folder All means a Preview-only scan of configured source folder top-level CSV candidates. It is not recursive and does not approve Start Upload.
 - File source summary: PLC dir, temp dir if enabled later.
 - Buttons: Run Preview, Start Upload.
 - Current scaffold: Start Upload is visible but disabled because real upload job execution is not implemented yet.

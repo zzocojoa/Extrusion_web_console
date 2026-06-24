@@ -119,6 +119,23 @@ function previewAutoReasonLabelKey(reason?: string | null) {
   }
 }
 
+function previewRangeLabelKey(rangeMode: PreviewRangeMode) {
+  switch (rangeMode) {
+    case "last_2_days":
+      return "upload.range.last2Days";
+    case "last_7_days":
+      return "upload.range.last7Days";
+    case "last_30_days":
+      return "upload.range.last30Days";
+    case "folder_all":
+      return "upload.range.folderAll";
+    case "today":
+    case "yesterday":
+    case "custom":
+      return `upload.range.${rangeMode}`;
+  }
+}
+
 function configValue(config: ConfigResponse | undefined, key: string): unknown {
   return config?.items.find((item) => item.key === key)?.value ?? null;
 }
@@ -967,6 +984,9 @@ function PreviewTab(props: PreviewTabProps) {
               <option value="today">{t("upload.range.today")}</option>
               <option value="yesterday">{t("upload.range.yesterday")}</option>
               <option value="last_2_days">{t("upload.range.last2Days")}</option>
+              <option value="last_7_days">{t("upload.range.last7Days")}</option>
+              <option value="last_30_days">{t("upload.range.last30Days")}</option>
+              <option value="folder_all">{t("upload.range.folderAll")}</option>
               <option value="custom">{t("upload.range.custom")}</option>
             </select>
           </label>
@@ -987,7 +1007,9 @@ function PreviewTab(props: PreviewTabProps) {
             <span>{t("upload.controls.source")}</span>
           </div>
           <div className="upload-preview__mode-note" role="status">
-            {t("upload.previewMode.largeSourceNote")}
+            {props.rangeMode === "folder_all"
+              ? t("upload.range.folderAllNote")
+              : t("upload.previewMode.largeSourceNote")}
           </div>
         </div>
         <div className="upload-preview__approval-scope" role="status">
@@ -996,9 +1018,7 @@ function PreviewTab(props: PreviewTabProps) {
             {props.approvalScopeReady
               ? t("upload.previewApproval.detail", {
                   sourceClass: props.approvalScope.expectedSourceClasses.plc ?? "missing",
-                  range: t(
-                    `upload.range.${props.approvalScope.expectedRangeMode === "last_2_days" ? "last2Days" : props.approvalScope.expectedRangeMode}`,
-                  ),
+                  range: t(previewRangeLabelKey(props.approvalScope.expectedRangeMode)),
                   profile: t(
                     previewProfileLabelKey(props.approvalScope.expectedAppliedProfile) ?? "upload.previewMode.largeSource",
                   ),
@@ -1156,7 +1176,7 @@ function DateScopedDeleteGatePanel({
           startDate: startDate || t("upload.delete.dateScoped.dateNotSet"),
           endDate: endDate || t("upload.delete.dateScoped.dateNotSet"),
         })
-      : t(`upload.range.${rangeMode === "last_2_days" ? "last2Days" : rangeMode}`);
+      : t(previewRangeLabelKey(rangeMode));
   const requiredRole = gate.requiredRole ?? "maintainer";
 
   return (

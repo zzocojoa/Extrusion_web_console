@@ -54,6 +54,22 @@ def test_preview_create_request_accepts_camel_case_api_payload_and_defaults() ->
     assert "forceFullScan" in api_payload["options"]
 
 
+@pytest.mark.parametrize("range_mode", ["last_7_days", "last_30_days", "folder_all"])
+def test_preview_create_request_accepts_extended_range_modes_without_custom_dates(
+    range_mode: str,
+) -> None:
+    schema = _schema_module()
+
+    request = schema.PreviewCreateRequest.model_validate(
+        {"rangeMode": range_mode, "sources": ["plc"]}
+    )
+
+    assert _enum_value(request.range_mode) == range_mode
+    assert request.start_date is None
+    assert request.end_date is None
+    assert request.model_dump(by_alias=True)["rangeMode"] == range_mode
+
+
 def test_preview_default_profile_keeps_short_interactive_timeout_budget() -> None:
     schema = _schema_module()
 

@@ -87,6 +87,15 @@ def test_date_window_modes_are_exact_kst_days() -> None:
     last_two = PreviewCreateRequest.model_validate({"rangeMode": "last_2_days", "sources": ["plc"]})
     assert date_window(last_two, now=now) == (now.date() - timedelta(days=1), now.date())
 
+    last_seven = PreviewCreateRequest.model_validate({"rangeMode": "last_7_days", "sources": ["plc"]})
+    assert date_window(last_seven, now=now) == (now.date() - timedelta(days=6), now.date())
+
+    last_thirty = PreviewCreateRequest.model_validate({"rangeMode": "last_30_days", "sources": ["plc"]})
+    assert date_window(last_thirty, now=now) == (now.date() - timedelta(days=29), now.date())
+
+    folder_all = PreviewCreateRequest.model_validate({"rangeMode": "folder_all", "sources": ["plc"]})
+    assert date_window(folder_all, now=now) == (None, None)
+
 
 def test_candidate_scanner_uses_configured_folder_and_no_legacy_state(tmp_path: Path) -> None:
     plc_dir = tmp_path / "plc"
@@ -119,6 +128,39 @@ def test_candidate_scanner_uses_configured_folder_and_no_legacy_state(tmp_path: 
         "Factory_Integrated_Log_20260601_090000.csv"
     ]
     assert {issue["reason_code"] for issue in issues} == {"outside_date_range"}
+
+
+def test_candidate_scanner_folder_all_keeps_file_date_rules_without_date_exclusion(
+    tmp_path: Path,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        ["Date,Time,Mold1", "2026-06-01,09:00:00,1"],
+    )
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20250101_090000.csv",
+        ["Date,Time,Mold1", "2025-01-01,09:00:00,1"],
+    )
+    write_csv(plc_dir / "no_date.csv", ["Date,Time,Mold1", "2026-06-01,09:00:00,1"])
+
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "folder_all",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    scanner = CandidateScanner(Settings(plc_data_dir=str(plc_dir)))
+
+    candidates, issues = scanner.scan(request)
+
+    assert {candidate.path.name for candidate in candidates} == {
+        "Factory_Integrated_Log_20260601_090000.csv",
+        "Factory_Integrated_Log_20250101_090000.csv",
+    }
+    assert {issue["reason_code"] for issue in issues} == {"file_date_missing"}
 
 
 def test_candidate_scanner_caps_excluded_rows_without_dropping_in_range_file(tmp_path: Path) -> None:
