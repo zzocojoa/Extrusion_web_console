@@ -61,7 +61,17 @@ import type { StatusTone } from "./dashboard/dashboardTypes";
 const API_MODE = import.meta.env.VITE_API_MODE === "api";
 const uploadPreviewColumnStorageKey = "ewc.ui.uploadPreview.columnWidths.v1";
 const uploadPreviewPageSizeStorageKey = "ewc.ui.uploadPreview.pageSize.v1";
+const uploadPreviewRangeModeStorageKey = "ewc.ui.uploadPreview.rangeMode.v1";
 const tablePageSizeOptions = [5, 15, 30, 60, 100];
+const previewRangeModes: PreviewRangeMode[] = [
+  "today",
+  "yesterday",
+  "last_2_days",
+  "last_7_days",
+  "last_30_days",
+  "folder_all",
+  "custom",
+];
 
 const statusTone: Record<PreviewItemStatus, StatusTone> = {
   target: "ready",
@@ -332,11 +342,34 @@ function mockRunId() {
   return `mock_${Date.now()}`;
 }
 
+function isPreviewRangeMode(value: string | null): value is PreviewRangeMode {
+  return value !== null && previewRangeModes.includes(value as PreviewRangeMode);
+}
+
+function readStoredPreviewRangeMode(): PreviewRangeMode {
+  if (typeof window === "undefined") return "today";
+  try {
+    const stored = window.localStorage.getItem(uploadPreviewRangeModeStorageKey);
+    return isPreviewRangeMode(stored) ? stored : "today";
+  } catch {
+    return "today";
+  }
+}
+
+function writeStoredPreviewRangeMode(rangeMode: PreviewRangeMode) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(uploadPreviewRangeModeStorageKey, rangeMode);
+  } catch {
+    // UI preference persistence must never block Upload Preview rendering.
+  }
+}
+
 export function UploadPage() {
   const { i18n, t } = useTranslation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"preview" | "job">("preview");
-  const [rangeMode, setRangeMode] = useState<PreviewRangeMode>("today");
+  const [rangeMode, setRangeMode] = useState<PreviewRangeMode>(() => readStoredPreviewRangeMode());
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [previewRunId, setPreviewRunId] = useState<string | null>(null);
@@ -354,6 +387,10 @@ export function UploadPage() {
   const [mockJobCancelled, setMockJobCancelled] = useState(false);
   const [sseEvents, setSseEvents] = useState<JobEvent[]>([]);
   const latestSeqRef = useRef(0);
+
+  useEffect(() => {
+    writeStoredPreviewRangeMode(rangeMode);
+  }, [rangeMode]);
 
   const queryParams: PreviewQueryParams = useMemo(
     () => ({
@@ -448,6 +485,7 @@ export function UploadPage() {
       currentPreview.run.summary.targetRows > 0 &&
       currentPreview.run.summary.risky === 0,
   );
+  const customRangeIncomplete = rangeMode === "custom" && (!startDate || !endDate);
   const latestDeleteJobQuery = useQuery({
     queryKey: ["upload-delete", "latest"],
     enabled: API_MODE,
@@ -777,7 +815,7 @@ export function UploadPage() {
           runPreviewDisabled={createMutation.isPending || Boolean(
             currentPreview?.run.status &&
               ["queued", "running", "cancelling"].includes(currentPreview.run.status),
-          ) || (API_MODE && (!configQuery.data || configQuery.isLoading))}
+          ) || customRangeIncomplete || (API_MODE && (!configQuery.data || configQuery.isLoading))}
           cancelling={cancelMutation.isPending}
           approvalScope={previewApprovalScope}
           approvalScopeReady={!API_MODE || Boolean(configQuery.data)}

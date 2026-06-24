@@ -113,6 +113,7 @@ state safely:
 | Preference | Suggested key | Value |
 | --- | --- | --- |
 | Sidebar collapsed | `ewc.ui.sidebarCollapsed.v1` | `"true"` / `"false"` |
+| Upload Preview range mode | `ewc.ui.uploadPreview.rangeMode.v1` | validated `PreviewRangeMode` enum string |
 | Upload Preview page size | `ewc.ui.uploadPreview.pageSize.v1` | number |
 | Upload Preview column widths | `ewc.ui.uploadPreview.columnWidths.v1` | JSON object |
 | Audit Logs page size | `ewc.ui.auditLogs.pageSize.v1` | number |

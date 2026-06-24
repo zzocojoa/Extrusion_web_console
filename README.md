@@ -560,6 +560,10 @@ Browser QA has been run against:
 - `docs/10_audit_logs_plan.md`
 - `docs/01-plan/features/operator-ui-density-and-navigation.plan.md`
 - `docs/02-design/features/operator-ui-density-and-navigation.design.md`
+- `docs/01-plan/features/upload-preview-range-options.plan.md`
+- `docs/02-design/features/upload-preview-range-options.design.md`
+- `docs/01-plan/features/upload-preview-preferences-and-audit-panel-polish.plan.md`
+- `docs/02-design/features/upload-preview-preferences-and-audit-panel-polish.design.md`
 - `docs/156_operator_already_in_db_delete_contract.md`
 - `docs/157_operator_2026-01-19_delete_execution.md`
 - `docs/158_operator_status_language_policy.md`

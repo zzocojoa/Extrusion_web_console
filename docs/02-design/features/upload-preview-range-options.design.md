@@ -137,6 +137,11 @@ When `folder_all` is selected, show short copy that it is a Preview-only top-lev
 
 Existing range modes retain behavior. Existing stored preview runs can keep historical `range_mode` values; no migration is required. New enum values are accepted only for new requests and are stored as strings in the existing state table.
 
+Upload Preview `rangeMode` UI preference persistence is intentionally handled by
+`docs/02-design/features/upload-preview-preferences-and-audit-panel-polish.design.md`
+so the backend range contract and the frontend preference lifecycle remain
+reviewable as separate changes.
+
 ## 8. Rollback
 
 Revert the branch or merge commit. No DB rollback is required because there is no schema change.
