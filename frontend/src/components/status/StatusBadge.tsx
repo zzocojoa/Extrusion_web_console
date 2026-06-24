@@ -4,6 +4,7 @@ import {
   CheckCircle,
   Circle,
   CircleX,
+  LoaderCircle,
   OctagonAlert,
   TriangleAlert,
   type LucideIcon,
@@ -25,16 +26,17 @@ const statusIcon: Record<StatusTone, LucideIcon> = {
 interface StatusBadgeProps {
   tone: StatusTone;
   label?: string;
+  busy?: boolean;
 }
 
-export function StatusBadge({ tone, label }: StatusBadgeProps) {
+export function StatusBadge({ tone, label, busy = false }: StatusBadgeProps) {
   const { t } = useTranslation();
-  const Icon = statusIcon[tone];
+  const Icon = busy ? LoaderCircle : statusIcon[tone];
   const visibleLabel = label ?? t(`status.${tone}`);
 
   return (
-    <span className={`status-badge status-badge--${tone}`} aria-label={visibleLabel}>
-      <Icon aria-hidden="true" className="status-badge__icon" />
+    <span className={`status-badge status-badge--${tone}${busy ? " status-badge--busy" : ""}`} aria-label={visibleLabel}>
+      <Icon aria-hidden="true" className={`status-badge__icon${busy ? " status-badge__icon--spin" : ""}`} />
       <span>{visibleLabel}</span>
     </span>
   );

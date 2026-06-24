@@ -1,3 +1,4 @@
+import { LoaderCircle, Play, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { RuntimeStatusResponse, RuntimeServiceStatus } from "../../api/runtime";
@@ -21,6 +22,7 @@ interface RuntimeCheckPanelProps {
   onStart?: () => void;
   onStop?: () => void;
   actionPending?: boolean;
+  pendingAction?: "start" | "stop" | null;
 }
 
 export function RuntimeCheckPanel({
@@ -31,43 +33,77 @@ export function RuntimeCheckPanel({
   onStart,
   onStop,
   actionPending = false,
+  pendingAction = null,
 }: RuntimeCheckPanelProps) {
   const { t, i18n } = useTranslation();
   const translate: Translate = (key, options) => String(t(key, options));
   const tableRows = runtimeStatus ? runtimeRows(runtimeStatus, translate) : rows;
-  const startDisabledReason = runtimeStatus ? startDisabledReasonFor(runtimeStatus, actionPending, translate) : translate("runtime.actions.apiRequired");
-  const stopDisabledReason = runtimeStatus ? stopDisabledReasonFor(runtimeStatus, actionPending, translate) : translate("runtime.actions.apiRequired");
+  const activeAction = actionPending
+    ? pendingAction ?? runtimeStatus?.activeOperation?.kind ?? null
+    : runtimeStatus?.activeOperation?.kind ?? null;
+  const startPending = activeAction === "start";
+  const stopPending = activeAction === "stop";
+  const summaryTone = runtimeStatus ? (activeAction ? "running" : toneForOverall(runtimeStatus.overallStatus)) : "muted";
+  const startLabel = startPending ? t("runtime.actions.starting") : t("runtime.actions.start");
+  const stopLabel = stopPending ? t("runtime.actions.stopping") : t("runtime.actions.stop");
+  const startDisabledReason = runtimeStatus ? startDisabledReasonFor(runtimeStatus, activeAction, translate) : translate("runtime.actions.apiRequired");
+  const stopDisabledReason = runtimeStatus ? stopDisabledReasonFor(runtimeStatus, activeAction, translate) : translate("runtime.actions.apiRequired");
   const startDisabled = Boolean(startDisabledReason);
   const stopDisabled = Boolean(stopDisabledReason);
+  const summaryLabel = activeAction
+    ? t(activeAction === "start" ? "runtime.actions.starting" : "runtime.actions.stopping")
+    : runtimeStatus
+      ? t(`runtime.overall.${runtimeStatus.overallStatus}`)
+      : t("runtime.overall.unknown");
+  const summaryDetail = activeAction
+    ? t(activeAction === "start" ? "runtime.actions.startingDetail" : "runtime.actions.stoppingDetail")
+    : runtimeStatus
+      ? runtimeReasonText(runtimeStatus, translate)
+      : "";
 
   return (
     <Panel className="runtime-check-panel" title={t("dashboard.runtime.title")} titleId="runtime-check-title">
       {runtimeStatus ? (
-        <div className={`runtime-summary runtime-summary--${toneForOverall(runtimeStatus.overallStatus)}`}>
-          <div>
-            <StatusBadge tone={toneForOverall(runtimeStatus.overallStatus)} label={t(`runtime.overall.${runtimeStatus.overallStatus}`)} />
-            <p>{runtimeReasonText(runtimeStatus, translate)}</p>
+        <div
+          aria-busy={Boolean(activeAction)}
+          className={`runtime-summary runtime-summary--${summaryTone}${activeAction ? " runtime-summary--busy" : ""}`}
+        >
+          <div className="runtime-summary__state" role="status" aria-live="polite">
+            <StatusBadge tone={summaryTone} label={summaryLabel} busy={Boolean(activeAction)} />
+            <p>{summaryDetail}</p>
           </div>
           <div className="runtime-actions">
             <button
-              aria-label={startDisabledReason || t("runtime.actions.start")}
-              className="button button--secondary"
+              aria-label={startDisabledReason || startLabel}
+              aria-busy={startPending}
+              className={`button button--secondary runtime-actions__button${startPending ? " runtime-actions__button--pending" : ""}`}
               disabled={startDisabled}
               onClick={onStart}
               title={startDisabledReason || undefined}
               type="button"
             >
-              {actionPending ? t("runtime.actions.working") : t("runtime.actions.start")}
+              {startPending ? (
+                <LoaderCircle aria-hidden="true" className="button__icon button__icon--spin" size={15} />
+              ) : (
+                <Play aria-hidden="true" className="button__icon" size={15} />
+              )}
+              <span>{startLabel}</span>
             </button>
             <button
-              aria-label={stopDisabledReason || t("runtime.actions.stop")}
-              className="button button--secondary"
+              aria-label={stopDisabledReason || stopLabel}
+              aria-busy={stopPending}
+              className={`button button--secondary runtime-actions__button${stopPending ? " runtime-actions__button--pending" : ""}`}
               disabled={stopDisabled}
               onClick={onStop}
               title={stopDisabledReason || undefined}
               type="button"
             >
-              {actionPending ? t("runtime.actions.working") : t("runtime.actions.stop")}
+              {stopPending ? (
+                <LoaderCircle aria-hidden="true" className="button__icon button__icon--spin" size={15} />
+              ) : (
+                <Square aria-hidden="true" className="button__icon" size={15} />
+              )}
+              <span>{stopLabel}</span>
             </button>
           </div>
         </div>
@@ -220,8 +256,18 @@ function containerDetail(containers: RuntimeStatusResponse["containers"], t: Tra
     : t("runtime.containers.detail", { running, total: containers.length });
 }
 
-function startDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, actionPending: boolean, t: Translate): string {
-  if (actionPending || runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
+type RuntimeAction = "start" | "stop";
+
+function activeOperationDisabledReason(activeAction: RuntimeAction | null, t: Translate): string {
+  if (activeAction === "start") return t("runtime.actions.startingActive");
+  if (activeAction === "stop") return t("runtime.actions.stoppingActive");
+  return "";
+}
+
+function startDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, activeAction: RuntimeAction | null, t: Translate): string {
+  const operationDisabledReason = activeOperationDisabledReason(activeAction, t);
+  if (operationDisabledReason) return operationDisabledReason;
+  if (runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
   if (runtimeStatus.overallStatus === "ready") return t("runtime.actions.alreadyReady");
   if (runtimeStatus.reasonCode === "non_core_runtime_attention") return t("runtime.actions.nonCoreAttention");
   if (runtimeStatus.reasonCode === "required_container_missing") return t("runtime.actions.requiredContainerMissing");
@@ -229,8 +275,10 @@ function startDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, actionPend
   return "";
 }
 
-function stopDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, actionPending: boolean, t: Translate): string {
-  if (actionPending || runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
+function stopDisabledReasonFor(runtimeStatus: RuntimeStatusResponse, activeAction: RuntimeAction | null, t: Translate): string {
+  const operationDisabledReason = activeOperationDisabledReason(activeAction, t);
+  if (operationDisabledReason) return operationDisabledReason;
+  if (runtimeStatus.overallStatus === "running" || runtimeStatus.activeOperation) return t("runtime.actions.operationActive");
   if (runtimeStatus.docker.status !== "ready") return t("runtime.actions.dockerUnavailable");
   if (!runtimeStatus.containers.some((row) => row.running)) return t("runtime.actions.alreadyStopped");
   return "";

@@ -28,6 +28,10 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: ["runtime", "local-supabase"] });
     },
   });
+  const pendingRuntimeAction =
+    runtimeMutation.isPending && (runtimeMutation.variables === "start" || runtimeMutation.variables === "stop")
+      ? runtimeMutation.variables
+      : null;
 
   if (isLoading) {
     return (
@@ -61,6 +65,7 @@ export function DashboardPage() {
           onStart={() => runtimeMutation.mutate("start")}
           onStop={() => runtimeMutation.mutate("stop")}
           actionPending={runtimeMutation.isPending}
+          pendingAction={pendingRuntimeAction}
         />
         <WarningQueuePanel rows={data.warningQueue} />
         <AuditSummaryPanel rows={data.auditSummary} />
