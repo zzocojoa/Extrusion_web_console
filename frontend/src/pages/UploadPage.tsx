@@ -1441,21 +1441,57 @@ function DeleteSelectionPanel({
         </div>
       </div>
       {lastDeleteResult ? (
-        <div className="delete-selection-panel__line" role="status">
-          {t("upload.delete.panel.lastResult", {
+        <div
+          aria-label={t("upload.delete.panel.lastResult", {
             status: t(`upload.delete.status.${lastDeleteResult.status}`),
             rows: formatNumber(lastDeleteResult.deletedKeys),
           })}
+          className="delete-selection-panel__line delete-selection-panel__line--metrics"
+          role="status"
+        >
+          <span className="delete-selection-panel__line-title">{t("upload.delete.panel.lastResultLabel")}</span>
+          <span className="delete-selection-panel__metrics">
+            <span>
+              <span>{t("upload.delete.panel.fieldStatus")}</span>
+              <strong>{t(`upload.delete.status.${lastDeleteResult.status}`)}</strong>
+            </span>
+            <span>
+              <span>{t("upload.delete.panel.fieldRowsDeleted")}</span>
+              <strong>{formatNumber(lastDeleteResult.deletedKeys)}</strong>
+            </span>
+          </span>
         </div>
       ) : null}
       {job ? (
-        <div className="delete-selection-panel__line" role={job.recoveryRequired ? "alert" : "status"}>
-          {t("upload.delete.panel.latestJob", {
+        <div
+          aria-label={t("upload.delete.panel.latestJob", {
             status: t(`upload.delete.status.${job.status}`),
             expected: formatNumber(job.expectedDeleteKeys),
             deleted: formatNumber(job.deletedKeys),
           })}
-          {job.errorCode ? <span>{t("upload.delete.panel.reason", { reason: localizeDeleteReason(job.errorCode, t) })}</span> : null}
+          className="delete-selection-panel__line delete-selection-panel__line--metrics"
+          role={job.recoveryRequired ? "alert" : "status"}
+        >
+          <span className="delete-selection-panel__line-title">{t("upload.delete.panel.latestJobLabel")}</span>
+          <span className="delete-selection-panel__metrics">
+            <span>
+              <span>{t("upload.delete.panel.fieldStatus")}</span>
+              <strong>{t(`upload.delete.status.${job.status}`)}</strong>
+            </span>
+            <span>
+              <span>{t("upload.delete.panel.fieldExpected")}</span>
+              <strong>{formatNumber(job.expectedDeleteKeys)}</strong>
+            </span>
+            <span>
+              <span>{t("upload.delete.panel.fieldDeleted")}</span>
+              <strong>{formatNumber(job.deletedKeys)}</strong>
+            </span>
+          </span>
+          {job.errorCode ? (
+            <span className="delete-selection-panel__reason">
+              {t("upload.delete.panel.reason", { reason: localizeDeleteReason(job.errorCode, t) })}
+            </span>
+          ) : null}
         </div>
       ) : null}
       {latestDeleteJobError ? (

@@ -1,10 +1,11 @@
 .app-shell {
   --sidebar-current-width: var(--sidebar-width);
+  --topbar-current-height: var(--topbar-height);
   min-height: 100vh;
   max-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar-current-width) minmax(0, 1fr);
-  grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+  grid-template-rows: var(--topbar-current-height) minmax(0, 1fr);
   background: var(--color-bg);
 }
 
@@ -157,7 +158,7 @@
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  height: var(--topbar-height);
+  min-height: var(--topbar-height);
   background: var(--color-surface-raised);
   border-bottom: 1px solid var(--color-border);
   display: flex;
@@ -168,6 +169,7 @@
 }
 
 .topbar__nav-actions {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -258,10 +260,23 @@
 @media (max-width: 900px) {
   .app-shell {
     --sidebar-current-width: var(--sidebar-collapsed-width);
+    --topbar-current-height: auto;
   }
 
   .topbar__status {
     justify-content: flex-start;
+    flex: 0 1 auto;
+    max-width: 100%;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .topbar__status .status-chip {
+    flex: 0 1 auto;
+  }
+
+  .topbar__status .status-chip__label {
+    display: none;
   }
 
   .sidebar__brand,
@@ -278,8 +293,8 @@
 
 @media (max-width: 720px) {
   .app-shell {
+    --topbar-current-height: auto;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: var(--topbar-height) minmax(0, 1fr);
   }
 
   .sidebar {
@@ -369,11 +384,23 @@
 
   .topbar {
     grid-row: 1;
+    flex-wrap: wrap;
+    align-content: center;
     padding: 0 var(--space-3);
+    row-gap: var(--space-2);
+    padding-block: var(--space-2);
   }
 
   .topbar__title {
     flex: 1 1 160px;
+  }
+
+  .topbar__status {
+    flex: 0 0 100%;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: var(--space-1);
+    overflow: visible;
   }
 
   .dashboard-page,

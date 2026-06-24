@@ -608,6 +608,12 @@
         "selected": "{{count}} already-in-DB item selected",
         "latestJob": "Latest delete job: {{status}}, expected {{expected}}, deleted {{deleted}}.",
         "lastResult": "Delete result: {{status}}, {{rows}} rows deleted.",
+        "latestJobLabel": "Latest delete job",
+        "lastResultLabel": "Delete result",
+        "fieldStatus": "Status",
+        "fieldExpected": "Expected",
+        "fieldDeleted": "Deleted",
+        "fieldRowsDeleted": "Rows deleted",
         "reason": "Reason: {{reason}}"
       },
       "actions": {
