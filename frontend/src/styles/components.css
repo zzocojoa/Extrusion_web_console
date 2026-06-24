@@ -848,7 +848,27 @@
 }
 
 .logs-panel--audit {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
   overflow: visible;
+}
+
+.logs-panel--audit .resizable-table,
+.logs-panel--audit .table-scroll,
+.logs-panel--audit .table-pagination,
+.logs-panel--audit .audit-empty,
+.logs-panel--audit .panel--loading,
+.logs-panel--audit .panel--error {
+  background: var(--color-surface);
+}
+
+.logs-panel--audit .resizable-table {
+  flex: 1 1 auto;
+}
+
+.logs-panel--audit .table-scroll {
+  min-height: 0;
 }
 
 .panel-subtitle {

@@ -25,7 +25,9 @@ The Upload page currently exposes `today`, `yesterday`, `last_2_days`, and `cust
 ### 2.2 Non-Goals
 - Do not execute Upload Preview as part of implementation.
 - Do not change Start Upload, Retry Failed, Delete, or Settings save behavior.
-- Do not add rangeMode persistence.
+- Do not add rangeMode persistence in this range-contract feature. That follow-up
+  UI preference is tracked separately in
+  `docs/01-plan/features/upload-preview-preferences-and-audit-panel-polish.plan.md`.
 - Do not change audit panel CSS.
 - Do not run Supabase reset/cleanup, Docker cleanup, LAN/deploy, or operational DB mutation.
 

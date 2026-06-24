@@ -6,6 +6,11 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Persisted the Upload Preview range selector as a frontend-only UI preference
+  and tightened the Audit Logs panel surface so the toolbar, summary, resizable
+  table, and pagination render inside one continuous panel background. Only the
+  validated `rangeMode` enum is stored; custom dates, file paths, filenames,
+  audit params, errors, tokens, secrets, and DB URLs remain out of localStorage.
 - Added Upload Preview range options for Last 7 days, Last 30 days, and
   Folder All. The new modes keep the backend/frontend range contract
   fail-closed through approval scope, keep Folder All as Preview-only
