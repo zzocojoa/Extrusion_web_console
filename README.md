@@ -588,6 +588,7 @@ Browser QA has been run against:
 - `docs/164_operator_data_mutation_safety_gate.md`
 - `docs/165_v2_status_matrix.md`
 - `docs/175_legacy_gui_replacement_gap_audit.md`
+- `docs/176_v1_cutover_go_no_go_validation_plan.md`
 
 ## Reference Project
 
