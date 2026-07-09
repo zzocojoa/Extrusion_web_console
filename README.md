@@ -350,7 +350,7 @@ $preview = Invoke-RestMethod -Method Post `
   -ContentType "application/json" `
   -Body $body
 
-Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/$($preview.previewRunId)
+$previewDetail = Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/$($preview.previewRunId)
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/latest
 Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=upload.preview&limit=20"
 ```
@@ -358,10 +358,23 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=upload.preview&limit=2
 Upload Job API smoke check after a successful preview with target rows:
 
 ```powershell
+$expectedTargetRows = [int]$previewDetail.run.summary.targetRows
+$expectedTargetFiles = [int]$previewDetail.run.summary.target
+if ($expectedTargetRows -le 0 -or $expectedTargetFiles -le 0) {
+  throw "Preview has no upload target rows/files."
+}
+
+$jobBody = @{
+  previewRunId = $preview.previewRunId
+  mode = "preview_targets"
+  expectedTargetRows = $expectedTargetRows
+  expectedTargetFiles = $expectedTargetFiles
+} | ConvertTo-Json
+
 $job = Invoke-RestMethod -Method Post `
   -Uri http://127.0.0.1:8000/api/upload/jobs `
   -ContentType "application/json" `
-  -Body (@{ previewRunId = $preview.previewRunId } | ConvertTo-Json)
+  -Body $jobBody
 
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/$($job.jobId)
 Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/latest
@@ -574,6 +587,7 @@ Browser QA has been run against:
 - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
 - `docs/164_operator_data_mutation_safety_gate.md`
 - `docs/165_v2_status_matrix.md`
+- `docs/175_legacy_gui_replacement_gap_audit.md`
 
 ## Reference Project
 
