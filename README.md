@@ -587,6 +587,7 @@ Browser QA has been run against:
 - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
 - `docs/164_operator_data_mutation_safety_gate.md`
 - `docs/165_v2_status_matrix.md`
+- `docs/175_legacy_gui_replacement_gap_audit.md`
 
 ## Reference Project
 
