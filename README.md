@@ -590,6 +590,7 @@ Browser QA has been run against:
 - `docs/175_legacy_gui_replacement_gap_audit.md`
 - `docs/176_v1_cutover_go_no_go_validation_plan.md`
 - `docs/177_operator_pc_read_only_smoke_evidence.md`
+- `docs/178_operator_backend_readiness_approval_package.md`
 
 ## Reference Project
 
