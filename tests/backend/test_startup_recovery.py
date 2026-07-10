@@ -1,4 +1,5 @@
 import logging
+import traceback
 from pathlib import Path
 
 import pytest
@@ -87,13 +88,16 @@ def test_startup_recovery_logs_committed_counts_when_later_stage_fails(monkeypat
     monkeypatch.setattr(startup_recovery, "RuntimeRepository", UnexpectedRepository)
     caplog.set_level(logging.INFO, logger=startup_recovery.__name__)
 
-    with pytest.raises(RuntimeError, match="sensitive-path-must-not-be-logged"):
+    with pytest.raises(startup_recovery.StartupRecoveryError) as raised:
         startup_recovery.recover_interrupted_work("synthetic.db")
 
     messages = "\n".join(record.getMessage() for record in caplog.records)
+    rendered_exception = "".join(traceback.format_exception(raised.value))
     assert "stage=preview_runs changed=2 committed_total=2" in messages
     assert "stage=upload_jobs" in messages
     assert "preview_runs=2" in messages
     assert "committed_total=2" in messages
     assert "error_type=RuntimeError" in messages
     assert "sensitive-path-must-not-be-logged" not in messages
+    assert "stage upload_jobs (RuntimeError)" in str(raised.value)
+    assert "sensitive-path-must-not-be-logged" not in rendered_exception

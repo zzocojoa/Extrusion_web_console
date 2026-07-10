@@ -208,14 +208,16 @@ Backend가 고정 allowlist command만 실행한다.
 **Failure Modes**
 ```text
 CSV transform fails        -> file failed, job partial_failed, UI visible, tested
-SSE disconnect             -> reconnect by seq, no lost logs, tested in WP-01
+SSE disconnect             -> reconnect by seq, no lost logs, covered by PR #229 reliability patch
 Supabase DB down           -> upload blocked, audit failure, integration test
 Edge function 500          -> retry then failed file, existing upload test base
-Backend killed mid-upload  -> startup marks interrupted, resume_offset retained for explicit retry, tested in WP-01
+Backend killed mid-upload  -> startup marks interrupted, resume_offset retained for explicit retry, covered by PR #229 reliability patch
 Config env override hidden -> UI source_by_key, audit redacted, unit test
 Grafana down               -> status degraded, link still shown, smoke test
 ```
-Critical silent-failure gap: none allowed by design. WP-01 implements the two former “test needed” items with unit, temporary-SQLite integration, API contract, and synthetic reconnect soak coverage. SSE replay now honors the higher persisted cursor from `afterSeq` or valid `Last-Event-ID`, drains backlog without poll sleeps, and returns HTTP 204 for a terminal stream whose reconnect cursor is already current so native `EventSource` clients stop reconnecting. Startup recovery reports non-secret interruption counts, preserves upload `resume_offset`, and leaves interrupted files eligible for an explicitly requested retry. No operational CSV, Supabase, Docker, upload, delete, deployment, or production migration action is part of this coverage.
+Critical silent-failure gap: none allowed by design. PR #229 is an Upload Job SSE/startup-recovery reliability patch, not completion of the requested V2 WP-01. It covers the two former “test needed” items with unit, temporary-SQLite integration, API contract, deterministic terminal-commit concurrency, and synthetic reconnect soak coverage. SSE replay now honors the higher persisted cursor from `afterSeq` or valid `Last-Event-ID`, reads event backlog and job status from one SQLite snapshot before deciding to close, drains backlog without poll sleeps, and returns HTTP 204 for a terminal stream whose reconnect cursor is already current so native `EventSource` clients stop reconnecting. Terminal jobs reject late event/file writes and workers treat that seal as a stop condition. Constructor, execution, cancellation, or executor-submission failures atomically reconcile still-active jobs and queued/running files to retryable failed state with a visible terminal event/audit and sanitized metadata; terminal jobs remain unchanged, and failed persistence falls back to safe job/type logging. A submission failure returns HTTP 503 with the persisted failed `jobId` and `Location`. Startup recovery reports non-secret interruption counts, propagates only sanitized stage/type failures, preserves upload `resume_offset`, and leaves interrupted files eligible for an explicitly requested retry. No operational CSV, Supabase, Docker, upload, delete, deployment, or production migration action is part of this coverage.
+
+The requested V2 WP-01 remains open for Upload Preview DB-status correctness, representative legacy CSV compatibility fixtures, a synthetic large CSV Preview soak, Audit Logs failure-path coverage, and duplicate `v2_lan_access_enabled` cleanup.
 
 **Launcher phase 1 implementation status**
 

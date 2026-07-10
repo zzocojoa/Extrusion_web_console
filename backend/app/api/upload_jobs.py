@@ -1,6 +1,7 @@
 import json
+import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -38,12 +39,39 @@ from backend.app.services.upload_event_stream import (
     SQLITE_MAX_INTEGER,
     read_upload_event_batch,
     resolve_upload_event_cursor,
-    upload_event_replay_batch_size,
 )
 from backend.app.services.upload_jobs import UploadJobService, is_jwt_like_key
 
 router = APIRouter(prefix="/api/upload/jobs", tags=["upload-jobs"])
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-job")
+_LOGGER = logging.getLogger(__name__)
+UPLOAD_WORKER_UNAVAILABLE_RESPONSE = {
+    "description": "The job was persisted but the background worker could not be submitted.",
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["detail"],
+                "properties": {
+                    "detail": {
+                        "type": "object",
+                        "required": ["reason", "jobId"],
+                        "properties": {
+                            "reason": {"type": "string", "enum": ["upload_worker_unavailable"]},
+                            "jobId": {"type": "string"},
+                        },
+                    }
+                },
+            }
+        }
+    },
+    "headers": {
+        "Location": {
+            "description": "Detail URL for the persisted failed upload job.",
+            "schema": {"type": "string"},
+        }
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -82,6 +110,92 @@ def get_upload_runtime_readiness(settings: Settings = Depends(get_settings)) -> 
     if runtime.edge_runtime.status.value != "ready":
         return UploadRuntimeReadiness(ready=False, reason="edge_unreachable", detail=detail)
     return UploadRuntimeReadiness(ready=True, detail=detail)
+
+
+def _reconcile_upload_worker_failure(
+    repository: UploadJobRepository,
+    job_id: str,
+    *,
+    error_code: str,
+    error_type: str,
+) -> bool:
+    message = f"Upload job worker stopped unexpectedly ({error_type})."
+    try:
+        return repository.reconcile_worker_failure(job_id, error_code, message)
+    except Exception as persistence_error:
+        _LOGGER.error(
+            "Upload job worker failure reconciliation failed: job_id=%s error_type=%s persistence_error_type=%s",
+            job_id,
+            error_type,
+            type(persistence_error).__name__,
+        )
+        return False
+
+
+def _run_upload_job_worker(settings: Settings, repository: UploadJobRepository, job_id: str) -> None:
+    try:
+        UploadJobService(settings, repository).run_job(job_id)
+    except Exception as error:
+        _reconcile_upload_worker_failure(
+            repository,
+            job_id,
+            error_code="upload_worker_failed",
+            error_type=type(error).__name__,
+        )
+        raise
+
+
+def _observe_upload_job_future(
+    job_id: str,
+    repository: UploadJobRepository,
+    future: Future[None],
+) -> None:
+    try:
+        error = future.exception()
+    except CancelledError:
+        _reconcile_upload_worker_failure(
+            repository,
+            job_id,
+            error_code="upload_worker_cancelled",
+            error_type="CancelledError",
+        )
+        _LOGGER.warning("Upload job worker was cancelled: job_id=%s", job_id)
+        return
+    if error is not None:
+        _reconcile_upload_worker_failure(
+            repository,
+            job_id,
+            error_code="upload_worker_failed",
+            error_type=type(error).__name__,
+        )
+        _LOGGER.error(
+            "Upload job worker exited unexpectedly: job_id=%s error_type=%s",
+            job_id,
+            type(error).__name__,
+        )
+
+
+def _submit_upload_job(settings: Settings, repository: UploadJobRepository, job_id: str) -> None:
+    try:
+        future = executor.submit(_run_upload_job_worker, settings, repository, job_id)
+    except Exception as error:
+        _reconcile_upload_worker_failure(
+            repository,
+            job_id,
+            error_code="upload_worker_failed",
+            error_type=type(error).__name__,
+        )
+        _LOGGER.error(
+            "Upload job worker submission failed: job_id=%s error_type=%s",
+            job_id,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"reason": "upload_worker_unavailable", "jobId": job_id},
+            headers={"Location": f"/api/upload/jobs/{job_id}"},
+        ) from None
+    future.add_done_callback(lambda completed: _observe_upload_job_future(job_id, repository, completed))
 
 
 def _dt(value: str | None) -> datetime | None:
@@ -299,7 +413,12 @@ def ensure_upload_config(
         )
 
 
-@router.post("", response_model=UploadJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "",
+    response_model=UploadJobCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def create_upload_job(
     request: UploadJobCreateRequest,
     settings: Settings = Depends(get_settings),
@@ -397,7 +516,7 @@ def create_upload_job(
             },
             detail_extra=detail_extra,
         )
-    executor.submit(UploadJobService(settings, repository).run_job, job_id)
+    _submit_upload_job(settings, repository, job_id)
     return UploadJobCreateResponse(
         job_id=job_id,
         status=UploadJobStatus.queued,
@@ -437,7 +556,12 @@ def upload_job_detail(
     return build_job_detail(job_id, repository)
 
 
-@router.post("/{jobId}/retry", response_model=UploadJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{jobId}/retry",
+    response_model=UploadJobCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def retry_upload_job(
     request: RetryFailedRequest,
     job_id: str = Path(alias="jobId"),
@@ -529,7 +653,7 @@ def retry_upload_job(
             },
             detail_extra=detail_extra,
         )
-    executor.submit(UploadJobService(settings, repository).run_job, retry_job_id)
+    _submit_upload_job(settings, repository, retry_job_id)
     return UploadJobCreateResponse(
         job_id=retry_job_id,
         status=UploadJobStatus.queued,
@@ -627,7 +751,16 @@ def cancel_upload_job(
 
 @router.get(
     "/{jobId}/events",
+    response_class=StreamingResponse,
     responses={
+        status.HTTP_200_OK: {
+            "description": "Persisted upload-job events encoded as a server-sent event stream.",
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                }
+            },
+        },
         status.HTTP_204_NO_CONTENT: {
             "description": "The terminal stream cursor is current; EventSource clients must stop reconnecting."
         }
@@ -636,7 +769,12 @@ def cancel_upload_job(
 def upload_job_events(
     job_id: str = Path(alias="jobId"),
     after_seq: int = Query(default=0, ge=0, le=SQLITE_MAX_INTEGER, alias="afterSeq"),
-    tail: int = Query(default=100, ge=1, le=500),
+    tail: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Maximum persisted events read per SQLite batch; this does not cap total replay.",
+    ),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
 ) -> Response:
@@ -644,14 +782,13 @@ def upload_job_events(
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
     start_after = resolve_upload_event_cursor(after_seq, last_event_id)
-    replay_batch_size = upload_event_replay_batch_size(tail)
     if str(job["status"]) not in ACTIVE_JOB_STATUSES and repository.latest_event_seq(job_id) <= start_after:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     def stream():
         seq = max(0, start_after)
         while True:
-            batch = read_upload_event_batch(repository, job_id, after_seq=seq, limit=replay_batch_size)
+            batch = read_upload_event_batch(repository, job_id, after_seq=seq, limit=tail)
             for row in batch.events:
                 seq = int(row["seq"])
                 payload = event_dto(row).model_dump(mode="json", by_alias=True)

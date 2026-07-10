@@ -23,6 +23,7 @@ import {
   getUploadJobEventsUrl,
   normalizeJobEvent,
   retryUploadJob,
+  UploadWorkerUnavailableError,
   type JobEvent,
   type UploadJobDetail,
   type UploadJobFileStatus,
@@ -678,6 +679,20 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
     },
   });
 
+  const openUploadJobFromError = (error: Error) => {
+    const failedJobId =
+      error instanceof ActiveUploadJobError
+        ? error.activeJobId
+        : error instanceof UploadWorkerUnavailableError
+          ? error.jobId
+          : null;
+    if (!failedJobId) return;
+    latestSeqRef.current = 0;
+    setSseEvents([]);
+    setJobId(failedJobId);
+    setActiveTab("job");
+  };
+
   const startUploadMutation = useMutation({
     mutationFn: async (approval: { expectedTargetRows: number; expectedTargetFiles: number }) => {
       if (!activePreviewRunId) throw new Error("No preview run");
@@ -696,12 +711,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       setJobId(response.jobId);
       setActiveTab("job");
     },
-    onError: (error) => {
-      if (error instanceof ActiveUploadJobError) {
-        setJobId(error.activeJobId);
-        setActiveTab("job");
-      }
-    },
+    onError: openUploadJobFromError,
   });
 
   const deletePreflightMutation = useMutation({
@@ -761,6 +771,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       setJobId(response.jobId);
       setActiveTab("job");
     },
+    onError: openUploadJobFromError,
   });
 
   const controlMutation = useMutation({

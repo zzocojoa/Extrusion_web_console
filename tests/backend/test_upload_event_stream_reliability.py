@@ -1,13 +1,14 @@
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.upload_jobs import UploadJobStatus
 from backend.app.services.upload_event_stream import (
-    MIN_REPLAY_BATCH_SIZE,
     SQLITE_MAX_INTEGER,
     read_upload_event_batch,
     resolve_upload_event_cursor,
-    upload_event_replay_batch_size,
 )
 from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
 
@@ -44,12 +45,6 @@ def test_resolve_upload_event_cursor_ignores_malformed_or_non_ascii_ids() -> Non
     assert resolve_upload_event_cursor(7, "9" * 5_000) == 7
 
 
-def test_requested_tail_cannot_reduce_server_replay_batch_size() -> None:
-    assert upload_event_replay_batch_size(1) == MIN_REPLAY_BATCH_SIZE
-    assert upload_event_replay_batch_size(MIN_REPLAY_BATCH_SIZE) == MIN_REPLAY_BATCH_SIZE
-    assert upload_event_replay_batch_size(500) == 500
-
-
 def test_terminal_batch_closes_only_after_persisted_events_are_drained(tmp_path: Path) -> None:
     repository = create_upload_job(tmp_path / "state.db")
     repository.append_event("upl_stream", event_type="log.info", level="info", message="persisted")
@@ -77,6 +72,80 @@ def test_empty_active_batch_waits_but_missing_job_closes(tmp_path: Path) -> None
     assert active.should_close is False
     assert missing.events == ()
     assert missing.should_close is True
+
+
+def test_terminal_commit_between_event_and_status_reads_delivers_final_event(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "state.db"
+    event_select_finished = Event()
+    terminal_commit_finished = Event()
+    intercept_event_select = True
+
+    class CoordinatedConnection(sqlite3.Connection):
+        def execute(self, sql: str, parameters=(), /) -> sqlite3.Cursor:
+            nonlocal intercept_event_select
+            result = super().execute(sql, parameters)
+            normalized_sql = " ".join(sql.split())
+            if intercept_event_select and "FROM job_events" in normalized_sql and "seq > ?" in normalized_sql:
+                intercept_event_select = False
+                event_select_finished.set()
+                assert terminal_commit_finished.wait(timeout=10), "terminal commit did not finish"
+            return result
+
+    class CoordinatedUploadJobRepository(UploadJobRepository):
+        _connection_factory = CoordinatedConnection
+
+    create_preview_with_items(db_path)
+    reader_repository = CoordinatedUploadJobRepository(db_path)
+    reader_repository.create_job_from_preview(
+        job_id="upl_stream",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    writer_repository = UploadJobRepository(db_path)
+    cursor = reader_repository.latest_event_seq("upl_stream")
+
+    def commit_terminal_state() -> None:
+        try:
+            assert event_select_finished.wait(timeout=10), "event snapshot read did not start"
+            assert writer_repository.finish_job("upl_stream", UploadJobStatus.succeeded) is True
+        finally:
+            terminal_commit_finished.set()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        terminal_commit = executor.submit(commit_terminal_state)
+        before_commit_snapshot = read_upload_event_batch(
+            reader_repository,
+            "upl_stream",
+            after_seq=cursor,
+            limit=1,
+        )
+        terminal_commit.result(timeout=15)
+
+    final_event_batch = read_upload_event_batch(
+        reader_repository,
+        "upl_stream",
+        after_seq=cursor,
+        limit=1,
+    )
+    closed = read_upload_event_batch(
+        reader_repository,
+        "upl_stream",
+        after_seq=final_event_batch.next_cursor,
+        limit=1,
+    )
+
+    assert before_commit_snapshot.events == ()
+    assert before_commit_snapshot.should_close is False
+    assert [row["event_type"] for row in final_event_batch.events] == ["job.succeeded"]
+    assert final_event_batch.should_close is False
+    assert closed.events == ()
+    assert closed.should_close is True
 
 
 def test_synthetic_soak_reconnects_without_event_loss_or_duplicates(tmp_path: Path) -> None:

@@ -10,6 +10,11 @@ from backend.app.db.upload_job_repository import UploadJobRepository
 _LOGGER = logging.getLogger(__name__)
 
 
+class StartupRecoveryError(RuntimeError):
+    def __init__(self, stage: str, error_type: str) -> None:
+        super().__init__(f"Startup interruption recovery failed at stage {stage} ({error_type}).")
+
+
 @dataclass(frozen=True)
 class StartupRecoverySummary:
     preview_runs: int
@@ -51,7 +56,7 @@ def recover_interrupted_work(state_db_path: str) -> StartupRecoverySummary:
                 sum(counts.values()),
                 type(error).__name__,
             )
-            raise
+            raise StartupRecoveryError(stage, type(error).__name__) from None
         _LOGGER.info(
             "Startup interruption recovery stage committed: stage=%s changed=%d committed_total=%d",
             stage,

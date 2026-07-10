@@ -1,9 +1,13 @@
 import json
+import logging
+from concurrent.futures import Future
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from backend.app.api import upload_jobs as upload_jobs_api
 from backend.app.api.upload_jobs import UploadRuntimeReadiness, get_upload_job_repository, get_upload_runtime_readiness
 from backend.app.core.settings import Settings, get_settings
 from backend.app.db.upload_job_repository import UploadJobRepository
@@ -58,8 +62,29 @@ def test_upload_job_routes_are_registered_in_openapi(monkeypatch) -> None:
     assert "/api/upload/jobs/{jobId}" in paths
     assert "/api/upload/jobs/{jobId}/retry" in paths
     assert "/api/upload/jobs/{jobId}/events" in paths
-    assert paths["/api/upload/jobs/{jobId}/events"]["get"]["responses"]["204"]["description"].startswith(
+    for operation in (
+        paths["/api/upload/jobs"]["post"],
+        paths["/api/upload/jobs/{jobId}/retry"]["post"],
+    ):
+        unavailable = operation["responses"]["503"]
+        assert unavailable["description"].startswith("The job was persisted")
+        assert unavailable["headers"]["Location"]["schema"]["type"] == "string"
+        detail_schema = unavailable["content"]["application/json"]["schema"]["properties"]["detail"]
+        assert set(detail_schema["required"]) == {"reason", "jobId"}
+        assert detail_schema["properties"]["reason"]["enum"] == ["upload_worker_unavailable"]
+        assert detail_schema["properties"]["jobId"]["type"] == "string"
+    event_responses = paths["/api/upload/jobs/{jobId}/events"]["get"]["responses"]
+    assert set(event_responses["200"]["content"]) == {"text/event-stream"}
+    assert event_responses["204"]["description"].startswith(
         "The terminal stream cursor is current"
+    )
+    event_parameters = paths["/api/upload/jobs/{jobId}/events"]["get"]["parameters"]
+    tail_parameter = next(parameter for parameter in event_parameters if parameter["name"] == "tail")
+    assert tail_parameter["schema"]["default"] == 100
+    assert tail_parameter["schema"]["minimum"] == 1
+    assert tail_parameter["schema"]["maximum"] == 500
+    assert tail_parameter["description"] == (
+        "Maximum persisted events read per SQLite batch; this does not cap total replay."
     )
     get_settings.cache_clear()
 
@@ -286,8 +311,8 @@ def test_upload_job_start_success_records_expected_and_actual_counts(tmp_path: P
     app.dependency_overrides[get_settings] = lambda: upload_ready_settings(db_path)
     submitted: list[str] = []
     monkeypatch.setattr(
-        "backend.app.api.upload_jobs.executor.submit",
-        lambda _fn, job_id: submitted.append(job_id),
+        "backend.app.api.upload_jobs._submit_upload_job",
+        lambda _settings, _repository, job_id: submitted.append(job_id),
     )
     client = TestClient(app)
 
@@ -666,8 +691,8 @@ def test_retry_success_records_expected_and_actual_counts(tmp_path: Path, monkey
     )
     submitted: list[str] = []
     monkeypatch.setattr(
-        "backend.app.api.upload_jobs.executor.submit",
-        lambda _fn, job_id: submitted.append(job_id),
+        "backend.app.api.upload_jobs._submit_upload_job",
+        lambda _settings, _repository, job_id: submitted.append(job_id),
     )
     client = TestClient(app)
 
@@ -827,6 +852,49 @@ def test_upload_job_events_returns_no_content_when_terminal_cursor_is_current(tm
     assert body == ""
 
 
+def test_upload_job_events_preserves_requested_tail_as_database_batch_limit(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_tail_contract",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    repository.append_event("upl_tail_contract", event_type="log.info", level="info", message="second")
+    repository.finish_job("upl_tail_contract", UploadJobStatus.succeeded)
+    expected_ids = [
+        int(row["seq"])
+        for row in repository.list_events("upl_tail_contract", limit=500)
+    ]
+    observed_limits: list[int] = []
+    read_snapshot = repository.read_event_stream_snapshot
+
+    def observe_snapshot_limit(job_id: str, *, after_seq: int = 0, limit: int = 200):
+        observed_limits.append(limit)
+        return read_snapshot(job_id, after_seq=after_seq, limit=limit)
+
+    monkeypatch.setattr(repository, "read_event_stream_snapshot", observe_snapshot_limit)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        with client.stream("GET", "/api/upload/jobs/upl_tail_contract/events?tail=1") as response:
+            body = "".join(response.iter_text())
+    finally:
+        app.dependency_overrides.clear()
+
+    actual_ids = [int(line.removeprefix("id: ")) for line in body.splitlines() if line.startswith("id: ")]
+    assert response.status_code == 200
+    assert actual_ids == expected_ids
+    assert observed_limits
+    assert set(observed_limits) == {1}
+
+
 def test_upload_job_events_rejects_after_seq_above_sqlite_integer_range(tmp_path: Path) -> None:
     repository = UploadJobRepository(tmp_path / "state.db")
     app.dependency_overrides[get_upload_job_repository] = lambda: repository
@@ -838,6 +906,216 @@ def test_upload_job_events_rejects_after_seq_above_sqlite_integer_range(tmp_path
         app.dependency_overrides.clear()
 
     assert response.status_code == 422
+
+
+def test_upload_job_worker_future_persists_and_logs_safe_failure_metadata(tmp_path: Path, caplog) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_safe_log",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    future: Future[None] = Future()
+    future.set_exception(RuntimeError("sensitive-worker-detail"))
+    caplog.set_level(logging.ERROR, logger="backend.app.api.upload_jobs")
+
+    upload_jobs_api._observe_upload_job_future("upl_safe_log", repository, future)
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    job = repository.get_job("upl_safe_log")
+    files = repository.list_job_files("upl_safe_log")
+    retry = repository.create_retry_job(
+        job_id="upl_safe_log_retry",
+        source_job_id="upl_safe_log",
+        include_interrupted=False,
+        include_cancelled=False,
+        expected_remaining_rows=2,
+        expected_retry_files=1,
+        options={},
+        config_snapshot={},
+    )
+    assert "job_id=upl_safe_log" in messages
+    assert "error_type=RuntimeError" in messages
+    assert "sensitive-worker-detail" not in messages
+    assert job["status"] == UploadJobStatus.failed.value
+    assert job["error_code"] == "upload_worker_failed"
+    assert "sensitive-worker-detail" not in job["error_message"]
+    assert files[0]["status"] == "failed"
+    assert files[0]["resume_offset"] == 0
+    assert retry.created is True
+
+
+def test_upload_job_worker_cancel_persists_visible_failure(tmp_path: Path, caplog) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_cancelled_future",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    future: Future[None] = Future()
+    assert future.cancel() is True
+    caplog.set_level(logging.WARNING, logger="backend.app.api.upload_jobs")
+
+    upload_jobs_api._observe_upload_job_future("upl_cancelled_future", repository, future)
+
+    job = repository.get_job("upl_cancelled_future")
+    files = repository.list_job_files("upl_cancelled_future")
+    events = repository.list_events("upl_cancelled_future", limit=500)
+    assert job["status"] == UploadJobStatus.failed.value
+    assert job["error_code"] == "upload_worker_cancelled"
+    assert files[0]["status"] == "failed"
+    assert events[-1]["event_type"] == "job.failed"
+    assert "job_id=upl_cancelled_future" in "\n".join(record.getMessage() for record in caplog.records)
+
+
+def test_upload_job_worker_wrapper_reconciles_constructor_failure(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_constructor_failure",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+
+    class FailingUploadJobService:
+        def __init__(self, _settings, _repository) -> None:
+            raise RuntimeError("sensitive-constructor-detail")
+
+    monkeypatch.setattr(upload_jobs_api, "UploadJobService", FailingUploadJobService)
+
+    with pytest.raises(RuntimeError, match="sensitive-constructor-detail"):
+        upload_jobs_api._run_upload_job_worker(Settings(state_db_path=str(db_path)), repository, "upl_constructor_failure")
+
+    job = repository.get_job("upl_constructor_failure")
+    files = repository.list_job_files("upl_constructor_failure")
+    assert job["status"] == UploadJobStatus.failed.value
+    assert job["error_code"] == "upload_worker_failed"
+    assert "sensitive-constructor-detail" not in job["error_message"]
+    assert files[0]["status"] == "failed"
+
+
+def test_upload_job_submit_failure_reconciles_job_and_returns_safe_503(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_submit_failure",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+
+    def reject_submission(*_args, **_kwargs):
+        raise RuntimeError("sensitive-submit-detail")
+
+    monkeypatch.setattr(
+        upload_jobs_api.executor,
+        "submit",
+        reject_submission,
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        upload_jobs_api._submit_upload_job(
+            Settings(state_db_path=str(db_path)),
+            repository,
+            "upl_submit_failure",
+        )
+
+    job = repository.get_job("upl_submit_failure")
+    assert raised.value.status_code == 503
+    assert raised.value.detail == {"reason": "upload_worker_unavailable", "jobId": "upl_submit_failure"}
+    assert raised.value.headers == {"Location": "/api/upload/jobs/upl_submit_failure"}
+    assert job["status"] == UploadJobStatus.failed.value
+    assert job["error_code"] == "upload_worker_failed"
+    assert "sensitive-submit-detail" not in job["error_message"]
+
+
+def test_upload_job_start_submit_failure_returns_failed_job_location(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: upload_ready_settings(db_path)
+
+    def reject_submission(*_args, **_kwargs):
+        raise RuntimeError("sensitive-start-submit-detail")
+
+    monkeypatch.setattr(upload_jobs_api.executor, "submit", reject_submission)
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs", json=START_UPLOAD_APPROVAL)
+    finally:
+        app.dependency_overrides.clear()
+
+    detail = response.json()["detail"]
+    job_id = detail["jobId"]
+    job = repository.get_job(job_id)
+    assert response.status_code == 503
+    assert detail["reason"] == "upload_worker_unavailable"
+    assert response.headers["location"] == f"/api/upload/jobs/{job_id}"
+    assert job["status"] == UploadJobStatus.failed.value
+    assert repository.list_job_files(job_id)[0]["status"] == "failed"
+
+
+def test_upload_job_retry_submit_failure_returns_failed_job_location(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_retry_source",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    source_file_id = repository.list_job_files("upl_retry_source")[0]["job_file_id"]
+    repository.mark_file_failed(source_file_id, "upload_failed", "synthetic", 1)
+    repository.finish_job("upl_retry_source", UploadJobStatus.failed)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    app.dependency_overrides[get_settings] = lambda: upload_ready_settings(db_path)
+
+    def reject_submission(*_args, **_kwargs):
+        raise RuntimeError("sensitive-retry-submit-detail")
+
+    monkeypatch.setattr(upload_jobs_api.executor, "submit", reject_submission)
+    client = TestClient(app)
+
+    try:
+        response = client.post("/api/upload/jobs/upl_retry_source/retry", json=RETRY_APPROVAL)
+    finally:
+        app.dependency_overrides.clear()
+
+    detail = response.json()["detail"]
+    retry_job_id = detail["jobId"]
+    retry_job = repository.get_job(retry_job_id)
+    assert response.status_code == 503
+    assert detail["reason"] == "upload_worker_unavailable"
+    assert response.headers["location"] == f"/api/upload/jobs/{retry_job_id}"
+    assert retry_job["status"] == UploadJobStatus.failed.value
+    assert repository.list_job_files(retry_job_id)[0]["status"] == "failed"
 
 
 def latest_audit(repository: UploadJobRepository):

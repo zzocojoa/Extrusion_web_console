@@ -439,6 +439,7 @@ def test_terminal_upload_job_seals_event_stream_and_rolls_back_late_file_updates
     file_id = repository.list_job_files("upl_sealed")[0]["job_file_id"]
     repository.finish_job("upl_sealed", UploadJobStatus.succeeded)
     final_seq = repository.latest_event_seq("upl_sealed")
+    final_event = repository.list_events("upl_sealed", after_seq=final_seq - 1, limit=1)[0]
 
     with pytest.raises(UploadJobEventStreamSealedError):
         repository.append_event("upl_sealed", event_type="log.info", level="info", message="late")
@@ -446,7 +447,20 @@ def test_terminal_upload_job_seals_event_stream_and_rolls_back_late_file_updates
         repository.mark_file_running(file_id)
 
     assert repository.latest_event_seq("upl_sealed") == final_seq
+    assert final_event["event_type"] == "job.succeeded"
     assert repository.get_job_file(file_id)["status"] == "queued"
+
+
+def test_append_event_rejects_missing_job_without_writing_event(tmp_path: Path) -> None:
+    repository = UploadJobRepository(tmp_path / "state.db")
+
+    with pytest.raises(ValueError, match="Upload job not found"):
+        repository.append_event("upl_missing", event_type="log.info", level="info", message="orphan")
+
+    with repository.connect() as connection:
+        event_count = connection.execute("SELECT COUNT(*) AS count FROM job_events").fetchone()["count"]
+
+    assert event_count == 0
 
 
 def test_mark_paused_is_idempotent_and_does_not_duplicate_events(tmp_path: Path) -> None:

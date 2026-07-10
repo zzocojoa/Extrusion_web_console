@@ -5,7 +5,6 @@ from backend.app.db.upload_job_repository import ACTIVE_JOB_STATUSES, UploadJobR
 
 
 SQLITE_MAX_INTEGER = (1 << 63) - 1
-MIN_REPLAY_BATCH_SIZE = 100
 
 
 @dataclass(frozen=True)
@@ -29,10 +28,6 @@ def resolve_upload_event_cursor(after_seq: int, last_event_id: str | None) -> in
     return max(cursor, parsed_last_event_id)
 
 
-def upload_event_replay_batch_size(requested_tail: int) -> int:
-    return max(MIN_REPLAY_BATCH_SIZE, requested_tail)
-
-
 def read_upload_event_batch(
     repository: UploadJobRepository,
     job_id: str,
@@ -42,7 +37,12 @@ def read_upload_event_batch(
 ) -> UploadEventBatch:
     """Read the next persisted batch and decide whether an idle stream is terminal."""
     cursor = max(0, after_seq)
-    events = tuple(repository.list_events(job_id, after_seq=cursor, limit=limit))
+    snapshot_events, snapshot_status = repository.read_event_stream_snapshot(
+        job_id,
+        after_seq=cursor,
+        limit=limit,
+    )
+    events = tuple(snapshot_events)
     if events:
         return UploadEventBatch(
             events=events,
@@ -50,6 +50,5 @@ def read_upload_event_batch(
             should_close=False,
         )
 
-    job = repository.get_job(job_id)
-    should_close = job is None or str(job["status"]) not in ACTIVE_JOB_STATUSES
+    should_close = snapshot_status is None or snapshot_status not in ACTIVE_JOB_STATUSES
     return UploadEventBatch(events=(), next_cursor=cursor, should_close=should_close)

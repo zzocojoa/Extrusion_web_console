@@ -122,6 +122,16 @@ export class ActiveUploadJobError extends Error {
   }
 }
 
+export class UploadWorkerUnavailableError extends Error {
+  jobId: string;
+
+  constructor(jobId: string) {
+    super("The upload job was persisted, but its worker was unavailable");
+    this.name = "UploadWorkerUnavailableError";
+    this.jobId = jobId;
+  }
+}
+
 const defaultOptions: UploadJobOptions = {
   batchRows: 2000,
   chunkRows: 10000,
@@ -150,13 +160,7 @@ export async function createUploadJob(
     { mutating: true },
   );
   if (!response.ok) {
-    if (response.status === 409) {
-      const raw = await response.json().catch(() => null);
-      const activeJobId = raw?.detail?.activeJobId;
-      if (typeof activeJobId === "string" && activeJobId) throw new ActiveUploadJobError(activeJobId);
-    }
-    const raw = await response.json().catch(() => null);
-    throw new Error(raw?.detail?.reason ?? "Upload job could not be started");
+    await throwUploadJobRequestError(response, "Upload job could not be started");
   }
   return normalizeCreateResponse(await response.json());
 }
@@ -166,7 +170,7 @@ export async function retryUploadJob(
   approval: { expectedRemainingRows: number; expectedRetryFiles?: number | null },
 ): Promise<UploadJobCreateResponse> {
   const response = await apiFetch(
-    `/api/upload/jobs/${jobId}/retry`,
+    `/api/upload/jobs/${encodeURIComponent(jobId)}/retry`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -180,8 +184,35 @@ export async function retryUploadJob(
     },
     { mutating: true },
   );
-  if (!response.ok) throw new Error("Retry job could not be started");
+  if (!response.ok) await throwUploadJobRequestError(response, "Retry job could not be started");
   return normalizeCreateResponse(await response.json());
+}
+
+async function throwUploadJobRequestError(response: Response, fallbackMessage: string): Promise<never> {
+  const raw = await response.json().catch(() => null);
+  const detail = raw?.detail;
+  if (response.status === 409) {
+    const activeJobId = detail?.activeJobId;
+    if (typeof activeJobId === "string" && activeJobId) throw new ActiveUploadJobError(activeJobId);
+  }
+  if (response.status === 503 && detail?.reason === "upload_worker_unavailable") {
+    const jobId = workerUnavailableJobId(response, detail?.jobId);
+    if (jobId) throw new UploadWorkerUnavailableError(jobId);
+  }
+  throw new Error(detail?.reason ?? fallbackMessage);
+}
+
+function canonicalUploadJobId(value: unknown): string | null {
+  return typeof value === "string" && /^upl_[0-9a-f]{12}$/.test(value) ? value : null;
+}
+
+function workerUnavailableJobId(response: Response, bodyJobId: unknown): string | null {
+  const prefix = "/api/upload/jobs/";
+  const location = response.headers.get("Location");
+  const locationJobId = location?.startsWith(prefix) ? canonicalUploadJobId(location.slice(prefix.length)) : null;
+  if (bodyJobId === undefined || bodyJobId === null) return locationJobId;
+  const canonicalBodyJobId = canonicalUploadJobId(bodyJobId);
+  return canonicalBodyJobId && canonicalBodyJobId === locationJobId ? canonicalBodyJobId : null;
 }
 
 export async function fetchLatestUploadJob(): Promise<UploadJobDetail | null> {
@@ -192,7 +223,7 @@ export async function fetchLatestUploadJob(): Promise<UploadJobDetail | null> {
 }
 
 export async function fetchUploadJob(jobId: string): Promise<UploadJobDetail> {
-  const response = await fetch(`/api/upload/jobs/${jobId}`);
+  const response = await fetch(`/api/upload/jobs/${encodeURIComponent(jobId)}`);
   if (!response.ok) throw new Error("Upload job could not be loaded");
   return normalizeJobDetail(await response.json());
 }
@@ -202,7 +233,7 @@ export async function controlUploadJob(
   action: "pause" | "resume" | "cancel",
 ): Promise<UploadJobDetail> {
   const response = await apiFetch(
-    `/api/upload/jobs/${jobId}/${action}`,
+    `/api/upload/jobs/${encodeURIComponent(jobId)}/${action}`,
     { method: "POST" },
     { mutating: true },
   );
