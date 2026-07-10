@@ -23,6 +23,28 @@ from backend.app.services.runtime_control import RuntimeConflictError, RuntimeCo
 from backend.app.services.runtime_readiness import RuntimeReadinessService
 
 
+def install_synthetic_runtime_network_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    def ready_port(name: str, port: int, *, timeout_seconds: float = 0.25) -> RuntimePortStatus:
+        return RuntimePortStatus(name=name, port=port, status=RuntimeServiceStatus.ready, detail="synthetic")
+
+    def ready_edge(url: str, *, timeout_seconds: float = 2.0) -> RuntimeProbeStatus:
+        return RuntimeProbeStatus(name="Edge Function", status=RuntimeServiceStatus.ready, detail="synthetic", url=url)
+
+    monkeypatch.setattr("backend.app.services.runtime_readiness.port_status", ready_port)
+    monkeypatch.setattr("backend.app.services.runtime_readiness.probe_edge_route", ready_edge)
+    monkeypatch.setattr(
+        RuntimeReadinessService,
+        "_probe_grafana",
+        lambda self: RuntimeProbeStatus(name="Grafana", status=RuntimeServiceStatus.ready, detail="synthetic"),
+    )
+
+
+@pytest.fixture(autouse=True)
+def isolate_runtime_network_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep runtime-control tests synthetic and independent of operator services."""
+    install_synthetic_runtime_network_probes(monkeypatch)
+
+
 class FakeRunner:
     def __init__(self, docker_ps_output: str = "", *, project_id: str = "Extrusion_web_console") -> None:
         self.docker_ps_output = docker_ps_output
