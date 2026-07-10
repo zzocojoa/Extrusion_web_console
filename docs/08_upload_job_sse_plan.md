@@ -102,7 +102,7 @@ backend/app/api/upload_jobs.py
 backend/app/schemas/upload_jobs.py
 backend/app/db/upload_job_repository.py
 backend/app/services/upload_jobs.py
-backend/app/services/job_event_stream.py
+backend/app/services/upload_event_stream.py
 backend/app/core/upload_core.py
 backend/app/core/transform_core.py
 backend/app/core/file_state_keys.py
@@ -297,9 +297,11 @@ tail=100
 
 Headers:
 
-- Accepts `Last-Event-ID`.
+- Accepts `Last-Event-ID` and resumes from the greater of that cursor and `afterSeq`.
+- Constrains `afterSeq` to `0` through SQLite's signed 64-bit maximum (`2^63 - 1`) and ignores malformed or out-of-range `Last-Event-ID` values.
 - Returns `Content-Type: text/event-stream`.
-- Sends heartbeat comments every 15 seconds.
+- Sends heartbeat comments while an active job has no persisted events available.
+- Returns `204 No Content` when a terminal job has no events after the resolved cursor, so native `EventSource` clients stop reconnecting.
 
 SSE event format:
 
