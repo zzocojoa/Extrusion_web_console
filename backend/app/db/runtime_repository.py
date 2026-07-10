@@ -302,7 +302,7 @@ class RuntimeRepository:
                 data={"errorCode": error_code, "errorMessage": error_message},
             )
 
-    def mark_interrupted_active_operations(self) -> None:
+    def mark_interrupted_active_operations(self) -> int:
         now = iso_now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -337,6 +337,7 @@ class RuntimeRepository:
                     error_code="interrupted",
                     error_message="Runtime operation was interrupted before completion.",
                 )
+        return len(rows)
 
     def get_operation(self, operation_id: str) -> sqlite3.Row | None:
         with self.connect() as connection:
