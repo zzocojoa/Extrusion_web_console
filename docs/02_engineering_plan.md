@@ -135,7 +135,7 @@ UI start/retry
 ```
 
 **Streaming**
-SSE로 확정. `GET /api/upload/jobs/{id}/events?after_seq=N`를 지원하고 `Last-Event-ID` reconnect를 처리한다. 모든 progress/log는 `job_events`에 먼저 저장한 뒤 publish한다. UI가 닫혀도 로그가 사라지지 않는다.
+SSE로 확정. `GET /api/upload/jobs/{id}/events?afterSeq=N`를 지원하고 `Last-Event-ID` reconnect를 처리한다. 모든 progress/log는 `job_events`에 먼저 저장한 뒤 publish한다. UI가 닫혀도 로그가 사라지지 않는다.
 
 **Config**
 우선순위:
@@ -208,14 +208,14 @@ Backend가 고정 allowlist command만 실행한다.
 **Failure Modes**
 ```text
 CSV transform fails        -> file failed, job partial_failed, UI visible, tested
-SSE disconnect             -> reconnect by seq, no lost logs, test needed
+SSE disconnect             -> reconnect by seq, no lost logs, tested in WP-01
 Supabase DB down           -> upload blocked, audit failure, integration test
 Edge function 500          -> retry then failed file, existing upload test base
-Backend killed mid-upload  -> startup marks interrupted, resume available, test needed
+Backend killed mid-upload  -> startup marks interrupted, resume_offset retained for explicit retry, tested in WP-01
 Config env override hidden -> UI source_by_key, audit redacted, unit test
 Grafana down               -> status degraded, link still shown, smoke test
 ```
-Critical silent-failure gap: none allowed by design. The two “test needed” items must be implemented before v1 signoff.
+Critical silent-failure gap: none allowed by design. WP-01 implements the two former “test needed” items with unit, temporary-SQLite integration, API contract, and synthetic reconnect soak coverage. SSE replay now honors the higher persisted cursor from `afterSeq` or valid `Last-Event-ID`, drains backlog without poll sleeps, and returns HTTP 204 for a terminal stream whose reconnect cursor is already current so native `EventSource` clients stop reconnecting. Startup recovery reports non-secret interruption counts, preserves upload `resume_offset`, and leaves interrupted files eligible for an explicitly requested retry. No operational CSV, Supabase, Docker, upload, delete, deployment, or production migration action is part of this coverage.
 
 **Launcher phase 1 implementation status**
 
