@@ -8,6 +8,7 @@ from backend.app.api.upload_jobs import UploadRuntimeReadiness, get_upload_job_r
 from backend.app.core.settings import Settings, get_settings
 from backend.app.db.upload_job_repository import UploadJobRepository
 from backend.app.schemas.upload_jobs import UploadJobStatus
+from backend.app.services.upload_event_stream import SQLITE_MAX_INTEGER
 from backend.app.main import app, create_app
 from tests.backend.test_upload_jobs_repository_contract import PREVIEW_GATE_SNAPSHOT, create_preview_with_items
 
@@ -57,6 +58,9 @@ def test_upload_job_routes_are_registered_in_openapi(monkeypatch) -> None:
     assert "/api/upload/jobs/{jobId}" in paths
     assert "/api/upload/jobs/{jobId}/retry" in paths
     assert "/api/upload/jobs/{jobId}/events" in paths
+    assert paths["/api/upload/jobs/{jobId}/events"]["get"]["responses"]["204"]["description"].startswith(
+        "The terminal stream cursor is current"
+    )
     get_settings.cache_clear()
 
 
@@ -749,6 +753,91 @@ def test_upload_job_events_replays_after_seq(tmp_path: Path) -> None:
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "id: 2" in body
     assert "log.info" in body
+
+
+def test_upload_job_events_resumes_after_last_event_id_without_duplicates(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_last_event",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    repository.append_event("upl_last_event", event_type="log.info", level="info", message="second")
+    repository.append_event("upl_last_event", event_type="log.info", level="info", message="third")
+    repository.finish_job("upl_last_event", UploadJobStatus.succeeded)
+    expected_ids = [
+        int(row["seq"])
+        for row in repository.list_events("upl_last_event", after_seq=2, limit=500)
+    ]
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        with client.stream(
+            "GET",
+            "/api/upload/jobs/upl_last_event/events?afterSeq=1",
+            headers={"Last-Event-ID": "2"},
+        ) as response:
+            body = "".join(response.iter_text())
+    finally:
+        app.dependency_overrides.clear()
+
+    actual_ids = [int(line.removeprefix("id: ")) for line in body.splitlines() if line.startswith("id: ")]
+    assert response.status_code == 200
+    assert actual_ids == expected_ids
+    assert 1 not in actual_ids
+    assert 2 not in actual_ids
+
+
+def test_upload_job_events_returns_no_content_when_terminal_cursor_is_current(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_terminal_cursor",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    repository.finish_job("upl_terminal_cursor", UploadJobStatus.succeeded)
+    latest_seq = repository.latest_event_seq("upl_terminal_cursor")
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        with client.stream(
+            "GET",
+            "/api/upload/jobs/upl_terminal_cursor/events",
+            headers={"Last-Event-ID": str(latest_seq)},
+        ) as response:
+            body = "".join(response.iter_text())
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 204
+    assert body == ""
+
+
+def test_upload_job_events_rejects_after_seq_above_sqlite_integer_range(tmp_path: Path) -> None:
+    repository = UploadJobRepository(tmp_path / "state.db")
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    client = TestClient(app)
+
+    try:
+        response = client.get(f"/api/upload/jobs/upl_missing/events?afterSeq={SQLITE_MAX_INTEGER + 1}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
 
 
 def latest_audit(repository: UploadJobRepository):

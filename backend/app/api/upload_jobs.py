@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from backend.app.core.settings import Settings, get_settings
 from backend.app.core.target_class import build_upload_target_preflight
@@ -34,6 +34,12 @@ from backend.app.schemas.upload_jobs import (
 from backend.app.services.preview_safety import source_gate_snapshot
 from backend.app.services.command_runner import AllowedCommandRunner
 from backend.app.services.runtime_readiness import RuntimeReadinessService
+from backend.app.services.upload_event_stream import (
+    SQLITE_MAX_INTEGER,
+    read_upload_event_batch,
+    resolve_upload_event_cursor,
+    upload_event_replay_batch_size,
+)
 from backend.app.services.upload_jobs import UploadJobService, is_jwt_like_key
 
 router = APIRouter(prefix="/api/upload/jobs", tags=["upload-jobs"])
@@ -619,34 +625,43 @@ def cancel_upload_job(
     return build_job_detail(job_id, repository)
 
 
-@router.get("/{jobId}/events")
+@router.get(
+    "/{jobId}/events",
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "The terminal stream cursor is current; EventSource clients must stop reconnecting."
+        }
+    },
+)
 def upload_job_events(
     job_id: str = Path(alias="jobId"),
-    after_seq: int = Query(default=0, ge=0, alias="afterSeq"),
+    after_seq: int = Query(default=0, ge=0, le=SQLITE_MAX_INTEGER, alias="afterSeq"),
     tail: int = Query(default=100, ge=1, le=500),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
-) -> StreamingResponse:
-    if repository.get_job(job_id) is None:
+) -> Response:
+    job = repository.get_job(job_id)
+    if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
-    start_after = after_seq
-    if last_event_id and last_event_id.isdigit():
-        start_after = max(start_after, int(last_event_id))
+    start_after = resolve_upload_event_cursor(after_seq, last_event_id)
+    replay_batch_size = upload_event_replay_batch_size(tail)
+    if str(job["status"]) not in ACTIVE_JOB_STATUSES and repository.latest_event_seq(job_id) <= start_after:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     def stream():
         seq = max(0, start_after)
-        sent_any = False
         while True:
-            events = repository.list_events(job_id, after_seq=seq, limit=tail)
-            for row in events:
+            batch = read_upload_event_batch(repository, job_id, after_seq=seq, limit=replay_batch_size)
+            for row in batch.events:
                 seq = int(row["seq"])
-                sent_any = True
                 payload = event_dto(row).model_dump(mode="json", by_alias=True)
                 yield f"id: {seq}\n"
                 yield f"event: {row['event_type']}\n"
                 yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-            job = repository.get_job(job_id)
-            if job is None or (job["status"] not in ACTIVE_JOB_STATUSES and sent_any and not events):
+            if batch.events:
+                seq = batch.next_cursor
+                continue
+            if batch.should_close:
                 yield ": closed\n\n"
                 break
             yield ": heartbeat\n\n"

@@ -2,8 +2,10 @@ import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from backend.app.db.preview_repository import PreviewRepository
-from backend.app.db.upload_job_repository import UploadJobRepository
+from backend.app.db.upload_job_repository import UploadJobEventStreamSealedError, UploadJobRepository
 from backend.app.schemas.upload_jobs import UploadJobStatus
 
 
@@ -419,6 +421,32 @@ def test_finish_job_does_not_overwrite_terminal_interrupted_job(tmp_path: Path) 
     job = repository.get_job("upl_interrupted")
     assert changed is False
     assert job["status"] == "interrupted"
+
+
+def test_terminal_upload_job_seals_event_stream_and_rolls_back_late_file_updates(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_sealed",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    file_id = repository.list_job_files("upl_sealed")[0]["job_file_id"]
+    repository.finish_job("upl_sealed", UploadJobStatus.succeeded)
+    final_seq = repository.latest_event_seq("upl_sealed")
+
+    with pytest.raises(UploadJobEventStreamSealedError):
+        repository.append_event("upl_sealed", event_type="log.info", level="info", message="late")
+    with pytest.raises(UploadJobEventStreamSealedError):
+        repository.mark_file_running(file_id)
+
+    assert repository.latest_event_seq("upl_sealed") == final_seq
+    assert repository.get_job_file(file_id)["status"] == "queued"
 
 
 def test_mark_paused_is_idempotent_and_does_not_duplicate_events(tmp_path: Path) -> None:

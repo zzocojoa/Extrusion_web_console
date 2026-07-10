@@ -35,6 +35,10 @@ class CreateRetryJobResult:
     remaining_row_count: int = 0
 
 
+class UploadJobEventStreamSealedError(RuntimeError):
+    pass
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -681,6 +685,7 @@ class UploadJobRepository:
                 level=level,
                 message=f"Upload job finished with status {final_status.value}.",
                 data={"errorCode": error_code, "errorMessage": error_message},
+                allow_terminal=True,
             )
             self._append_audit_in_connection(
                 connection,
@@ -1068,6 +1073,7 @@ class UploadJobRepository:
                     level="error",
                     message="Upload job was interrupted before completion.",
                     data={"wasCancelling": was_cancelling},
+                    allow_terminal=True,
                 )
                 self._append_audit_in_connection(
                     connection,
@@ -1166,6 +1172,7 @@ class UploadJobRepository:
         message: str,
         job_file_id: int | None = None,
         data: dict[str, Any] | None = None,
+        allow_terminal: bool = False,
     ) -> int:
         row = connection.execute(
             "SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM job_events WHERE job_id = ?",
@@ -1173,13 +1180,37 @@ class UploadJobRepository:
         ).fetchone()
         seq = int(row["next_seq"] if row else 1)
         now = iso_now()
-        connection.execute(
-            """
+        inserted = connection.execute(
+            f"""
             INSERT INTO job_events(job_id, seq, ts, level, event_type, message, job_file_id, data_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (
+                SELECT 1
+                FROM upload_jobs
+                WHERE job_id = ?
+                  AND (? = 1 OR status NOT IN ({",".join("?" for _ in TERMINAL_JOB_STATUSES)}))
+            )
             """,
-            (job_id, seq, now, level, event_type, message, job_file_id, _json(data or {}), now),
+            (
+                job_id,
+                seq,
+                now,
+                level,
+                event_type,
+                message,
+                job_file_id,
+                _json(data or {}),
+                now,
+                job_id,
+                int(allow_terminal),
+                *TERMINAL_JOB_STATUSES,
+            ),
         )
+        if inserted.rowcount <= 0:
+            job = connection.execute("SELECT status FROM upload_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if job is not None and str(job["status"]) in TERMINAL_JOB_STATUSES:
+                raise UploadJobEventStreamSealedError(f"Upload job event stream is sealed: {job_id}")
+            raise ValueError(f"Upload job not found: {job_id}")
         return seq
 
     def append_audit(
