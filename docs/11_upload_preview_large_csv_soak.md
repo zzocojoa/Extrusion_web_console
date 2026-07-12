@@ -171,6 +171,21 @@ No functional merge blocker was found.
 
 The main observation is performance: each controlled large-sample Preview run took roughly 59 to 63 seconds for about 20k rows, with low observed Python allocation peak. This stayed inside the configured 900 second run budget and 300 second file budget, but it is long enough that operator-facing progress, cancellation, and timeout handling remain important for larger production samples.
 
+## Automated Synthetic Regression
+
+V2 WP-01 adds `tests/backend/test_upload_preview_large_synthetic_soak.py`.
+The test generates a temporary 25,000-row integrated PLC CSV, runs Preview
+through temporary SQLite with a controlled exact-key reconciler, and verifies:
+
+- completed `succeeded/reachable` classification;
+- exact row/key/upload estimates;
+- configured reconciliation chunk size propagation;
+- completion under 30 seconds and peak traced Python allocation below 96 MiB;
+- safe `upload.preview` audit evidence without the temporary path or filename.
+
+This regression is synthetic and does not connect to operational Supabase or
+replace the real operator-source soak described in the limitations below.
+
 ## Limitations
 
 - This QA did not connect to a real local Supabase instance. DB-reachable and DB-unreachable states were controlled reconciliation paths.

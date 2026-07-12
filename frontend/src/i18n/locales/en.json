@@ -458,6 +458,7 @@
       "schema_mismatch": "CSV schema is incomplete. Timestamp or device_id could not be confirmed.",
       "file_unstable": "File was modified inside the configured stability lag window.",
       "db_unreachable": "Local Supabase DB could not be reached.",
+      "db_query_failed": "Local Supabase DB query failed.",
       "timeout": "Preview run exceeded the configured time limit.",
       "cancelled": "Preview run was cancelled.",
       "transform_error": "CSV transform failed.",

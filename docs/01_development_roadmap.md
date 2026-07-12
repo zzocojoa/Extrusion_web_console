@@ -123,8 +123,8 @@ Compare the new app against the legacy GUI for:
 
 Status:
 
-- Partially started: Upload Preview now uses legacy scanning/transform behavior as reference and tests exact-key reconciliation.
-- Still required: broader legacy CSV fixture coverage, large real CSV Upload Preview soak, local Supabase control E2E on the operator PC, and final operator validation of failure reporting across Audit Logs.
+- Automated foundation complete: Upload Preview uses legacy scanning/transform behavior as reference, tests exact-key reconciliation and DB-status semantics, covers representative UTF-8/CP949 legacy and integrated CSV fixtures, runs a deterministic 25,000-row synthetic Preview soak, and queries representative failure/blocked evidence through the Audit Logs API.
+- Still required outside synthetic automation: large real CSV Upload Preview soak, local Supabase control E2E on the operator PC, and final operator validation of failure reporting across Audit Logs.
 
 ## 7. Package And Transition
 

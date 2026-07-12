@@ -83,8 +83,8 @@ No browser console errors, page errors, or unexpected failed requests were obser
 ## Remaining Risks
 
 - Real reachable local Supabase reconciliation still needs operator-environment testing against representative `all_metrics` data.
-- Legacy CSV fixture coverage should be expanded before upload execution work, especially for CP949 files, locked files, unstable files, empty files, and mixed date/source folders.
-- `db_query_failed` and other partial batch-failure paths need more focused tests beyond the DB unreachable path.
+- Legacy CSV compatibility now has representative UTF-8 and CP949 PLC/temperature fixtures plus integrated PLC date/time variants, checked through Preview key extraction and legacy full/chunked transforms. Actual operator CSV diversity still requires separate sanitized validation.
+- `db_query_failed` now has focused reconciler and service coverage distinct from DB unreachable, including persisted run/item status and operator i18n. Additional driver/network failure variants remain appropriate for operator-environment testing.
 - The currently wired service streams CSV rows and chunks DB matching, but it does not use the planned temporary `preview_key_stage` table. Very large CSV behavior is bounded by timeouts and key deduplication, not by temp-table staging yet.
 - Cancel and deadline checks are wired before scanning, during CSV row extraction, and between DB batches. A single in-flight DB statement is bounded by Postgres `statement_timeout`, but true mid-statement cancellation still depends on the DB driver/network path.
 - Timeout behavior is bounded and persisted, but it should still be rechecked with larger real CSV files on the operator PC.

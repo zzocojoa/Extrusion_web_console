@@ -35,6 +35,10 @@ class PreviewDbUnavailableError(RuntimeError):
     pass
 
 
+class PreviewDbQueryError(RuntimeError):
+    pass
+
+
 class PreviewCancelledError(RuntimeError):
     pass
 
@@ -569,7 +573,9 @@ class SupabaseExactReconciler:
             progress.elapsed_ms = elapsed_ms(started_at)
             if run_deadline is not None and time.monotonic() > run_deadline:
                 raise TimeoutError("Preview run exceeded the configured time limit") from error
-            raise PreviewDbUnavailableError(str(error)) from error
+            if progress.stage == "connect":
+                raise PreviewDbUnavailableError(str(error)) from error
+            raise PreviewDbQueryError(str(error)) from error
         return existing
 
 
@@ -622,8 +628,20 @@ class PreviewService:
 
             db_error: str | None = None
             any_db_unreachable = False
+            any_db_query_failed = False
+            any_db_query_succeeded = False
             timed_out = False
             timeout_stage: str | None = None
+
+            def observed_db_status() -> PreviewDbStatus:
+                if any_db_query_failed:
+                    return PreviewDbStatus.query_failed
+                if any_db_unreachable:
+                    return PreviewDbStatus.unreachable
+                if any_db_query_succeeded:
+                    return PreviewDbStatus.reachable
+                return PreviewDbStatus.not_checked
+
             source_error = next(
                 (
                     item
@@ -638,7 +656,7 @@ class PreviewService:
                         preview_run_id,
                         request,
                         status=PreviewRunStatus.cancelled,
-                        db_status=PreviewDbStatus.not_checked,
+                        db_status=observed_db_status(),
                     )
                     return
                 if time.monotonic() > run_deadline:
@@ -658,11 +676,7 @@ class PreviewService:
                         preview_run_id,
                         request,
                         status=PreviewRunStatus.timed_out,
-                        db_status=(
-                            PreviewDbStatus.unreachable
-                            if any_db_unreachable
-                            else PreviewDbStatus.not_checked
-                        ),
+                        db_status=observed_db_status(),
                         error_code="timeout",
                         error_message="Preview run exceeded the configured time limit.",
                         timeout_stage=timeout_stage,
@@ -702,7 +716,7 @@ class PreviewService:
                             preview_run_id,
                             request,
                             status=PreviewRunStatus.cancelled,
-                            db_status=PreviewDbStatus.not_checked,
+                            db_status=observed_db_status(),
                         )
                         return
                     if not extraction.local_keys:
@@ -732,6 +746,7 @@ class PreviewService:
                         )
                         item_timing["dbMatchMs"] = elapsed_ms(db_started)
                         item_timing |= reconciliation_progress_timing(self.reconciler)
+                        any_db_query_succeeded = True
                         if self.repository.is_cancel_requested(preview_run_id):
                             self.repository.insert_item(
                                 preview_run_id,
@@ -746,7 +761,7 @@ class PreviewService:
                                 preview_run_id,
                                 request,
                                 status=PreviewRunStatus.cancelled,
-                                db_status=PreviewDbStatus.not_checked,
+                                db_status=observed_db_status(),
                             )
                             return
                         if time.monotonic() > run_deadline:
@@ -765,6 +780,22 @@ class PreviewService:
                                 reason_text,
                                 extraction,
                                 db_match_count=len(existing),
+                                timing=item_timing,
+                            ),
+                        )
+                    except PreviewDbQueryError as error:
+                        any_db_query_failed = True
+                        db_error = str(error)
+                        item_timing |= reconciliation_progress_timing(self.reconciler)
+                        self.repository.insert_item(
+                            preview_run_id,
+                            build_result_item(
+                                candidate,
+                                PreviewItemStatus.risky,
+                                "db_query_failed",
+                                "Local Supabase DB query failed.",
+                                extraction,
+                                error_message=db_error,
                                 timing=item_timing,
                             ),
                         )
@@ -827,7 +858,7 @@ class PreviewService:
                         preview_run_id,
                         request,
                         status=PreviewRunStatus.cancelled,
-                        db_status=PreviewDbStatus.not_checked,
+                        db_status=observed_db_status(),
                     )
                     return
                 except PreviewSchemaMismatchError as error:
@@ -841,13 +872,13 @@ class PreviewService:
                         build_error_item(candidate, "transform_error", str(error), timing=item_timing),
                     )
 
-            if any_db_unreachable:
+            if any_db_query_failed or any_db_unreachable:
                 self._finish_preview(
                     preview_run_id,
                     request,
                     status=PreviewRunStatus.partial_failed,
-                    db_status=PreviewDbStatus.unreachable,
-                    error_code="db_unreachable",
+                    db_status=observed_db_status(),
+                    error_code="db_query_failed" if any_db_query_failed else "db_unreachable",
                     error_message=db_error,
                     timing=run_timing | {"runMs": elapsed_ms(run_started)},
                 )
@@ -856,7 +887,7 @@ class PreviewService:
                     preview_run_id,
                     request,
                     status=PreviewRunStatus.timed_out,
-                    db_status=PreviewDbStatus.not_checked,
+                    db_status=observed_db_status(),
                     error_code="timeout",
                     error_message="Preview run exceeded the configured time limit.",
                     timeout_stage=timeout_stage,
@@ -880,7 +911,7 @@ class PreviewService:
                     preview_run_id,
                     request,
                     status=PreviewRunStatus.succeeded,
-                    db_status=PreviewDbStatus.reachable if candidates else PreviewDbStatus.not_checked,
+                    db_status=observed_db_status(),
                     timing=run_timing | {"runMs": elapsed_ms(run_started)},
                 )
         except Exception as error:

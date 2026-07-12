@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from backend.app.services.upload_preview import PreviewCancelledError, SupabaseExactReconciler
+from backend.app.services.upload_preview import (
+    PreviewCancelledError,
+    PreviewDbQueryError,
+    PreviewDbUnavailableError,
+    SupabaseExactReconciler,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -237,3 +242,48 @@ def test_supabase_reconciler_temp_table_match_shapes(monkeypatch, existing_keys,
     result = SupabaseExactReconciler("postgresql://local").find_existing_keys(candidate_keys, chunk_rows=1)
 
     assert result == expected_keys
+
+
+def test_supabase_reconciler_classifies_connect_failure_as_unreachable(monkeypatch) -> None:
+    def fail_connect(*_args, **_kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=fail_connect))
+
+    with pytest.raises(PreviewDbUnavailableError, match="connection refused"):
+        SupabaseExactReconciler("postgresql://local").find_existing_keys(
+            {("2026-06-01T09:00:00+09:00", "a")}
+        )
+
+
+def test_supabase_reconciler_classifies_post_connect_failure_as_query_failed(monkeypatch) -> None:
+    class FailingCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, *_args, **_kwargs) -> None:
+            raise RuntimeError("permission denied for all_metrics")
+
+    class ConnectedDatabase:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def cursor(self):
+            return FailingCursor()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(connect=lambda *_args, **_kwargs: ConnectedDatabase()),
+    )
+
+    with pytest.raises(PreviewDbQueryError, match="permission denied"):
+        SupabaseExactReconciler("postgresql://local").find_existing_keys(
+            {("2026-06-01T09:00:00+09:00", "a")}
+        )
