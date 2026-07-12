@@ -4,7 +4,11 @@ import {
   UploadWorkerUnavailableError,
 } from "./uploadJobErrors";
 
-export { UploadWorkerUnavailableError } from "./uploadJobErrors";
+export {
+  shouldClearRecoveredWorkerFailure,
+  uploadWorkerRecoveryTranslationKey,
+  UploadWorkerUnavailableError,
+} from "./uploadJobErrors";
 
 export type UploadJobMode = "preview_targets" | "retry_failed";
 export type UploadJobStatus =
@@ -199,13 +203,13 @@ async function throwUploadJobRequestError(response: Response, fallbackMessage: s
 export async function fetchLatestUploadJob(): Promise<UploadJobDetail | null> {
   const response = await fetch("/api/upload/jobs/latest");
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error("Latest upload job could not be loaded");
+  if (!response.ok) await throwUploadJobRequestError(response, "Latest upload job could not be loaded");
   return normalizeJobDetail(await response.json());
 }
 
 export async function fetchUploadJob(jobId: string): Promise<UploadJobDetail> {
   const response = await fetch(`/api/upload/jobs/${encodeURIComponent(jobId)}`);
-  if (!response.ok) throw new Error("Upload job could not be loaded");
+  if (!response.ok) await throwUploadJobRequestError(response, "Upload job could not be loaded");
   return normalizeJobDetail(await response.json());
 }
 
@@ -218,7 +222,7 @@ export async function controlUploadJob(
     { method: "POST" },
     { mutating: true },
   );
-  if (!response.ok) throw new Error(`Upload job could not ${action}`);
+  if (!response.ok) await throwUploadJobRequestError(response, `Upload job could not ${action}`);
   return normalizeJobDetail(await response.json());
 }
 

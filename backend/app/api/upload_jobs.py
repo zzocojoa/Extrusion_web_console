@@ -5,7 +5,9 @@ from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from pathlib import Path as FileSystemPath
+from threading import RLock
+from typing import Any, Callable
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
@@ -46,6 +48,8 @@ from backend.app.services.upload_jobs import UploadJobService, is_jwt_like_key
 router = APIRouter(prefix="/api/upload/jobs", tags=["upload-jobs"])
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-job")
 _LOGGER = logging.getLogger(__name__)
+_worker_failure_notice_lock = RLock()
+_worker_failure_notices: set[tuple[str, str]] = set()
 UPLOAD_WORKER_UNAVAILABLE_REASON = "upload_worker_unavailable"
 UPLOAD_WORKER_RECONCILIATION_FAILED_REASON = "upload_worker_reconciliation_failed"
 UPLOAD_WORKER_RETRY_RECOVERY = (
@@ -62,9 +66,61 @@ class UploadWorkerFailureReconciliation(str, Enum):
     persistence_failed = "persistence_failed"
 
 
+def _worker_failure_notice_key(repository: UploadJobRepository, job_id: str) -> tuple[str, str]:
+    return str(FileSystemPath(repository.db_path).resolve()), job_id
+
+
+def _record_worker_failure_notice(repository: UploadJobRepository, job_id: str) -> None:
+    with _worker_failure_notice_lock:
+        _worker_failure_notices.add(_worker_failure_notice_key(repository, job_id))
+
+
+def _clear_worker_failure_notice(repository: UploadJobRepository, job_id: str) -> None:
+    with _worker_failure_notice_lock:
+        _worker_failure_notices.discard(_worker_failure_notice_key(repository, job_id))
+
+
+def _has_worker_failure_notice(repository: UploadJobRepository, job_id: str) -> bool:
+    with _worker_failure_notice_lock:
+        return _worker_failure_notice_key(repository, job_id) in _worker_failure_notices
+
+
+def _worker_unavailable_exception(job_id: str, *, reconciliation_failed: bool) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "reason": (
+                UPLOAD_WORKER_RECONCILIATION_FAILED_REASON
+                if reconciliation_failed
+                else UPLOAD_WORKER_UNAVAILABLE_REASON
+            ),
+            "jobId": job_id,
+            "restartRequired": True,
+            "recovery": (
+                UPLOAD_WORKER_RESTART_RECOVERY
+                if reconciliation_failed
+                else UPLOAD_WORKER_RETRY_RECOVERY
+            ),
+        },
+        headers={"Location": f"/api/upload/jobs/{job_id}"},
+    )
+
+
+def _raise_for_unreconciled_worker_failure(
+    repository: UploadJobRepository,
+    job_id: str,
+    job_row: Any,
+) -> None:
+    if str(job_row["status"]) not in ACTIVE_JOB_STATUSES:
+        _clear_worker_failure_notice(repository, job_id)
+        return
+    if _has_worker_failure_notice(repository, job_id):
+        raise _worker_unavailable_exception(job_id, reconciliation_failed=True)
+
+
 UPLOAD_WORKER_UNAVAILABLE_RESPONSE = {
     "description": (
-        "The job was persisted but the background worker could not be submitted. "
+        "The job was persisted but the background worker became unavailable. "
         "A launcher restart is required; reason reports whether failure-state reconciliation also failed."
     ),
     "content": {
@@ -151,6 +207,7 @@ def _reconcile_upload_worker_failure(
     try:
         reconciled = repository.reconcile_worker_failure(job_id, error_code, message)
     except Exception as persistence_error:
+        _record_worker_failure_notice(repository, job_id)
         _LOGGER.error(
             "Upload job worker failure reconciliation failed: job_id=%s error_type=%s persistence_error_type=%s",
             job_id,
@@ -158,6 +215,7 @@ def _reconcile_upload_worker_failure(
             type(persistence_error).__name__,
         )
         return UploadWorkerFailureReconciliation.persistence_failed
+    _clear_worker_failure_notice(repository, job_id)
     if reconciled:
         return UploadWorkerFailureReconciliation.reconciled
     return UploadWorkerFailureReconciliation.not_active
@@ -184,21 +242,34 @@ def _observe_upload_job_future(
     try:
         error = future.exception()
     except CancelledError:
-        _reconcile_upload_worker_failure(
+        reconciliation = _reconcile_upload_worker_failure(
             repository,
             job_id,
             error_code="upload_worker_cancelled",
             error_type="CancelledError",
         )
+        if reconciliation is UploadWorkerFailureReconciliation.persistence_failed:
+            _LOGGER.critical(
+                "Upload job worker cancellation could not be reconciled: "
+                "job_id=%s restart_required=true",
+                job_id,
+            )
         _LOGGER.warning("Upload job worker was cancelled: job_id=%s", job_id)
         return
     if error is not None:
-        _reconcile_upload_worker_failure(
+        reconciliation = _reconcile_upload_worker_failure(
             repository,
             job_id,
             error_code="upload_worker_failed",
             error_type=type(error).__name__,
         )
+        if reconciliation is UploadWorkerFailureReconciliation.persistence_failed:
+            _LOGGER.critical(
+                "Upload job worker failure could not be reconciled: "
+                "job_id=%s error_type=%s restart_required=true",
+                job_id,
+                type(error).__name__,
+            )
         _LOGGER.error(
             "Upload job worker exited unexpectedly: job_id=%s error_type=%s",
             job_id,
@@ -216,14 +287,7 @@ def _submit_upload_job(settings: Settings, repository: UploadJobRepository, job_
             error_code="upload_worker_failed",
             error_type=type(error).__name__,
         )
-        restart_required = True
         reconciliation_failed = reconciliation is UploadWorkerFailureReconciliation.persistence_failed
-        reason = (
-            UPLOAD_WORKER_RECONCILIATION_FAILED_REASON
-            if reconciliation_failed
-            else UPLOAD_WORKER_UNAVAILABLE_REASON
-        )
-        recovery = UPLOAD_WORKER_RESTART_RECOVERY if reconciliation_failed else UPLOAD_WORKER_RETRY_RECOVERY
         if reconciliation_failed:
             _LOGGER.critical(
                 "Upload job worker submission and failure reconciliation both failed: "
@@ -235,15 +299,9 @@ def _submit_upload_job(settings: Settings, repository: UploadJobRepository, job_
             job_id,
             type(error).__name__,
         )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "reason": reason,
-                "jobId": job_id,
-                "restartRequired": restart_required,
-                "recovery": recovery,
-            },
-            headers={"Location": f"/api/upload/jobs/{job_id}"},
+        raise _worker_unavailable_exception(
+            job_id,
+            reconciliation_failed=reconciliation_failed,
         ) from None
     future.add_done_callback(lambda completed: _observe_upload_job_future(job_id, repository, completed))
 
@@ -331,6 +389,7 @@ def build_job_detail(
     row = repository.get_job(job_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+    _raise_for_unreconciled_worker_failure(repository, job_id, row)
     latest_seq = repository.latest_event_seq(job_id)
     after_seq = max(0, latest_seq - event_tail)
     return UploadJobDetailResponse(
@@ -396,6 +455,41 @@ def reject_with_audit(
     if detail_extra:
         detail.update(detail_extra)
     raise HTTPException(status_code=status_code, detail=detail, headers=headers)
+
+
+def _control_upload_job(
+    repository: UploadJobRepository,
+    job_id: str,
+    *,
+    action: str,
+    transition: Callable[[str], UploadJobStatus | None],
+    allowed_statuses: set[UploadJobStatus],
+) -> UploadJobDetailResponse:
+    with _worker_failure_notice_lock:
+        if _has_worker_failure_notice(repository, job_id):
+            raise _worker_unavailable_exception(job_id, reconciliation_failed=True)
+        next_status = transition(job_id)
+        if next_status is None:
+            reject_with_audit(
+                repository,
+                status_code=status.HTTP_404_NOT_FOUND,
+                action=f"upload.{action}",
+                target_type="upload_job",
+                target_id=job_id,
+                reason="upload_job_not_found",
+            )
+        if next_status not in allowed_statuses:
+            reject_with_audit(
+                repository,
+                status_code=status.HTTP_409_CONFLICT,
+                action=f"upload.{action}",
+                target_type="upload_job",
+                target_id=job_id,
+                reason="invalid_upload_job_state",
+                params={"status": next_status.value},
+                detail_extra={"status": next_status.value},
+            )
+        return build_job_detail(job_id, repository)
 
 
 def ensure_upload_config(
@@ -575,7 +669,11 @@ def create_upload_job(
     )
 
 
-@router.get("", response_model=UploadJobListResponse)
+@router.get(
+    "",
+    response_model=UploadJobListResponse,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def list_upload_jobs(
     status_filter: UploadJobStatus | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -587,10 +685,16 @@ def list_upload_jobs(
         limit=limit,
         offset=offset,
     )
+    for row in rows:
+        _raise_for_unreconciled_worker_failure(repository, str(row["job_id"]), row)
     return UploadJobListResponse(jobs=[job_dto(row) for row in rows], total=total)
 
 
-@router.get("/latest", response_model=UploadJobDetailResponse)
+@router.get(
+    "/latest",
+    response_model=UploadJobDetailResponse,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def latest_upload_job(repository: UploadJobRepository = Depends(get_upload_job_repository)) -> UploadJobDetailResponse:
     row = repository.get_latest_job()
     if row is None:
@@ -598,7 +702,11 @@ def latest_upload_job(repository: UploadJobRepository = Depends(get_upload_job_r
     return build_job_detail(row["job_id"], repository)
 
 
-@router.get("/{jobId}", response_model=UploadJobDetailResponse)
+@router.get(
+    "/{jobId}",
+    response_model=UploadJobDetailResponse,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def upload_job_detail(
     job_id: str = Path(alias="jobId"),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
@@ -712,91 +820,58 @@ def retry_upload_job(
     )
 
 
-@router.post("/{jobId}/pause", response_model=UploadJobDetailResponse)
+@router.post(
+    "/{jobId}/pause",
+    response_model=UploadJobDetailResponse,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def pause_upload_job(
     job_id: str = Path(alias="jobId"),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
 ) -> UploadJobDetailResponse:
-    next_status = repository.request_pause(job_id)
-    if next_status is None:
-        reject_with_audit(
-            repository,
-            status_code=status.HTTP_404_NOT_FOUND,
-            action="upload.pause",
-            target_type="upload_job",
-            target_id=job_id,
-            reason="upload_job_not_found",
-        )
-    if next_status not in {UploadJobStatus.pausing, UploadJobStatus.paused}:
-        reject_with_audit(
-            repository,
-            status_code=status.HTTP_409_CONFLICT,
-            action="upload.pause",
-            target_type="upload_job",
-            target_id=job_id,
-            reason="invalid_upload_job_state",
-            params={"status": next_status.value},
-            detail_extra={"status": next_status.value},
-        )
-    return build_job_detail(job_id, repository)
+    return _control_upload_job(
+        repository,
+        job_id,
+        action="pause",
+        transition=repository.request_pause,
+        allowed_statuses={UploadJobStatus.pausing, UploadJobStatus.paused},
+    )
 
 
-@router.post("/{jobId}/resume", response_model=UploadJobDetailResponse)
+@router.post(
+    "/{jobId}/resume",
+    response_model=UploadJobDetailResponse,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def resume_upload_job(
     job_id: str = Path(alias="jobId"),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
 ) -> UploadJobDetailResponse:
-    next_status = repository.resume_job(job_id)
-    if next_status is None:
-        reject_with_audit(
-            repository,
-            status_code=status.HTTP_404_NOT_FOUND,
-            action="upload.resume",
-            target_type="upload_job",
-            target_id=job_id,
-            reason="upload_job_not_found",
-        )
-    if next_status != UploadJobStatus.running:
-        reject_with_audit(
-            repository,
-            status_code=status.HTTP_409_CONFLICT,
-            action="upload.resume",
-            target_type="upload_job",
-            target_id=job_id,
-            reason="invalid_upload_job_state",
-            params={"status": next_status.value},
-            detail_extra={"status": next_status.value},
-        )
-    return build_job_detail(job_id, repository)
+    return _control_upload_job(
+        repository,
+        job_id,
+        action="resume",
+        transition=repository.resume_job,
+        allowed_statuses={UploadJobStatus.running},
+    )
 
 
-@router.post("/{jobId}/cancel", response_model=UploadJobDetailResponse)
+@router.post(
+    "/{jobId}/cancel",
+    response_model=UploadJobDetailResponse,
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE},
+)
 def cancel_upload_job(
     job_id: str = Path(alias="jobId"),
     repository: UploadJobRepository = Depends(get_upload_job_repository),
 ) -> UploadJobDetailResponse:
-    next_status = repository.request_cancel(job_id)
-    if next_status is None:
-        reject_with_audit(
-            repository,
-            status_code=status.HTTP_404_NOT_FOUND,
-            action="upload.cancel",
-            target_type="upload_job",
-            target_id=job_id,
-            reason="upload_job_not_found",
-        )
-    if next_status != UploadJobStatus.cancelling:
-        reject_with_audit(
-            repository,
-            status_code=status.HTTP_409_CONFLICT,
-            action="upload.cancel",
-            target_type="upload_job",
-            target_id=job_id,
-            reason="invalid_upload_job_state",
-            params={"status": next_status.value},
-            detail_extra={"status": next_status.value},
-        )
-    return build_job_detail(job_id, repository)
+    return _control_upload_job(
+        repository,
+        job_id,
+        action="cancel",
+        transition=repository.request_cancel,
+        allowed_statuses={UploadJobStatus.cancelling},
+    )
 
 
 @router.get(
@@ -813,7 +888,8 @@ def cancel_upload_job(
         },
         status.HTTP_204_NO_CONTENT: {
             "description": "The terminal stream cursor is current; EventSource clients must stop reconnecting."
-        }
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: UPLOAD_WORKER_UNAVAILABLE_RESPONSE,
     },
 )
 def upload_job_events(
@@ -831,6 +907,7 @@ def upload_job_events(
     job = repository.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload job not found")
+    _raise_for_unreconciled_worker_failure(repository, job_id, job)
     start_after = resolve_upload_event_cursor(after_seq, last_event_id)
     if str(job["status"]) not in ACTIVE_JOB_STATUSES and repository.latest_event_seq(job_id) <= start_after:
         return Response(status_code=status.HTTP_204_NO_CONTENT)

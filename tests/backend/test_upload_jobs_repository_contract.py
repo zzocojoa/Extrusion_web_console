@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -498,6 +499,95 @@ def test_reconcile_worker_failure_rolls_back_every_write_when_audit_persistence_
             for table in ("upload_file_state", "job_events", "audit_log")
         }
     assert after_counts == before_counts
+
+
+def test_reconcile_worker_failure_uses_bounded_sql_for_large_file_sets(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_bulk_failure",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    with repository.connect() as connection:
+        connection.execute(
+            """
+            WITH RECURSIVE sequence(value) AS (
+              SELECT 1
+              UNION ALL
+              SELECT value + 1 FROM sequence WHERE value < 999
+            )
+            INSERT INTO upload_job_files(
+              job_id, preview_item_id, file_key, folder_label, folder_path, filename,
+              path, kind, file_date, file_signature, source_preview_status,
+              source_reason_code, status, row_count, processed_rows, uploaded_rows,
+              inserted_rows, resume_offset, retry_count, created_at, updated_at
+            )
+            SELECT source.job_id, source.preview_item_id, 'bulk-key-' || sequence.value,
+                   source.folder_label, source.folder_path,
+                   'bulk-' || sequence.value || '.csv',
+                   source.path || '-' || sequence.value, source.kind, source.file_date,
+                   source.file_signature, source.source_preview_status,
+                   source.source_reason_code, source.status, source.row_count,
+                   source.processed_rows, source.uploaded_rows, source.inserted_rows,
+                   source.resume_offset, source.retry_count, source.created_at, source.updated_at
+            FROM upload_job_files AS source
+            CROSS JOIN sequence
+            WHERE source.job_id = ? AND source.file_key = 'key-target.csv'
+            """,
+            ("upl_bulk_failure",),
+        )
+        connection.execute(
+            """
+            UPDATE upload_job_files
+            SET resume_offset = 17
+            WHERE job_id = ? AND file_key = 'bulk-key-999'
+            """,
+            ("upl_bulk_failure",),
+        )
+
+    statements: list[str] = []
+
+    class TracingConnection(sqlite3.Connection):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.set_trace_callback(statements.append)
+
+    class TracingRepository(UploadJobRepository):
+        _connection_factory = TracingConnection
+
+    tracing_repository = TracingRepository(db_path)
+    statements.clear()
+
+    assert tracing_repository.reconcile_worker_failure(
+        "upl_bulk_failure",
+        "upload_worker_failed",
+        "Upload job worker stopped unexpectedly (RuntimeError).",
+    ) is True
+
+    normalized = [" ".join(statement.split()) for statement in statements]
+    assert sum("INSERT INTO upload_file_state" in statement for statement in normalized) == 1
+    assert sum("UPDATE upload_job_files" in statement for statement in normalized) == 1
+    with tracing_repository.connect() as connection:
+        failed_files = connection.execute(
+            "SELECT COUNT(*) AS count FROM upload_job_files WHERE job_id = ? AND status = 'failed'",
+            ("upl_bulk_failure",),
+        ).fetchone()["count"]
+        state_rows = connection.execute(
+            "SELECT COUNT(*) AS count FROM upload_file_state WHERE last_job_id = ? AND state = 'failed'",
+            ("upl_bulk_failure",),
+        ).fetchone()["count"]
+        resumed = connection.execute(
+            "SELECT resume_offset FROM upload_file_state WHERE file_key = 'bulk-key-999'",
+        ).fetchone()["resume_offset"]
+    assert failed_files == 1_000
+    assert state_rows == 1_000
+    assert resumed == 17
 
 
 def test_append_event_rejects_missing_job_without_writing_event(tmp_path: Path) -> None:

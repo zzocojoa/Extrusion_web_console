@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square, Trash2 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { isLocalTokenApiError } from "../api/client";
@@ -23,6 +24,8 @@ import {
   getUploadJobEventsUrl,
   normalizeJobEvent,
   retryUploadJob,
+  shouldClearRecoveredWorkerFailure,
+  uploadWorkerRecoveryTranslationKey,
   UploadWorkerUnavailableError,
   type JobEvent,
   type UploadJobDetail,
@@ -582,6 +585,14 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
   }, [jobId, jobQuery.data, latestJobQuery.data, sseEvents]);
 
   useEffect(() => {
+    if (!workerFailureError || !currentJob) return;
+    const isTerminal = !activeJobStatuses.includes(currentJob.job.status);
+    if (shouldClearRecoveredWorkerFailure(workerFailureError, currentJob.job.jobId, isTerminal)) {
+      setWorkerFailureError(null);
+    }
+  }, [currentJob, workerFailureError]);
+
+  useEffect(() => {
     latestSeqRef.current = 0;
     setSseEvents([]);
   }, [jobId]);
@@ -1112,12 +1123,12 @@ function PreviewTab(props: PreviewTabProps) {
 
       {props.error ? (
         <div className="error-banner" role="alert">
-          {formatOperatorError(props.error, t("upload.preview.error"))}
+          {formatOperatorError(props.error, t("upload.preview.error"), t)}
         </div>
       ) : null}
       {props.startUploadError ? (
         <div className="error-banner" role="alert">
-          {t("upload.job.startError")}: {props.startUploadError.message}
+          {t("upload.job.startError")}: {formatOperatorError(props.startUploadError, props.startUploadError.message, t)}
         </div>
       ) : null}
       {props.deletePreflightError ? (
@@ -1973,7 +1984,7 @@ function JobTab({
     return <section className="panel panel--loading">{t("upload.job.loading")}</section>;
   }
   if (error && !detail) {
-    return <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"))}</div>;
+    return <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"), t)}</div>;
   }
   if (!detail) {
     return (
@@ -2041,7 +2052,7 @@ function JobTab({
               <Metric label={t("upload.job.metrics.accepted")} value={formatNumber(job.summary.acceptedRows)} />
               <Metric label={t("upload.job.metrics.failures")} value={formatNumber(job.summary.failedFiles)} danger={job.summary.failedFiles > 0} />
             </div>
-            {error ? <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"))}</div> : null}
+            {error ? <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"), t)}</div> : null}
             {job.errorMessage ? <div className="error-banner" role="alert">{job.errorMessage}</div> : null}
           </div>
         </div>
@@ -2176,9 +2187,11 @@ function RetryConfirmationModal({
   );
 }
 
-function formatOperatorError(error: Error, fallback: string): string {
+function formatOperatorError(error: Error, fallback: string, t: TFunction): string {
   if (isLocalTokenApiError(error)) return error.message;
-  if (error instanceof UploadWorkerUnavailableError) return error.recovery;
+  if (error instanceof UploadWorkerUnavailableError) {
+    return t(uploadWorkerRecoveryTranslationKey(error));
+  }
   return fallback;
 }
 

@@ -15,7 +15,7 @@ Implemented on branch `codex/upload-job-sse`:
 - Cooperative pause/resume/cancel checkpoints between files and batches.
 - SSE event replay backed by persisted `job_events`.
 - Startup recovery that marks active upload jobs interrupted.
-- PR #229 hardening that reads each SSE event batch and job status from one SQLite snapshot, preserves the existing `tail` batch-size contract, terminates current terminal cursors with HTTP 204, seals terminal event streams, treats sealed workers as stopped, atomically reconciles constructor/execution/cancellation/submission failures to retryable failed job/file state with visible terminal events and audits, returns persisted job discovery metadata on submission failure, and reports startup recovery counts or sanitized stage/type failures. This is an Upload Job SSE/startup-recovery reliability patch, not the requested V2 WP-01.
+- PR #229 hardening that reads each SSE event batch and job status from one SQLite snapshot, preserves the existing `tail` batch-size contract, terminates current terminal cursors with HTTP 204, seals terminal event streams, treats sealed workers as stopped, atomically reconciles constructor/execution/cancellation/submission failures to retryable failed job/file state with visible terminal events and audits, keeps an unreconciled asynchronous worker failure visible through structured `503` responses until startup recovery persists a terminal state, returns persisted job discovery metadata on submission failure, and reports startup recovery counts or sanitized stage/type failures. This is an Upload Job SSE/startup-recovery reliability patch, not the requested V2 WP-01.
 - Upload Job frontend tab with progress summary, action buttons, file table, event viewer, mock mode, API mode, and SSE reconnect.
 - Upload Job row count terminology now exposes `acceptedRows` as the canonical accepted/upserted count in API responses, job events, SSE replay, and UI labels; `insertedRows` remains a deprecated v1 compatibility alias.
 - Review hardening for canonical legacy-compatible CSV transform, legacy Korean PLC/temperature fixture parity, terminal status guards, blocked-path audit logging, idempotent pause events, job-scoped SSE reconnect/replay, and concurrent event sequence writes.
@@ -58,7 +58,7 @@ This plan follows `AGENTS.md`, `docs/00_product_scope.md`, `docs/02_engineering_
    Pause and cancel are checked before files, between chunks, between batches, and between retry sleeps. An in-flight HTTP call to the Edge Function is bounded by timeout, not forcibly killed.
 
 7. Background failures must hit three surfaces.
-   Every failure writes `upload_jobs` / `upload_job_files`, a `job_events` error row, and an audit row. UI surfaces the same job id in Upload Job, Logs, and Dashboard.
+   Every failure writes `upload_jobs` / `upload_job_files`, a `job_events` error row, and an audit row while SQLite is writable. If worker-failure reconciliation itself cannot be persisted, a process-local notice and structured `503` temporarily provide operator visibility until launcher startup recovery writes the terminal state. UI surfaces the same job id in Upload Job, Logs, and Dashboard.
 
 8. Upload execution introduces a web app state store, not a legacy state import.
    Do not import `uploader_state.db`. New resume/retry state lives in the web SQLite DB.
@@ -188,6 +188,8 @@ Worker unavailable `503`:
 The response includes `Location: /api/upload/jobs/upl_abc123def456`. The persisted job and its queued/running files are already failed atomically and remain discoverable for event/audit review after the required launcher restart. A real `ThreadPoolExecutor` submission rejection is not recoverable in-process, so retry must wait until restart.
 
 If worker submission and failure-state reconciliation both fail, the response keeps the same `jobId` and `Location` but uses `reason: upload_worker_reconciliation_failed`, `restartRequired: true`, and `recovery: Restart the web console from the launcher before starting or retrying an upload job.` The job may still appear active because its failure state could not be persisted. The operator must restart through the launcher; startup recovery then marks the stale active job interrupted before another upload or retry is attempted.
+
+If an already accepted asynchronous worker later fails and both the worker wrapper and completion callback cannot persist failure reconciliation, the backend records only the database-path/job-id pair in a thread-safe process-local notice. List, detail, latest-job, SSE, and pause/resume/cancel responses that include that still-active job return the same fixed `upload_worker_reconciliation_failed` `503` contract instead of presenting a healthy queued job. Control requests check the notice before their mutation transaction, so a `503` response does not change job state or append an event/audit. The UI selects localized recovery copy from the validated reason code and never renders server-supplied recovery text directly. Once reconciliation or launcher startup recovery persists a terminal state, the notice is cleared automatically.
 
 ### `GET /api/upload/jobs`
 
@@ -751,7 +753,7 @@ Buttons:
 | Cancel requested | job `cancelling -> cancelled` or `partial_failed` | cancelled banner | service + UI |
 | Backend killed mid-upload | startup marks `interrupted`; event/audit written | latest job interrupted; Retry visible | startup |
 | SSE disconnect | client reconnects with last seq; no lost events | event list resumes | SSE |
-| SSE client opens old job | backlog streamed then heartbeat | stable logs | SSE |
+| SSE client opens old job | backlog streamed, then stream closes; a current reconnect gets `204` | stable logs without reconnect loop | SSE |
 | Korean long error text | wraps in table/log viewer | no overflow | browser QA |
 
 ## Test Plan
@@ -856,7 +858,7 @@ GET /api/upload/jobs/{id}/events
   ├─ no Last-Event-ID -> tail/backlog [SSE]
   ├─ Last-Event-ID -> replay after seq [SSE]
   ├─ no new events -> heartbeat [SSE]
-  └─ job terminal -> final event then heartbeat/close decision [SSE]
+  └─ job terminal -> final event then close; current reconnect gets 204 [SSE]
 
 Startup
   ├─ no active jobs -> no-op [startup]

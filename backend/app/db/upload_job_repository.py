@@ -718,41 +718,42 @@ class UploadJobRepository:
             if job is None or str(job["status"]) not in ACTIVE_JOB_STATUSES:
                 return False
 
-            file_rows = connection.execute(
+            connection.execute(
                 """
-                SELECT *
+                INSERT INTO upload_file_state(
+                  file_key, legacy_key, folder_label, folder_path, filename, path, kind,
+                  file_signature, state, resume_offset, last_error_code, last_error_message,
+                  retry_count, completed_at, failed_at, last_job_id, created_at, updated_at
+                )
+                SELECT file_key, folder_path || '::' || filename, folder_label, folder_path,
+                       filename, path, kind, file_signature, 'failed', resume_offset, ?, ?,
+                       retry_count, NULL, ?, job_id, ?, ?
                 FROM upload_job_files
                 WHERE job_id = ? AND status IN ('queued', 'running')
+                ON CONFLICT(file_key) DO UPDATE SET
+                  file_signature = excluded.file_signature,
+                  state = excluded.state,
+                  resume_offset = excluded.resume_offset,
+                  last_error_code = excluded.last_error_code,
+                  last_error_message = excluded.last_error_message,
+                  retry_count = excluded.retry_count,
+                  completed_at = COALESCE(excluded.completed_at, upload_file_state.completed_at),
+                  failed_at = COALESCE(excluded.failed_at, upload_file_state.failed_at),
+                  last_job_id = excluded.last_job_id,
+                  updated_at = excluded.updated_at
                 """,
-                (job_id,),
-            ).fetchall()
-            for file_row in file_rows:
-                resume_offset = int(file_row["resume_offset"] or 0)
-                connection.execute(
-                    """
-                    UPDATE upload_job_files
-                    SET status = 'failed', resume_offset = ?,
-                        finished_at = COALESCE(finished_at, ?),
-                        last_error_code = ?, last_error_message = ?, updated_at = ?
-                    WHERE job_file_id = ?
-                    """,
-                    (
-                        resume_offset,
-                        now,
-                        error_code,
-                        error_message,
-                        now,
-                        file_row["job_file_id"],
-                    ),
-                )
-                self._upsert_file_state_in_connection(
-                    connection,
-                    file_row,
-                    "failed",
-                    resume_offset,
-                    error_code,
-                    error_message,
-                )
+                (error_code, error_message, now, now, now, job_id),
+            )
+            connection.execute(
+                """
+                UPDATE upload_job_files
+                SET status = 'failed',
+                    finished_at = COALESCE(finished_at, ?),
+                    last_error_code = ?, last_error_message = ?, updated_at = ?
+                WHERE job_id = ? AND status IN ('queued', 'running')
+                """,
+                (now, error_code, error_message, now, job_id),
+            )
 
             self._recompute_job_summary(connection, job_id)
             connection.execute(

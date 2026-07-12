@@ -65,7 +65,11 @@ def test_upload_job_routes_are_registered_in_openapi(monkeypatch) -> None:
     assert "/api/upload/jobs/{jobId}/events" in paths
     for operation in (
         paths["/api/upload/jobs"]["post"],
+        paths["/api/upload/jobs"]["get"],
         paths["/api/upload/jobs/{jobId}/retry"]["post"],
+        paths["/api/upload/jobs/{jobId}/pause"]["post"],
+        paths["/api/upload/jobs/{jobId}/resume"]["post"],
+        paths["/api/upload/jobs/{jobId}/cancel"]["post"],
     ):
         unavailable = operation["responses"]["503"]
         assert unavailable["description"].startswith("The job was persisted")
@@ -83,6 +87,9 @@ def test_upload_job_routes_are_registered_in_openapi(monkeypatch) -> None:
     assert set(event_responses["200"]["content"]) == {"text/event-stream"}
     assert event_responses["204"]["description"].startswith(
         "The terminal stream cursor is current"
+    )
+    assert event_responses["503"]["description"].startswith(
+        "The job was persisted but the background worker became unavailable"
     )
     event_parameters = paths["/api/upload/jobs/{jobId}/events"]["get"]["parameters"]
     tail_parameter = next(parameter for parameter in event_parameters if parameter["name"] == "tail")
@@ -806,7 +813,8 @@ def test_upload_job_events_resumes_after_last_event_id_without_duplicates(tmp_pa
         int(row["seq"])
         for row in repository.list_events("upl_last_event", after_seq=2, limit=500)
     ]
-    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    api_repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: api_repository
     client = TestClient(app)
 
     try:
@@ -826,6 +834,113 @@ def test_upload_job_events_resumes_after_last_event_id_without_duplicates(tmp_pa
     assert 2 not in actual_ids
 
 
+def test_cancelled_worker_reconciliation_failure_stays_visible_until_startup_recovery(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    job_id = "upl_abcdef123456"
+    repository.create_job_from_preview(
+        job_id=job_id,
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    future: Future[None] = Future()
+    assert future.cancel() is True
+
+    def reject_reconciliation(*_args, **_kwargs):
+        raise RuntimeError("sensitive-cancel-persistence-detail")
+
+    monkeypatch.setattr(repository, "reconcile_worker_failure", reject_reconciliation)
+    caplog.set_level(logging.ERROR, logger=upload_jobs_api.__name__)
+
+    upload_jobs_api._observe_upload_job_future(job_id, repository, future)
+
+    api_repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: api_repository
+    client = TestClient(app)
+    try:
+        detail_response = client.get(f"/api/upload/jobs/{job_id}")
+        events_response = client.get(f"/api/upload/jobs/{job_id}/events")
+        list_response = client.get("/api/upload/jobs")
+
+        assert detail_response.status_code == 503
+        assert detail_response.json()["detail"]["reason"] == "upload_worker_reconciliation_failed"
+        assert detail_response.json()["detail"]["restartRequired"] is True
+        assert events_response.status_code == 503
+        assert list_response.status_code == 503
+        assert repository.get_job(job_id)["status"] == UploadJobStatus.queued.value
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "restart_required=true" in messages
+        assert "sensitive-cancel-persistence-detail" not in messages
+
+        recovery = recover_interrupted_work(str(db_path))
+        recovered_response = client.get(f"/api/upload/jobs/{job_id}")
+
+        assert recovery.upload_jobs == 1
+        assert recovered_response.status_code == 200
+        assert recovered_response.json()["job"]["status"] == UploadJobStatus.interrupted.value
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("action", ["pause", "resume", "cancel"])
+def test_upload_job_control_preserves_unreconciled_worker_failure_contract(
+    tmp_path: Path,
+    action: str,
+) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    job_id = "upl_a1b2c3d4e5f6"
+    repository.create_job_from_preview(
+        job_id=job_id,
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    if action == "resume":
+        assert repository.request_pause(job_id) == UploadJobStatus.pausing
+        repository.mark_paused(job_id)
+    before_job = dict(repository.get_job(job_id))
+    before_event_count = len(repository.list_events(job_id, limit=500))
+    with repository.connect() as connection:
+        before_audit_count = connection.execute("SELECT COUNT(*) AS count FROM audit_log").fetchone()["count"]
+    upload_jobs_api._record_worker_failure_notice(repository, job_id)
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    client = TestClient(app)
+    try:
+        response = client.post(f"/api/upload/jobs/{job_id}/{action}")
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == {
+            "reason": "upload_worker_reconciliation_failed",
+            "jobId": job_id,
+            "restartRequired": True,
+            "recovery": upload_jobs_api.UPLOAD_WORKER_RESTART_RECOVERY,
+        }
+        assert response.headers["location"] == f"/api/upload/jobs/{job_id}"
+        assert dict(repository.get_job(job_id)) == before_job
+        assert len(repository.list_events(job_id, limit=500)) == before_event_count
+        with repository.connect() as connection:
+            after_audit_count = connection.execute("SELECT COUNT(*) AS count FROM audit_log").fetchone()["count"]
+        assert after_audit_count == before_audit_count
+    finally:
+        upload_jobs_api._clear_worker_failure_notice(repository, job_id)
+        app.dependency_overrides.clear()
+
+
 def test_upload_job_events_returns_no_content_when_terminal_cursor_is_current(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     create_preview_with_items(db_path)
@@ -841,7 +956,8 @@ def test_upload_job_events_returns_no_content_when_terminal_cursor_is_current(tm
     )
     repository.finish_job("upl_terminal_cursor", UploadJobStatus.succeeded)
     latest_seq = repository.latest_event_seq("upl_terminal_cursor")
-    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    api_repository = UploadJobRepository(db_path)
+    app.dependency_overrides[get_upload_job_repository] = lambda: api_repository
     client = TestClient(app)
 
     try:
@@ -1015,6 +1131,95 @@ def test_upload_job_worker_wrapper_reconciles_constructor_failure(tmp_path: Path
     assert job["error_code"] == "upload_worker_failed"
     assert "sensitive-constructor-detail" not in job["error_message"]
     assert files[0]["status"] == "failed"
+
+
+def test_async_worker_double_reconciliation_failure_stays_visible_until_startup_recovery(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    job_id = "upl_123456abcdef"
+    repository.create_job_from_preview(
+        job_id=job_id,
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+
+    class FailingUploadJobService:
+        def __init__(self, _settings, _repository) -> None:
+            pass
+
+        def run_job(self, _job_id: str) -> None:
+            raise RuntimeError("sensitive-async-worker-detail")
+
+    class ImmediateExecutor:
+        def submit(self, function, *args):
+            future: Future[None] = Future()
+            try:
+                function(*args)
+            except Exception as error:
+                future.set_exception(error)
+            else:
+                future.set_result(None)
+            return future
+
+    reconciliation_attempts = 0
+
+    def reject_reconciliation(*_args, **_kwargs):
+        nonlocal reconciliation_attempts
+        reconciliation_attempts += 1
+        raise RuntimeError("sensitive-async-persistence-detail")
+
+    monkeypatch.setattr(upload_jobs_api, "UploadJobService", FailingUploadJobService)
+    monkeypatch.setattr(upload_jobs_api, "executor", ImmediateExecutor())
+    monkeypatch.setattr(repository, "reconcile_worker_failure", reject_reconciliation)
+    caplog.set_level(logging.ERROR, logger=upload_jobs_api.__name__)
+
+    upload_jobs_api._submit_upload_job(
+        Settings(state_db_path=str(db_path)),
+        repository,
+        job_id,
+    )
+
+    app.dependency_overrides[get_upload_job_repository] = lambda: repository
+    client = TestClient(app)
+    try:
+        detail_response = client.get(f"/api/upload/jobs/{job_id}")
+        events_response = client.get(f"/api/upload/jobs/{job_id}/events")
+
+        assert reconciliation_attempts == 2
+        assert detail_response.status_code == 503
+        assert detail_response.json()["detail"] == {
+            "reason": "upload_worker_reconciliation_failed",
+            "jobId": job_id,
+            "restartRequired": True,
+            "recovery": upload_jobs_api.UPLOAD_WORKER_RESTART_RECOVERY,
+        }
+        assert detail_response.headers["location"] == f"/api/upload/jobs/{job_id}"
+        assert events_response.status_code == 503
+        assert repository.get_job(job_id)["status"] == UploadJobStatus.queued.value
+        assert repository.list_events(job_id, limit=500)[-1]["event_type"] == "job.created"
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "restart_required=true" in messages
+        assert "sensitive-async-worker-detail" not in messages
+        assert "sensitive-async-persistence-detail" not in messages
+
+        recovery = recover_interrupted_work(str(db_path))
+        recovered_response = client.get(f"/api/upload/jobs/{job_id}")
+
+        assert recovery.upload_jobs == 1
+        assert recovered_response.status_code == 200
+        assert recovered_response.json()["job"]["status"] == UploadJobStatus.interrupted.value
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_upload_job_submit_failure_reconciles_job_and_returns_safe_503(tmp_path: Path, monkeypatch) -> None:
