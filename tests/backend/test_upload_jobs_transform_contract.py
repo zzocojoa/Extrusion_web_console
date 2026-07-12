@@ -32,9 +32,19 @@ def collect_records(
     return [record for chunk in chunks for record in chunk]
 
 
-def collect_records_chunked(path: Path, *, kind: str = "plc") -> list[dict[str, object]]:
+def collect_records_chunked(
+    path: Path,
+    *,
+    kind: str = "plc",
+    file_date: str = "2026-06-02",
+) -> list[dict[str, object]]:
     reader = CsvUploadRecordReader()
-    chunks = list(reader.iter_records(file_row(path, kind=kind), chunk_rows=1))
+    chunks = list(
+        reader.iter_records(
+            file_row(path, kind=kind, file_date=file_date),
+            chunk_rows=1,
+        )
+    )
     return [record for chunk in chunks for record in chunk]
 
 
@@ -219,70 +229,102 @@ def test_upload_reader_matches_legacy_temperature_korean_mapping_contract() -> N
     assert collect_records_chunked(csv_path, kind="temperature") == records
 
 
-def test_upload_reader_matches_cp949_legacy_plc_alias_fixture(tmp_path: Path) -> None:
+def test_upload_reader_handles_cp949_legacy_plc_alias_fixture(tmp_path: Path) -> None:
     csv_path = materialize_cp949_fixture(
         "legacy_plc_cp949_source.csv",
         tmp_path / "260603_legacy_plc.csv",
     )
 
     records = collect_records(csv_path, kind="plc", file_date="2026-06-03")
-    legacy_records = collect_legacy_records("build_records_plc", csv_path, csv_path.name)
-    legacy_chunked_records = collect_legacy_records(
-        "build_records_plc",
-        csv_path,
-        csv_path.name,
-        chunksize=1,
-    )
-
-    assert records == legacy_records == legacy_chunked_records
     assert [record["timestamp"] for record in records] == [
         "2026-06-03T09:10:00+09:00",
         "2026-06-03T09:11:00+09:00",
     ]
     assert all(record["device_id"] == "extruder_plc" for record in records)
+    assert collect_records_chunked(
+        csv_path,
+        kind="plc",
+        file_date="2026-06-03",
+    ) == records
 
 
-def test_upload_reader_matches_cp949_legacy_temperature_alias_fixture(tmp_path: Path) -> None:
+def test_upload_reader_handles_cp949_legacy_temperature_alias_fixture(tmp_path: Path) -> None:
     csv_path = materialize_cp949_fixture(
         "legacy_temperature_cp949_source.csv",
         tmp_path / "temperature_2026-06-03.csv",
     )
 
     records = collect_records(csv_path, kind="temperature")
-    legacy_records = collect_legacy_records("build_records_temp", csv_path, csv_path.name)
-    legacy_chunked_records = collect_legacy_records(
-        "build_records_temp",
-        csv_path,
-        csv_path.name,
-        chunksize=1,
-    )
-
-    assert records == legacy_records == legacy_chunked_records
     assert [record["timestamp"] for record in records] == [
         "2026-06-03T10:00:00.250000+09:00",
         "2026-06-03T10:01:00.000000+09:00",
     ]
     assert all(record["device_id"] == "spot_temperature_sensor" for record in records)
+    assert collect_records_chunked(csv_path, kind="temperature") == records
 
 
-def test_upload_reader_matches_integrated_plc_fixture_and_chunking() -> None:
+def test_upload_reader_handles_integrated_plc_fixture_and_chunking() -> None:
     csv_path = FIXTURES / "legacy_integrated_plc.csv"
 
     records = collect_records(csv_path, kind="plc")
-    legacy_records = collect_legacy_records("build_records_plc", csv_path, csv_path.name)
+    assert [record["timestamp"] for record in records] == [
+        "2026-06-04T11:00:00.125000+09:00",
+        "2026-06-04T11:01:00.000000+09:00",
+    ]
+    assert all(record["device_id"] == "extruder_integrated" for record in records)
+    assert collect_records_chunked(csv_path, kind="plc") == records
+
+
+@pytest.mark.parametrize(
+    ("source_name", "destination_name", "kind", "legacy_function", "file_date"),
+    [
+        (
+            "legacy_plc_cp949_source.csv",
+            "260603_legacy_plc.csv",
+            "plc",
+            "build_records_plc",
+            "2026-06-03",
+        ),
+        (
+            "legacy_temperature_cp949_source.csv",
+            "temperature_2026-06-03.csv",
+            "temperature",
+            "build_records_temp",
+            "2026-06-02",
+        ),
+        (
+            "legacy_integrated_plc.csv",
+            None,
+            "plc",
+            "build_records_plc",
+            "2026-06-02",
+        ),
+    ],
+)
+def test_extended_fixture_matches_legacy_transform_when_reference_is_available(
+    tmp_path: Path,
+    source_name: str,
+    destination_name: str | None,
+    kind: str,
+    legacy_function: str,
+    file_date: str,
+) -> None:
+    source_path = FIXTURES / source_name
+    csv_path = (
+        materialize_cp949_fixture(source_name, tmp_path / destination_name)
+        if destination_name is not None
+        else source_path
+    )
+    records = collect_records(csv_path, kind=kind, file_date=file_date)
+    legacy_records = collect_legacy_records(legacy_function, csv_path, csv_path.name)
     legacy_chunked_records = collect_legacy_records(
-        "build_records_plc",
+        legacy_function,
         csv_path,
         csv_path.name,
         chunksize=1,
     )
 
     assert records == legacy_records == legacy_chunked_records
-    assert [record["timestamp"] for record in records] == [
-        "2026-06-04T11:00:00.125000+09:00",
-        "2026-06-04T11:01:00.000000+09:00",
-    ]
-    assert all(record["device_id"] == "extruder_integrated" for record in records)
 
 
 def test_upload_reader_resume_offset_skips_canonical_records(tmp_path: Path) -> None:

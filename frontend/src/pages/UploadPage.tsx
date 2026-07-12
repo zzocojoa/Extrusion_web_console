@@ -39,6 +39,8 @@ import {
   createUploadPreview,
   fetchLatestUploadPreview,
   fetchUploadPreview,
+  previewWorkerRecoveryTranslationKey,
+  PreviewWorkerUnavailableError,
   type PreviewApprovalScope,
   type PreviewItem,
   type PreviewItemStatus,
@@ -2189,6 +2191,9 @@ function RetryConfirmationModal({
 
 function formatOperatorError(error: Error, fallback: string, t: TFunction): string {
   if (isLocalTokenApiError(error)) return error.message;
+  if (error instanceof PreviewWorkerUnavailableError) {
+    return t(previewWorkerRecoveryTranslationKey(error));
+  }
   if (error instanceof UploadWorkerUnavailableError) {
     return t(uploadWorkerRecoveryTranslationKey(error));
   }

@@ -156,6 +156,92 @@ export class ActivePreviewRunError extends Error {
   }
 }
 
+export const PREVIEW_WORKER_UNAVAILABLE_REASON = "preview_worker_unavailable";
+export const PREVIEW_WORKER_RECONCILIATION_FAILED_REASON = "preview_worker_reconciliation_failed";
+export const PREVIEW_WORKER_RETRY_RECOVERY =
+  "Restart the web console from the launcher, inspect the persisted failed Preview, then run Preview again.";
+export const PREVIEW_WORKER_RESTART_RECOVERY =
+  "Restart the web console from the launcher before running Preview again.";
+export type PreviewWorkerUnavailableReason =
+  | typeof PREVIEW_WORKER_UNAVAILABLE_REASON
+  | typeof PREVIEW_WORKER_RECONCILIATION_FAILED_REASON;
+
+export class PreviewWorkerUnavailableError extends Error {
+  previewRunId: string;
+  reason: PreviewWorkerUnavailableReason;
+  restartRequired: boolean;
+  recovery: string;
+
+  constructor(
+    previewRunId: string,
+    reason: PreviewWorkerUnavailableReason,
+    restartRequired: boolean,
+    recovery: string,
+  ) {
+    super(recovery);
+    this.name = "PreviewWorkerUnavailableError";
+    this.previewRunId = previewRunId;
+    this.reason = reason;
+    this.restartRequired = restartRequired;
+    this.recovery = recovery;
+  }
+}
+
+export function previewWorkerRecoveryTranslationKey(
+  error: PreviewWorkerUnavailableError,
+): "upload.preview.workerUnavailableRecovery" | "upload.preview.workerReconciliationFailedRecovery" {
+  return error.reason === PREVIEW_WORKER_RECONCILIATION_FAILED_REASON
+    ? "upload.preview.workerReconciliationFailedRecovery"
+    : "upload.preview.workerUnavailableRecovery";
+}
+
+export function parsePreviewWorkerUnavailableError(
+  response: Response,
+  detail: unknown,
+): PreviewWorkerUnavailableError | null {
+  if (response.status !== 503 || !isRecord(detail)) return null;
+  const reason = detail.reason;
+  if (
+    reason !== PREVIEW_WORKER_UNAVAILABLE_REASON &&
+    reason !== PREVIEW_WORKER_RECONCILIATION_FAILED_REASON
+  ) {
+    return null;
+  }
+  const previewRunId = workerUnavailablePreviewRunId(response, detail.previewRunId);
+  const restartRequired = true;
+  const recovery = reason === PREVIEW_WORKER_RECONCILIATION_FAILED_REASON
+    ? PREVIEW_WORKER_RESTART_RECOVERY
+    : PREVIEW_WORKER_RETRY_RECOVERY;
+  if (
+    !previewRunId ||
+    detail.restartRequired !== restartRequired ||
+    detail.recovery !== recovery
+  ) {
+    return null;
+  }
+  return new PreviewWorkerUnavailableError(previewRunId, reason, restartRequired, recovery);
+}
+
+function canonicalPreviewRunId(value: unknown): string | null {
+  return typeof value === "string" && /^prv_[0-9a-f]{12}$/.test(value) ? value : null;
+}
+
+function workerUnavailablePreviewRunId(response: Response, bodyPreviewRunId: unknown): string | null {
+  const prefix = "/api/upload/preview/";
+  const location = response.headers.get("Location");
+  const locationPreviewRunId = location?.startsWith(prefix)
+    ? canonicalPreviewRunId(location.slice(prefix.length))
+    : null;
+  const canonicalBodyPreviewRunId = canonicalPreviewRunId(bodyPreviewRunId);
+  return canonicalBodyPreviewRunId && canonicalBodyPreviewRunId === locationPreviewRunId
+    ? canonicalBodyPreviewRunId
+    : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 const defaultOptions: PreviewOptions = {
   profile: "default",
   stableLagMinutes: 3,
@@ -332,13 +418,16 @@ export async function createUploadPreview(
   );
 
   if (!response.ok) {
+    const raw = await response.json().catch(() => null);
+    const detail = raw?.detail;
     if (response.status === 409) {
-      const raw = await response.json().catch(() => null);
-      const activePreviewRunId = raw?.detail?.activePreviewRunId;
+      const activePreviewRunId = detail?.activePreviewRunId;
       if (typeof activePreviewRunId === "string" && activePreviewRunId.length > 0) {
         throw new ActivePreviewRunError(activePreviewRunId);
       }
     }
+    const workerUnavailableError = parsePreviewWorkerUnavailableError(response, detail);
+    if (workerUnavailableError) throw workerUnavailableError;
     throw new Error("Upload preview could not be started");
   }
 

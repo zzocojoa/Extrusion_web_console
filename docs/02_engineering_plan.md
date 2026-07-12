@@ -226,11 +226,16 @@ legacy compatibility coverage now includes UTF-8 and CP949 PLC/temperature
 aliases plus integrated PLC date/time variants, checked against the legacy
 transform in full and chunked modes. A deterministic 25,000-row synthetic
 Preview soak verifies bounded runtime/memory, exact key counts, DB-checkable
-classification, and audit redaction. Audit API integration coverage exercises
+classification, and audit redaction. A separate instrumented 25,000-key
+`SupabaseExactReconciler` regression verifies production sorting/staging batch
+counts and the single exact-key join without an operational DB. Audit API integration coverage exercises
 malformed Preview, invalid Settings, DB unreachable, active Preview conflict,
 and blocked runtime start paths without operational services. The duplicate
 `v2_lan_access_enabled` declaration is removed and guarded by an AST regression
-test. This automated package does not replace real operator CSV, local
+test. Preview worker submission rejection now reconciles the queued run to a
+safe failed/audited state and returns a 503 restart contract; if reconciliation
+also fails, the queued run remains visible for startup interruption recovery.
+This automated package does not replace real operator CSV, local
 Supabase, or operator-PC validation.
 
 **Launcher phase 1 implementation status**

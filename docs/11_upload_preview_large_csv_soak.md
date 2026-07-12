@@ -180,7 +180,8 @@ through temporary SQLite with a controlled exact-key reconciler, and verifies:
 - completed `succeeded/reachable` classification;
 - exact row/key/upload estimates;
 - configured reconciliation chunk size propagation;
-- completion under 30 seconds and peak traced Python allocation below 96 MiB;
+- completion inside the configured run budget while recording elapsed time and
+  peak traced Python allocation as test properties;
 - safe `upload.preview` audit evidence without the temporary path or filename.
 
 This regression is synthetic and does not connect to operational Supabase or

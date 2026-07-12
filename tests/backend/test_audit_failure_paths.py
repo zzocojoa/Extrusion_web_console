@@ -17,30 +17,12 @@ from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.main import app
 from backend.app.schemas.upload_preview import PreviewDbStatus, PreviewRunStatus
+from tests.backend.preview_test_support import approval_scope
 from tests.backend.test_runtime_control import (
     FakeRunner,
     install_synthetic_runtime_network_probes,
     write_supabase_config,
 )
-
-
-def approval_scope(
-    *,
-    range_mode: str,
-    start_date: str | None = None,
-    end_date: str | None = None,
-    source_class: str = "drive_letter",
-    applied_profile: str = "large_source_operational",
-) -> dict[str, object]:
-    return {
-        "expectedSourceClasses": {"plc": source_class},
-        "expectedRangeMode": range_mode,
-        "expectedStartDate": start_date,
-        "expectedEndDate": end_date,
-        "expectedAppliedProfile": applied_profile,
-    }
-
-
 def test_audit_api_surfaces_representative_failure_and_blocked_paths(
     tmp_path: Path,
     monkeypatch,
@@ -109,7 +91,11 @@ def test_audit_api_surfaces_representative_failure_and_blocked_paths(
             json={
                 "rangeMode": "today",
                 "sources": ["plc"],
-                "approvalScope": approval_scope(range_mode="today"),
+                "approvalScope": approval_scope(
+                    source_class="drive_letter",
+                    range_mode="today",
+                    applied_profile="large_source_operational",
+                ),
             },
         )
         preview_repository.recompute_summary(
@@ -129,9 +115,11 @@ def test_audit_api_surfaces_representative_failure_and_blocked_paths(
                 "sources": ["plc"],
                 "options": {"stableLagMinutes": 0},
                 "approvalScope": approval_scope(
+                    source_class="drive_letter",
                     range_mode="custom",
                     start_date="2026-06-06",
                     end_date="2026-06-06",
+                    applied_profile="large_source_operational",
                 ),
             },
         )

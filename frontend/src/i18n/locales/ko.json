@@ -350,7 +350,9 @@
       "partialOverlapRows": "부분 중복 행",
       "interimSummary": "이미 처리된 행 기준의 잠정 집계입니다. 최종 업로드 가능 여부는 미리보기가 완료된 뒤에만 확정됩니다.",
       "loading": "로컬 CSV와 DB 중복 상태를 확인 중입니다...",
-      "error": "업로드 미리보기 상태를 불러오지 못했습니다."
+      "error": "업로드 미리보기 상태를 불러오지 못했습니다.",
+      "workerUnavailableRecovery": "웹 콘솔을 런처에서 다시 시작하고 저장된 실패 미리보기를 확인한 다음, 미리보기를 다시 실행하세요.",
+      "workerReconciliationFailedRecovery": "미리보기를 다시 실행하기 전에 웹 콘솔을 런처에서 다시 시작하세요."
     },
     "actions": {
       "runPreview": "미리보기",

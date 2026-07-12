@@ -13,6 +13,7 @@ from backend.app.schemas.upload_preview import PreviewCreateRequest, PreviewOpti
 from backend.app.services.upload_preview import (
     CandidateScanner,
     CsvKeyExtractor,
+    DB_QUERY_FAILED_MESSAGE,
     PreviewCancelledError,
     PreviewDbQueryError,
     PreviewDbUnavailableError,
@@ -59,7 +60,21 @@ class TimeoutReconciler:
 
 class QueryFailureReconciler:
     def find_existing_keys(self, keys: set[tuple[str, str]], **_kwargs) -> set[tuple[str, str]]:
-        raise PreviewDbQueryError(f"synthetic query failure for {len(keys)} keys")
+        raise PreviewDbQueryError(
+            f"synthetic query failure for {len(keys)} keys at "
+            "postgresql://operator:secret-token@localhost/db"
+        )
+
+
+class MixedDbFailureReconciler:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def find_existing_keys(self, _keys: set[tuple[str, str]], **_kwargs) -> set[tuple[str, str]]:
+        self.calls += 1
+        if self.calls == 1:
+            raise PreviewDbQueryError("permission denied for all_metrics")
+        raise PreviewDbUnavailableError("connection refused")
 
 
 class SchemaMismatchExtractor:
@@ -622,6 +637,19 @@ def test_classification_uses_exact_keys_not_latest_timestamp() -> None:
     assert result["db_match_count"] == 0
     assert result["upload_row_estimate"] == 1
 
+    query_failed = classify_reconciliation(
+        local_keys={csv_key},
+        matched_keys=set(),
+        db_status="query_failed",
+    )
+    assert query_failed == {
+        "status": query_failed["status"],
+        "reason_code": "db_query_failed",
+        "db_match_count": None,
+        "upload_row_estimate": 0,
+    }
+    assert query_failed["status"].value == "risky"
+
 
 def test_preview_service_marks_db_unreachable_candidates_risky(tmp_path: Path) -> None:
     plc_dir = tmp_path / "plc"
@@ -1119,6 +1147,7 @@ def test_preview_service_keeps_db_not_checked_when_no_candidate_reaches_reconcil
 
 def test_preview_service_distinguishes_db_query_failure_from_unreachable(
     tmp_path: Path,
+    caplog,
 ) -> None:
     plc_dir = tmp_path / "plc"
     plc_dir.mkdir()
@@ -1160,7 +1189,63 @@ def test_preview_service_distinguishes_db_query_failure_from_unreachable(
     assert row["status"] == "partial_failed"
     assert row["db_status"] == "query_failed"
     assert row["error_code"] == "db_query_failed"
+    assert row["error_message"] == DB_QUERY_FAILED_MESSAGE
     assert total == 1
     assert items[0]["status"] == "risky"
     assert items[0]["reason_code"] == "db_query_failed"
+    assert items[0]["error_message"] == DB_QUERY_FAILED_MESSAGE
     assert items[0]["upload_row_estimate"] == 0
+    assert "secret-token" not in caplog.text
+    assert "postgresql://" not in caplog.text
+
+
+def test_preview_service_keeps_query_failure_message_aligned_for_mixed_db_failures(
+    tmp_path: Path,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    for suffix, minute in (("090000", "00"), ("090100", "01")):
+        write_csv(
+            plc_dir / f"Factory_Integrated_Log_20260601_{suffix}.csv",
+            ["Date,Time,Mold1", f"2026-06-01,09:{minute}:00,1"],
+        )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_mixed_db_failures",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=MixedDbFailureReconciler(),
+    )
+    service.run_preview("prv_mixed_db_failures", request)
+
+    row = repository.get_run("prv_mixed_db_failures")
+    items, total = repository.list_items("prv_mixed_db_failures")
+    assert row is not None
+    assert row["status"] == "partial_failed"
+    assert row["db_status"] == "query_failed"
+    assert row["error_code"] == "db_query_failed"
+    assert row["error_message"] == DB_QUERY_FAILED_MESSAGE
+    assert total == 2
+    assert {item["reason_code"] for item in items} == {
+        "db_query_failed",
+        "db_unreachable",
+    }

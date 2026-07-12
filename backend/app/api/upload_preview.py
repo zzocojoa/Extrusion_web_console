@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import json
+import logging
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -38,6 +39,15 @@ from backend.app.services.upload_preview import PreviewService
 
 router = APIRouter(prefix="/api/upload/preview", tags=["upload-preview"])
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-preview")
+_LOGGER = logging.getLogger(__name__)
+PREVIEW_WORKER_UNAVAILABLE_REASON = "preview_worker_unavailable"
+PREVIEW_WORKER_RECONCILIATION_FAILED_REASON = "preview_worker_reconciliation_failed"
+PREVIEW_WORKER_RETRY_RECOVERY = (
+    "Restart the web console from the launcher, inspect the persisted failed Preview, then run Preview again."
+)
+PREVIEW_WORKER_RESTART_RECOVERY = (
+    "Restart the web console from the launcher before running Preview again."
+)
 
 
 def is_large_preview_range(request: PreviewCreateRequest) -> bool:
@@ -242,7 +252,16 @@ def item_dto(row: Any) -> PreviewItemDto:
     )
 
 
-@router.post("", response_model=PreviewCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "",
+    response_model=PreviewCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "The Preview run was persisted but its background worker could not start."
+        }
+    },
+)
 async def create_preview(
     raw_request: Request,
     settings: Settings = Depends(get_settings),
@@ -359,7 +378,45 @@ async def create_preview(
             headers={"Location": f"/api/upload/preview/{active_run_id}"},
         )
     service = PreviewService(settings, repository, audit_repository=audit_repository)
-    executor.submit(service.run_preview, preview_run_id, request)
+    try:
+        executor.submit(service.run_preview, preview_run_id, request)
+    except Exception as error:
+        reconciliation_failed = False
+        try:
+            service.reconcile_worker_submission_failure(preview_run_id, request)
+        except Exception as reconciliation_error:
+            reconciliation_failed = True
+            _LOGGER.critical(
+                "Preview worker submission failure could not be reconciled: "
+                "preview_run_id=%s submit_error_type=%s reconciliation_error_type=%s "
+                "restart_required=true",
+                preview_run_id,
+                type(error).__name__,
+                type(reconciliation_error).__name__,
+            )
+        _LOGGER.error(
+            "Preview worker submission failed: preview_run_id=%s error_type=%s",
+            preview_run_id,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "reason": (
+                    PREVIEW_WORKER_RECONCILIATION_FAILED_REASON
+                    if reconciliation_failed
+                    else PREVIEW_WORKER_UNAVAILABLE_REASON
+                ),
+                "previewRunId": preview_run_id,
+                "restartRequired": True,
+                "recovery": (
+                    PREVIEW_WORKER_RESTART_RECOVERY
+                    if reconciliation_failed
+                    else PREVIEW_WORKER_RETRY_RECOVERY
+                ),
+            },
+            headers={"Location": f"/api/upload/preview/{preview_run_id}"},
+        ) from None
     return PreviewCreateResponse(
         preview_run_id=preview_run_id,
         status=PreviewRunStatus.queued,

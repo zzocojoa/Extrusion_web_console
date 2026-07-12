@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -29,6 +30,10 @@ TEMPERATURE_DEVICE_ID = "spot_temperature_sensor"
 INTEGRATED_FILENAME_STEM = "_".join(("Factory", "Integrated", "Log"))
 CANCEL_CHECK_INTERVAL_ROWS = 1000
 CANCEL_CHECK_INTERVAL_SECONDS = 0.5
+DB_UNREACHABLE_MESSAGE = "Local Supabase DB could not be reached."
+DB_QUERY_FAILED_MESSAGE = "Local Supabase DB query failed."
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PreviewDbUnavailableError(RuntimeError):
@@ -499,6 +504,7 @@ class SupabaseExactReconciler:
         self.last_progress = progress
         started_at = time.monotonic()
         existing: set[tuple[str, str]] = set()
+        connected = False
         try:
             raise_if_cancelled_or_timed_out(should_cancel, run_deadline)
             connect_timeout = compute_connect_timeout(run_deadline)
@@ -508,6 +514,7 @@ class SupabaseExactReconciler:
                 autocommit=False,
                 connect_timeout=connect_timeout,
             ) as connection:
+                connected = True
                 with connection.cursor() as cursor:
                     progress.stage = "create_temp_table"
                     statement_timeout_ms = compute_statement_timeout_ms(run_deadline)
@@ -573,7 +580,7 @@ class SupabaseExactReconciler:
             progress.elapsed_ms = elapsed_ms(started_at)
             if run_deadline is not None and time.monotonic() > run_deadline:
                 raise TimeoutError("Preview run exceeded the configured time limit") from error
-            if progress.stage == "connect":
+            if not connected:
                 raise PreviewDbUnavailableError(str(error)) from error
             raise PreviewDbQueryError(str(error)) from error
         return existing
@@ -626,7 +633,8 @@ class PreviewService:
                 )
                 return
 
-            db_error: str | None = None
+            db_unreachable_error: str | None = None
+            db_query_error: str | None = None
             any_db_unreachable = False
             any_db_query_failed = False
             any_db_query_succeeded = False
@@ -785,7 +793,8 @@ class PreviewService:
                         )
                     except PreviewDbQueryError as error:
                         any_db_query_failed = True
-                        db_error = str(error)
+                        db_query_error = DB_QUERY_FAILED_MESSAGE
+                        _log_preview_db_failure(preview_run_id, "query_failed", error)
                         item_timing |= reconciliation_progress_timing(self.reconciler)
                         self.repository.insert_item(
                             preview_run_id,
@@ -793,15 +802,16 @@ class PreviewService:
                                 candidate,
                                 PreviewItemStatus.risky,
                                 "db_query_failed",
-                                "Local Supabase DB query failed.",
+                                DB_QUERY_FAILED_MESSAGE,
                                 extraction,
-                                error_message=db_error,
+                                error_message=db_query_error,
                                 timing=item_timing,
                             ),
                         )
                     except PreviewDbUnavailableError as error:
                         any_db_unreachable = True
-                        db_error = str(error)
+                        db_unreachable_error = DB_UNREACHABLE_MESSAGE
+                        _log_preview_db_failure(preview_run_id, "unreachable", error)
                         item_timing |= reconciliation_progress_timing(self.reconciler)
                         self.repository.insert_item(
                             preview_run_id,
@@ -809,9 +819,9 @@ class PreviewService:
                                 candidate,
                                 PreviewItemStatus.risky,
                                 "db_unreachable",
-                                "Local Supabase DB could not be reached.",
+                                DB_UNREACHABLE_MESSAGE,
                                 extraction,
-                                error_message=db_error,
+                                error_message=db_unreachable_error,
                                 timing=item_timing,
                             ),
                         )
@@ -879,7 +889,9 @@ class PreviewService:
                     status=PreviewRunStatus.partial_failed,
                     db_status=observed_db_status(),
                     error_code="db_query_failed" if any_db_query_failed else "db_unreachable",
-                    error_message=db_error,
+                    error_message=(
+                        db_query_error if any_db_query_failed else db_unreachable_error
+                    ),
                     timing=run_timing | {"runMs": elapsed_ms(run_started)},
                 )
             elif timed_out:
@@ -924,6 +936,20 @@ class PreviewService:
                 error_message=str(error),
                 timing=run_timing | {"runMs": elapsed_ms(run_started)},
             )
+
+    def reconcile_worker_submission_failure(
+        self,
+        preview_run_id: str,
+        request: PreviewCreateRequest,
+    ) -> None:
+        self._finish_preview(
+            preview_run_id,
+            request,
+            status=PreviewRunStatus.failed,
+            db_status=PreviewDbStatus.not_checked,
+            error_code="preview_worker_unavailable",
+            error_message="Preview worker could not be started. Restart the web console before retrying.",
+        )
 
     def _finish_preview(
         self,
@@ -1040,10 +1066,11 @@ def classify_reconciliation(
     db_status: str = "reachable",
     error_code: str | None = None,
 ) -> dict[str, object]:
-    if db_status == "unreachable" or matched_keys is None:
+    if db_status in {"unreachable", "query_failed"} or matched_keys is None:
+        default_error_code = "db_query_failed" if db_status == "query_failed" else "db_unreachable"
         return {
             "status": PreviewItemStatus.risky,
-            "reason_code": error_code or "db_unreachable",
+            "reason_code": error_code or default_error_code,
             "db_match_count": None,
             "upload_row_estimate": 0,
         }
@@ -1057,6 +1084,19 @@ def classify_reconciliation(
         if status != PreviewItemStatus.already_in_db
         else 0,
     }
+
+
+def _log_preview_db_failure(
+    preview_run_id: str,
+    failure_class: str,
+    error: Exception,
+) -> None:
+    _LOGGER.warning(
+        "Preview DB reconciliation failed: preview_run_id=%s failure_class=%s error_type=%s",
+        preview_run_id,
+        failure_class,
+        type(error).__name__,
+    )
 
 
 def build_result_item(
