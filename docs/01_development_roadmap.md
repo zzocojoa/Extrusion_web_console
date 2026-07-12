@@ -123,8 +123,9 @@ Compare the new app against the legacy GUI for:
 
 Status:
 
-- Automated foundation complete: Upload Preview uses legacy scanning/transform behavior as reference, tests exact-key reconciliation and DB-status semantics, covers representative UTF-8/CP949 legacy and integrated CSV fixtures, runs a deterministic 25,000-row synthetic Preview soak, and queries representative failure/blocked evidence through the Audit Logs API.
-- Still required outside synthetic automation: large real CSV Upload Preview soak, local Supabase control E2E on the operator PC, and final operator validation of failure reporting across Audit Logs.
+- Automated foundation complete on `main` commit `5695b93802f78f2e04a1aa83662e9400e1d49db2`: Upload Preview uses legacy scanning/transform behavior as reference, tests exact-key reconciliation and DB-status semantics, covers representative UTF-8/CP949 legacy and integrated CSV fixtures, runs a deterministic 25,000-row synthetic Preview soak, and queries representative failure/blocked evidence through the Audit Logs API.
+- Post-merge operator-PC evidence complete for the separately approved Preview-only scope: one `folder_all` large-source Preview (`prv_ca38650a9e7d`) persisted local run/audit state and succeeded without operational DB mutation, with DB reachable, 12 files classified, `target=0`, `risky=0`, 64,766 partial-overlap rows excluded from target-only upload, and Start Upload disabled. Later read-only Audit/Job/config/runtime observations and Core Ops route QA also passed.
+- Still required before any cutover can proceed: bind the accepted package label/source commit to build metadata, locate a compliant pre-Preview inventory record or repeat that gate under a future approval, record final release-owner/operator sign-off, and resolve or explicitly accept the current non-core Grafana/Vector attention with an owner and stop/rollback procedure. Local Supabase start/stop remains separately approved operational evidence only when a cutover actually requires lifecycle control.
 
 ## 7. Package And Transition
 
@@ -138,4 +139,4 @@ Transition from the legacy GUI only after:
 - upload behavior is tested with representative CSV files
 - README run instructions are accurate
 
-Current transition status: partially unblocked. Duplicate-risk preview, real upload jobs, progress/event streaming, Local Supabase controls, Audit Logs, and launcher phase 1 are implemented. Legacy GUI replacement still requires broader runtime E2E and final operator workflow validation.
+Current transition status: `NO-GO` for cutover execution; `CONDITIONAL GO` candidate after the hard gates above are satisfied. Core Ops implementation, representative legacy CSV automation, synthetic soak, the separately approved operator-PC Preview-only run, and later read-only UI/log observations are complete. The observed Preview had zero target-only rows, so Start Upload and Retry Failed were not applicable and were not executed, but 64,766 partial-overlap rows still require human disposition. Missing accepted-package binding, compliant inventory evidence, partial-overlap disposition, final sign-off, and Grafana/Vector risk ownership prevent a current proceed decision.
