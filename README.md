@@ -18,7 +18,7 @@ The current local console baseline is in place:
 - React + Vite + TypeScript frontend.
 - Dashboard Variant D UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
-- Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, SSE event replay, and canonical `acceptedRows` counts for Edge/Supabase upsert-accepted rows.
+- Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, snapshot-safe SSE replay, terminal event/file sealing, explicit restart-required worker recovery failures, and canonical `acceptedRows` counts for Edge/Supabase upsert-accepted rows.
 - Already-in-DB hard delete API/UI for selected `already_in_db` Preview rows only, with local DB target guard, DELETE privilege preflight, typed exact-key confirmation, rollback-readiness gate, commit-unknown reconciliation, and safe audit evidence.
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
 - Dashboard runtime module connected to the runtime API in API mode.

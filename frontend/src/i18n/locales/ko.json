@@ -476,6 +476,8 @@
       "loading": "업로드 작업을 불러오는 중...",
       "loadError": "업로드 작업을 불러오지 못했습니다.",
       "startError": "업로드 시작 실패",
+      "workerUnavailableRecovery": "웹 콘솔을 런처에서 다시 시작한 다음, 저장된 실패 업로드 작업을 확인한 후 재시도하세요.",
+      "workerReconciliationFailedRecovery": "업로드 작업을 시작하거나 재시도하기 전에 웹 콘솔을 런처에서 다시 시작하세요.",
       "jobId": "작업",
       "mode": "모드",
       "started": "시작",

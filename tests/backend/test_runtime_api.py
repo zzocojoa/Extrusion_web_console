@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.runtime import get_command_runner, get_runtime_service
@@ -14,7 +15,12 @@ from backend.app.schemas.runtime import (
     RuntimeServiceStatus,
     RuntimeStatusResponse,
 )
-from tests.backend.test_runtime_control import FakeRunner, write_supabase_config
+from tests.backend.test_runtime_control import FakeRunner, install_synthetic_runtime_network_probes, write_supabase_config
+
+
+@pytest.fixture(autouse=True)
+def isolate_runtime_api_network_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_synthetic_runtime_network_probes(monkeypatch)
 
 
 def test_runtime_routes_are_registered_in_openapi(monkeypatch) -> None:

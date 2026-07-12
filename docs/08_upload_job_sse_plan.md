@@ -15,6 +15,7 @@ Implemented on branch `codex/upload-job-sse`:
 - Cooperative pause/resume/cancel checkpoints between files and batches.
 - SSE event replay backed by persisted `job_events`.
 - Startup recovery that marks active upload jobs interrupted.
+- PR #229 hardening that reads each SSE event batch and job status from one SQLite snapshot, preserves the existing `tail` batch-size contract, terminates current terminal cursors with HTTP 204, seals terminal event streams, treats sealed workers as stopped, atomically reconciles constructor/execution/cancellation/submission failures to retryable failed job/file state with visible terminal events and audits, keeps an unreconciled asynchronous worker failure visible through structured `503` responses until startup recovery persists a terminal state, returns persisted job discovery metadata on submission failure, and reports startup recovery counts or sanitized stage/type failures. This is an Upload Job SSE/startup-recovery reliability patch, not the requested V2 WP-01.
 - Upload Job frontend tab with progress summary, action buttons, file table, event viewer, mock mode, API mode, and SSE reconnect.
 - Upload Job row count terminology now exposes `acceptedRows` as the canonical accepted/upserted count in API responses, job events, SSE replay, and UI labels; `insertedRows` remains a deprecated v1 compatibility alias.
 - Review hardening for canonical legacy-compatible CSV transform, legacy Korean PLC/temperature fixture parity, terminal status guards, blocked-path audit logging, idempotent pause events, job-scoped SSE reconnect/replay, and concurrent event sequence writes.
@@ -28,6 +29,7 @@ Verified after implementation:
 
 Remaining implementation risks:
 
+- Startup interruption recovery assumes the launcher-enforced single-backend process model. PR #229 does not add a cross-process database lease for competing direct server imports before port ownership is established.
 - Real operator-PC upload against local Supabase Edge Function still needs environment QA with representative CSVs.
 - Broader legacy CSV parity tests now cover synthetic Korean PLC and temperature fixtures; real operator-PC representative CSVs still need environment QA before v1 replacement.
 - In-flight Edge HTTP cancellation is bounded by timeout; pause/cancel take effect at the next checkpoint after the HTTP call returns.
@@ -47,7 +49,7 @@ This plan follows `AGENTS.md`, `docs/00_product_scope.md`, `docs/02_engineering_
    Keep the extracted latest-timestamp code and regression tests. In the web path, `enable_smart_sync = false` for `mode = preview_targets`. A future explicit operator setting can re-enable it only after the UI explains the tradeoff and audit logs the choice.
 
 4. Job progress/log streaming uses SSE backed by persisted `job_events`.
-   Every event is written to SQLite first, then streamed. UI reconnects with `Last-Event-ID` or `afterSeq`, so browser refreshes do not lose logs.
+   Every event is written to SQLite first, then streamed. UI reconnects with `Last-Event-ID` or `afterSeq`, so browser refreshes do not lose logs. Each empty-batch close decision reads the event backlog and job status inside one explicit SQLite read transaction, so a concurrent terminal commit cannot make the stream skip its final persisted event.
 
 5. Upload worker is backend in-process `ThreadPoolExecutor`.
    v1 is a localhost operator-PC app. No Celery/RQ. The durability boundary is SQLite WAL plus startup interruption handling.
@@ -56,7 +58,7 @@ This plan follows `AGENTS.md`, `docs/00_product_scope.md`, `docs/02_engineering_
    Pause and cancel are checked before files, between chunks, between batches, and between retry sleeps. An in-flight HTTP call to the Edge Function is bounded by timeout, not forcibly killed.
 
 7. Background failures must hit three surfaces.
-   Every failure writes `upload_jobs` / `upload_job_files`, a `job_events` error row, and an audit row. UI surfaces the same job id in Upload Job, Logs, and Dashboard.
+   Every failure writes `upload_jobs` / `upload_job_files`, a `job_events` error row, and an audit row while SQLite is writable. If worker-failure reconciliation itself cannot be persisted, a process-local notice and structured `503` temporarily provide operator visibility until launcher startup recovery writes the terminal state. UI surfaces the same job id in Upload Job, Logs, and Dashboard.
 
 8. Upload execution introduces a web app state store, not a legacy state import.
    Do not import `uploader_state.db`. New resume/retry state lives in the web SQLite DB.
@@ -102,7 +104,7 @@ backend/app/api/upload_jobs.py
 backend/app/schemas/upload_jobs.py
 backend/app/db/upload_job_repository.py
 backend/app/services/upload_jobs.py
-backend/app/services/job_event_stream.py
+backend/app/services/upload_event_stream.py
 backend/app/core/upload_core.py
 backend/app/core/transform_core.py
 backend/app/core/file_state_keys.py
@@ -169,6 +171,25 @@ Conflict `409`:
   }
 }
 ```
+
+Worker unavailable `503`:
+
+```json
+{
+  "detail": {
+    "reason": "upload_worker_unavailable",
+    "jobId": "upl_abc123def456",
+    "restartRequired": true,
+    "recovery": "Restart the web console from the launcher, then inspect the persisted failed upload job before retrying."
+  }
+}
+```
+
+The response includes `Location: /api/upload/jobs/upl_abc123def456`. The persisted job and its queued/running files are already failed atomically and remain discoverable for event/audit review after the required launcher restart. A real `ThreadPoolExecutor` submission rejection is not recoverable in-process, so retry must wait until restart.
+
+If worker submission and failure-state reconciliation both fail, the response keeps the same `jobId` and `Location` but uses `reason: upload_worker_reconciliation_failed`, `restartRequired: true`, and `recovery: Restart the web console from the launcher before starting or retrying an upload job.` The job may still appear active because its failure state could not be persisted. The operator must restart through the launcher; startup recovery then marks the stale active job interrupted before another upload or retry is attempted.
+
+If an already accepted asynchronous worker later fails and both the worker wrapper and completion callback cannot persist failure reconciliation, the backend records only the database-path/job-id pair in a thread-safe process-local notice. List, detail, latest-job, SSE, and pause/resume/cancel responses that include that still-active job return the same fixed `upload_worker_reconciliation_failed` `503` contract instead of presenting a healthy queued job. Control requests check the notice before their mutation transaction, so a `503` response does not change job state or append an event/audit. The UI selects localized recovery copy from the validated reason code and never renders server-supplied recovery text directly. Once reconciliation or launcher startup recovery persists a terminal state, the notice is cleared automatically.
 
 ### `GET /api/upload/jobs`
 
@@ -251,6 +272,7 @@ Rules:
 - Retry does not mutate the original job.
 - Retry snapshots the failed file rows into a new job with `retryOfJobId`.
 - Retry uses stored `resumeOffset` where safe.
+- If worker submission fails, return the same `503` body and `Location` contract as `POST /api/upload/jobs`. Every submission rejection requires launcher restart; `reason` distinguishes a persisted failed retry job from a reconciliation failure that may leave the retry job active until startup recovery.
 
 ### `POST /api/upload/jobs/{jobId}/pause`
 
@@ -295,11 +317,17 @@ afterSeq=84
 tail=100
 ```
 
-Headers:
+Query behavior:
 
-- Accepts `Last-Event-ID`.
+- Constrains `afterSeq` to `0` through SQLite's signed 64-bit maximum (`2^63 - 1`) and ignores malformed or out-of-range `Last-Event-ID` values.
+- Keeps `tail` compatible at `1` through `500` as the maximum number of persisted events read per SQLite batch. It does not cap the total replay.
+
+Headers and responses:
+
+- Accepts `Last-Event-ID` and resumes from the greater of that cursor and `afterSeq`.
 - Returns `Content-Type: text/event-stream`.
-- Sends heartbeat comments every 15 seconds.
+- Sends heartbeat comments while an active job has no persisted events available.
+- Returns `204 No Content` when a terminal job has no events after the resolved cursor, so native `EventSource` clients stop reconnecting.
 
 SSE event format:
 
@@ -725,7 +753,7 @@ Buttons:
 | Cancel requested | job `cancelling -> cancelled` or `partial_failed` | cancelled banner | service + UI |
 | Backend killed mid-upload | startup marks `interrupted`; event/audit written | latest job interrupted; Retry visible | startup |
 | SSE disconnect | client reconnects with last seq; no lost events | event list resumes | SSE |
-| SSE client opens old job | backlog streamed then heartbeat | stable logs | SSE |
+| SSE client opens old job | backlog streamed, then stream closes; a current reconnect gets `204` | stable logs without reconnect loop | SSE |
 | Korean long error text | wraps in table/log viewer | no overflow | browser QA |
 
 ## Test Plan
@@ -750,6 +778,9 @@ Backend API tests:
 - Pause/resume/cancel invalid states return `409`.
 - Retry failed creates new job with `retryOfJobId`.
 - `GET /events` returns `text/event-stream` and replays events after `Last-Event-ID`.
+- A terminal commit between event and status reads does not skip the final event because both reads share one SQLite snapshot.
+- `tail=1` remains a valid one-event database batch size without limiting total replay.
+- A terminal stream with a current cursor returns `204 No Content`.
 
 Backend service tests:
 
@@ -827,7 +858,7 @@ GET /api/upload/jobs/{id}/events
   ├─ no Last-Event-ID -> tail/backlog [SSE]
   ├─ Last-Event-ID -> replay after seq [SSE]
   ├─ no new events -> heartbeat [SSE]
-  └─ job terminal -> final event then heartbeat/close decision [SSE]
+  └─ job terminal -> final event then close; current reconnect gets 204 [SSE]
 
 Startup
   ├─ no active jobs -> no-op [startup]

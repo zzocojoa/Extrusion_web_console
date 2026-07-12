@@ -508,6 +508,8 @@
       "loading": "Loading upload job...",
       "loadError": "Upload job could not be loaded.",
       "startError": "Start Upload failed",
+      "workerUnavailableRecovery": "Restart the web console from the launcher, then inspect the persisted failed upload job before retrying.",
+      "workerReconciliationFailedRecovery": "Restart the web console from the launcher before starting or retrying an upload job.",
       "jobId": "Job",
       "mode": "Mode",
       "started": "Started",

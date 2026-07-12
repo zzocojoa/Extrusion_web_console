@@ -6,6 +6,10 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Hardened Upload Job terminal sealing so late cancellation cleanup cannot mutate
+  file rows after terminal commit, and made worker submission plus failure-state
+  persistence failures return an explicit launcher-restart-required contract
+  instead of claiming that a queued job was persisted as failed.
 - Tightened backend-served responsive containment for the topbar status chips,
   Dashboard status matrix, Upload action buttons, and compact table pagination
   at 390-1440px widths without changing backend contracts or operator

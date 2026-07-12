@@ -16,12 +16,21 @@ from backend.app.db.row_attribution_repository import RowAttributionRepository
 from backend.app.db.row_attribution_repository import build_exact_key_hash
 from backend.app.db.row_attribution_repository import build_safe_hash as build_hmac_safe_hash
 from backend.app.db.row_attribution_repository import build_source_evidence_hash
-from backend.app.db.upload_job_repository import UploadJobRepository, decode_json
+from backend.app.db.upload_job_repository import (
+    TERMINAL_JOB_STATUSES,
+    UploadJobEventStreamSealedError,
+    UploadJobRepository,
+    decode_json,
+)
 from backend.app.schemas.upload_jobs import UploadJobOptions, UploadJobStatus
 from backend.app.services.upload_preview import build_file_signature, is_file_locked
 
 
 class UploadJobCancelled(RuntimeError):
+    pass
+
+
+class UploadJobStopped(RuntimeError):
     pass
 
 
@@ -318,8 +327,13 @@ class UploadJobService:
             else:
                 self.repository.finish_job(job_id, UploadJobStatus.succeeded)
         except UploadJobCancelled:
-            self.repository.mark_remaining_cancelled(job_id)
-            self.repository.finish_job(job_id, UploadJobStatus.cancelled)
+            try:
+                self.repository.mark_remaining_cancelled(job_id)
+                self.repository.finish_job(job_id, UploadJobStatus.cancelled)
+            except UploadJobEventStreamSealedError:
+                return
+        except (UploadJobStopped, UploadJobEventStreamSealedError):
+            return
         except Exception as error:
             self.repository.append_event(
                 job_id,
@@ -439,7 +453,7 @@ class UploadJobService:
                     counters.inserted_rows,
                     processed_rows=counters.processed_rows,
                 )
-        except UploadJobCancelled:
+        except (UploadJobCancelled, UploadJobStopped, UploadJobEventStreamSealedError):
             raise
         except Exception as error:
             latest = self.repository.get_job_file(job_file_id)
@@ -586,6 +600,8 @@ class UploadJobService:
     def _control_checkpoint(self, job_id: str) -> None:
         while True:
             pause_requested, cancel_requested, status = self.repository.get_control_flags(job_id)
+            if status is None or status in TERMINAL_JOB_STATUSES:
+                raise UploadJobStopped("Upload job is no longer active.")
             if cancel_requested or status == UploadJobStatus.cancelling.value:
                 raise UploadJobCancelled("Upload job was cancelled.")
             if pause_requested or status == UploadJobStatus.pausing.value:

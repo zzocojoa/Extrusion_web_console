@@ -128,6 +128,83 @@ def test_upload_job_service_uploads_preview_targets_and_disables_smart_sync(tmp_
     assert completed_data["insertedRows"] == 2
 
 
+def test_upload_job_service_stops_when_job_is_terminal_before_batch(tmp_path: Path) -> None:
+    repository, job_id, _csv_path = prepare_target_job(
+        tmp_path,
+        "timestamp,device_id,value\n2026-06-02T09:00:00+09:00,extruder_plc,1\n",
+    )
+    uploader = FakeUploader()
+    assert repository.finish_job(job_id, UploadJobStatus.interrupted) is True
+    final_seq = repository.latest_event_seq(job_id)
+    service = UploadJobService(
+        _upload_settings(repository.db_path),
+        repository,
+        uploader=uploader,  # type: ignore[arg-type]
+    )
+
+    service.run_job(job_id)
+
+    assert uploader.batches == []
+    assert repository.get_job(job_id)["status"] == UploadJobStatus.interrupted.value
+    assert repository.latest_event_seq(job_id) == final_seq
+
+
+def test_upload_job_service_consumes_terminal_seal_race_without_late_event(tmp_path: Path) -> None:
+    repository, job_id, _csv_path = prepare_target_job(
+        tmp_path,
+        "timestamp,device_id,value\n2026-06-02T09:00:00+09:00,extruder_plc,1\n",
+    )
+
+    class TerminalizingUploader:
+        def upload_batch(self, batch: list[dict[str, object]]) -> int:
+            assert repository.finish_job(job_id, UploadJobStatus.interrupted) is True
+            return len(batch)
+
+    service = UploadJobService(
+        _upload_settings(repository.db_path),
+        repository,
+        uploader=TerminalizingUploader(),  # type: ignore[arg-type]
+    )
+
+    service.run_job(job_id)
+
+    events = repository.list_events(job_id, limit=500)
+    assert repository.get_job(job_id)["status"] == UploadJobStatus.interrupted.value
+    assert events[-1]["event_type"] == "job.interrupted"
+    assert all(event["event_type"] != "log.error" for event in events)
+
+
+def test_upload_job_service_consumes_terminal_seal_during_cancel_cleanup(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repository, job_id, _csv_path = prepare_target_job(
+        tmp_path,
+        "timestamp,device_id,value\n2026-06-02T09:00:00+09:00,extruder_plc,1\n",
+    )
+    assert repository.request_cancel(job_id) == UploadJobStatus.cancelling
+    mark_remaining_cancelled = repository.mark_remaining_cancelled
+
+    def terminalize_before_cancel_cleanup(cleanup_job_id: str) -> None:
+        assert repository.finish_job(cleanup_job_id, UploadJobStatus.interrupted) is True
+        mark_remaining_cancelled(cleanup_job_id)
+
+    monkeypatch.setattr(repository, "mark_remaining_cancelled", terminalize_before_cancel_cleanup)
+    service = UploadJobService(
+        _upload_settings(repository.db_path),
+        repository,
+        uploader=FakeUploader(),  # type: ignore[arg-type]
+    )
+
+    service.run_job(job_id)
+
+    events = repository.list_events(job_id, limit=500)
+    assert repository.get_job(job_id)["status"] == UploadJobStatus.interrupted.value
+    assert repository.list_job_files(job_id)[0]["status"] == "queued"
+    assert events[-1]["event_type"] == "job.interrupted"
+    assert all(event["event_type"] != "log.error" for event in events)
+
+
 def test_default_v2_evidence_gate_does_not_write_upload_delta_or_attribution(tmp_path: Path) -> None:
     repository, job_id, _csv_path = prepare_target_job(
         tmp_path,

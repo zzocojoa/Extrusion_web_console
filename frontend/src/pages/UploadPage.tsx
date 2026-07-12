@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Ban, Database, FileSearch, Pause, Play, RotateCcw, Search, Square, Trash2 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { isLocalTokenApiError } from "../api/client";
@@ -23,6 +24,9 @@ import {
   getUploadJobEventsUrl,
   normalizeJobEvent,
   retryUploadJob,
+  shouldClearRecoveredWorkerFailure,
+  uploadWorkerRecoveryTranslationKey,
+  UploadWorkerUnavailableError,
   type JobEvent,
   type UploadJobDetail,
   type UploadJobFileStatus,
@@ -391,6 +395,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
   const [mockJobPaused, setMockJobPaused] = useState(false);
   const [mockJobCancelled, setMockJobCancelled] = useState(false);
   const [sseEvents, setSseEvents] = useState<JobEvent[]>([]);
+  const [workerFailureError, setWorkerFailureError] = useState<UploadWorkerUnavailableError | null>(null);
   const latestSeqRef = useRef(0);
 
   useEffect(() => {
@@ -580,6 +585,14 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
   }, [jobId, jobQuery.data, latestJobQuery.data, sseEvents]);
 
   useEffect(() => {
+    if (!workerFailureError || !currentJob) return;
+    const isTerminal = !activeJobStatuses.includes(currentJob.job.status);
+    if (shouldClearRecoveredWorkerFailure(workerFailureError, currentJob.job.jobId, isTerminal)) {
+      setWorkerFailureError(null);
+    }
+  }, [currentJob, workerFailureError]);
+
+  useEffect(() => {
     latestSeqRef.current = 0;
     setSseEvents([]);
   }, [jobId]);
@@ -678,6 +691,21 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
     },
   });
 
+  const openUploadJobFromError = (error: Error) => {
+    setWorkerFailureError(error instanceof UploadWorkerUnavailableError ? error : null);
+    const failedJobId =
+      error instanceof ActiveUploadJobError
+        ? error.activeJobId
+        : error instanceof UploadWorkerUnavailableError
+          ? error.jobId
+          : null;
+    if (!failedJobId) return;
+    latestSeqRef.current = 0;
+    setSseEvents([]);
+    setJobId(failedJobId);
+    setActiveTab("job");
+  };
+
   const startUploadMutation = useMutation({
     mutationFn: async (approval: { expectedTargetRows: number; expectedTargetFiles: number }) => {
       if (!activePreviewRunId) throw new Error("No preview run");
@@ -691,17 +719,13 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       return createUploadJob(activePreviewRunId, approval);
     },
     onSuccess: (response) => {
+      setWorkerFailureError(null);
       latestSeqRef.current = 0;
       setSseEvents([]);
       setJobId(response.jobId);
       setActiveTab("job");
     },
-    onError: (error) => {
-      if (error instanceof ActiveUploadJobError) {
-        setJobId(error.activeJobId);
-        setActiveTab("job");
-      }
-    },
+    onError: openUploadJobFromError,
   });
 
   const deletePreflightMutation = useMutation({
@@ -756,11 +780,13 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       return retryUploadJob(currentJob.job.jobId, approval);
     },
     onSuccess: (response) => {
+      setWorkerFailureError(null);
       latestSeqRef.current = 0;
       setSseEvents([]);
       setJobId(response.jobId);
       setActiveTab("job");
     },
+    onError: openUploadJobFromError,
   });
 
   const controlMutation = useMutation({
@@ -870,7 +896,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
           detail={currentJob}
           loading={jobQuery.isLoading || latestJobQuery.isLoading || retryMutation.isPending || controlMutation.isPending}
           retryPending={retryMutation.isPending}
-          error={jobQuery.error ?? latestJobQuery.error ?? retryMutation.error ?? controlMutation.error}
+          error={workerFailureError ?? jobQuery.error ?? latestJobQuery.error ?? retryMutation.error ?? controlMutation.error}
           onPause={() => controlMutation.mutate("pause")}
           onResume={() => controlMutation.mutate("resume")}
           onCancel={() => controlMutation.mutate("cancel")}
@@ -1097,12 +1123,12 @@ function PreviewTab(props: PreviewTabProps) {
 
       {props.error ? (
         <div className="error-banner" role="alert">
-          {formatOperatorError(props.error, t("upload.preview.error"))}
+          {formatOperatorError(props.error, t("upload.preview.error"), t)}
         </div>
       ) : null}
       {props.startUploadError ? (
         <div className="error-banner" role="alert">
-          {t("upload.job.startError")}: {props.startUploadError.message}
+          {t("upload.job.startError")}: {formatOperatorError(props.startUploadError, props.startUploadError.message, t)}
         </div>
       ) : null}
       {props.deletePreflightError ? (
@@ -1958,7 +1984,7 @@ function JobTab({
     return <section className="panel panel--loading">{t("upload.job.loading")}</section>;
   }
   if (error && !detail) {
-    return <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"))}</div>;
+    return <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"), t)}</div>;
   }
   if (!detail) {
     return (
@@ -2026,6 +2052,7 @@ function JobTab({
               <Metric label={t("upload.job.metrics.accepted")} value={formatNumber(job.summary.acceptedRows)} />
               <Metric label={t("upload.job.metrics.failures")} value={formatNumber(job.summary.failedFiles)} danger={job.summary.failedFiles > 0} />
             </div>
+            {error ? <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"), t)}</div> : null}
             {job.errorMessage ? <div className="error-banner" role="alert">{job.errorMessage}</div> : null}
           </div>
         </div>
@@ -2160,8 +2187,11 @@ function RetryConfirmationModal({
   );
 }
 
-function formatOperatorError(error: Error, fallback: string): string {
+function formatOperatorError(error: Error, fallback: string, t: TFunction): string {
   if (isLocalTokenApiError(error)) return error.message;
+  if (error instanceof UploadWorkerUnavailableError) {
+    return t(uploadWorkerRecoveryTranslationKey(error));
+  }
   return fallback;
 }
 

@@ -35,6 +35,10 @@ class CreateRetryJobResult:
     remaining_row_count: int = 0
 
 
+class UploadJobEventStreamSealedError(RuntimeError):
+    pass
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -69,6 +73,8 @@ def _preview_reference_time(preview: sqlite3.Row) -> datetime | None:
 
 
 class UploadJobRepository:
+    _connection_factory = sqlite3.Connection
+
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = str(db_path)
         self.bootstrap()
@@ -76,7 +82,11 @@ class UploadJobRepository:
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path, timeout=30)
+        connection = sqlite3.connect(
+            self.db_path,
+            timeout=30,
+            factory=self._connection_factory,
+        )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
@@ -681,6 +691,7 @@ class UploadJobRepository:
                 level=level,
                 message=f"Upload job finished with status {final_status.value}.",
                 data={"errorCode": error_code, "errorMessage": error_message},
+                allow_terminal=True,
             )
             self._append_audit_in_connection(
                 connection,
@@ -689,6 +700,87 @@ class UploadJobRepository:
                 target_id=job_id,
                 params={},
                 result=result,
+                error_code=error_code,
+                error_message=error_message,
+                job_id=job_id,
+            )
+        return True
+
+    def reconcile_worker_failure(self, job_id: str, error_code: str, error_message: str) -> bool:
+        """Fail active worker state atomically while preserving retry offsets."""
+        now = iso_now()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            job = connection.execute(
+                "SELECT status FROM upload_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if job is None or str(job["status"]) not in ACTIVE_JOB_STATUSES:
+                return False
+
+            connection.execute(
+                """
+                INSERT INTO upload_file_state(
+                  file_key, legacy_key, folder_label, folder_path, filename, path, kind,
+                  file_signature, state, resume_offset, last_error_code, last_error_message,
+                  retry_count, completed_at, failed_at, last_job_id, created_at, updated_at
+                )
+                SELECT file_key, folder_path || '::' || filename, folder_label, folder_path,
+                       filename, path, kind, file_signature, 'failed', resume_offset, ?, ?,
+                       retry_count, NULL, ?, job_id, ?, ?
+                FROM upload_job_files
+                WHERE job_id = ? AND status IN ('queued', 'running')
+                ON CONFLICT(file_key) DO UPDATE SET
+                  file_signature = excluded.file_signature,
+                  state = excluded.state,
+                  resume_offset = excluded.resume_offset,
+                  last_error_code = excluded.last_error_code,
+                  last_error_message = excluded.last_error_message,
+                  retry_count = excluded.retry_count,
+                  completed_at = COALESCE(excluded.completed_at, upload_file_state.completed_at),
+                  failed_at = COALESCE(excluded.failed_at, upload_file_state.failed_at),
+                  last_job_id = excluded.last_job_id,
+                  updated_at = excluded.updated_at
+                """,
+                (error_code, error_message, now, now, now, job_id),
+            )
+            connection.execute(
+                """
+                UPDATE upload_job_files
+                SET status = 'failed',
+                    finished_at = COALESCE(finished_at, ?),
+                    last_error_code = ?, last_error_message = ?, updated_at = ?
+                WHERE job_id = ? AND status IN ('queued', 'running')
+                """,
+                (now, error_code, error_message, now, job_id),
+            )
+
+            self._recompute_job_summary(connection, job_id)
+            connection.execute(
+                """
+                UPDATE upload_jobs
+                SET status = 'failed', finished_at = COALESCE(finished_at, ?),
+                    error_code = ?, error_message = ?, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (now, error_code, error_message, now, job_id),
+            )
+            self._append_event_in_connection(
+                connection,
+                job_id,
+                event_type="job.failed",
+                level="error",
+                message=error_message,
+                data={"errorCode": error_code},
+                allow_terminal=True,
+            )
+            self._append_audit_in_connection(
+                connection,
+                action="upload.failed",
+                target_type="upload_job",
+                target_id=job_id,
+                params={"source": "worker_reconciliation"},
+                result="failure",
                 error_code=error_code,
                 error_message=error_message,
                 job_id=job_id,
@@ -977,6 +1069,14 @@ class UploadJobRepository:
         now = iso_now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            job = connection.execute(
+                "SELECT status FROM upload_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if job is None:
+                return
+            if str(job["status"]) in TERMINAL_JOB_STATUSES:
+                raise UploadJobEventStreamSealedError(f"Upload job event stream is sealed: {job_id}")
             rows = connection.execute(
                 """
                 SELECT *
@@ -1068,6 +1168,7 @@ class UploadJobRepository:
                     level="error",
                     message="Upload job was interrupted before completion.",
                     data={"wasCancelling": was_cancelling},
+                    allow_terminal=True,
                 )
                 self._append_audit_in_connection(
                     connection,
@@ -1115,16 +1216,42 @@ class UploadJobRepository:
 
     def list_events(self, job_id: str, after_seq: int = 0, limit: int = 200) -> list[sqlite3.Row]:
         with self.connect() as connection:
-            return connection.execute(
-                """
-                SELECT *
-                FROM job_events
-                WHERE job_id = ? AND seq > ?
-                ORDER BY seq ASC
-                LIMIT ?
-                """,
-                (job_id, after_seq, limit),
-            ).fetchall()
+            return self._list_events_in_connection(connection, job_id, after_seq, limit)
+
+    @staticmethod
+    def _list_events_in_connection(
+        connection: sqlite3.Connection,
+        job_id: str,
+        after_seq: int,
+        limit: int,
+    ) -> list[sqlite3.Row]:
+        return connection.execute(
+            """
+            SELECT *
+            FROM job_events
+            WHERE job_id = ? AND seq > ?
+            ORDER BY seq ASC
+            LIMIT ?
+            """,
+            (job_id, after_seq, limit),
+        ).fetchall()
+
+    def read_event_stream_snapshot(
+        self,
+        job_id: str,
+        *,
+        after_seq: int = 0,
+        limit: int = 200,
+    ) -> tuple[list[sqlite3.Row], str | None]:
+        """Read event backlog and job status from one SQLite snapshot."""
+        with self.connect() as connection:
+            connection.execute("BEGIN")
+            events = self._list_events_in_connection(connection, job_id, after_seq, limit)
+            job = connection.execute(
+                "SELECT status FROM upload_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+        return events, None if job is None else str(job["status"])
 
     def latest_event_seq(self, job_id: str) -> int:
         with self.connect() as connection:
@@ -1166,6 +1293,7 @@ class UploadJobRepository:
         message: str,
         job_file_id: int | None = None,
         data: dict[str, Any] | None = None,
+        allow_terminal: bool = False,
     ) -> int:
         row = connection.execute(
             "SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM job_events WHERE job_id = ?",
@@ -1173,13 +1301,37 @@ class UploadJobRepository:
         ).fetchone()
         seq = int(row["next_seq"] if row else 1)
         now = iso_now()
-        connection.execute(
-            """
+        inserted = connection.execute(
+            f"""
             INSERT INTO job_events(job_id, seq, ts, level, event_type, message, job_file_id, data_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (
+                SELECT 1
+                FROM upload_jobs
+                WHERE job_id = ?
+                  AND (? = 1 OR status NOT IN ({",".join("?" for _ in TERMINAL_JOB_STATUSES)}))
+            )
             """,
-            (job_id, seq, now, level, event_type, message, job_file_id, _json(data or {}), now),
+            (
+                job_id,
+                seq,
+                now,
+                level,
+                event_type,
+                message,
+                job_file_id,
+                _json(data or {}),
+                now,
+                job_id,
+                int(allow_terminal),
+                *TERMINAL_JOB_STATUSES,
+            ),
         )
+        if inserted.rowcount <= 0:
+            job = connection.execute("SELECT status FROM upload_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if job is not None and str(job["status"]) in TERMINAL_JOB_STATUSES:
+                raise UploadJobEventStreamSealedError(f"Upload job event stream is sealed: {job_id}")
+            raise ValueError(f"Upload job not found: {job_id}")
         return seq
 
     def append_audit(

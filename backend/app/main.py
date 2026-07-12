@@ -29,11 +29,8 @@ from backend.app.core.settings import Settings
 from backend.app.core.settings import get_settings
 from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.db_delta_repository import DbDeltaEvidenceRepository
-from backend.app.db.preview_repository import PreviewRepository
-from backend.app.db.runtime_repository import RuntimeRepository
 from backend.app.db.row_attribution_repository import RowAttributionRepository
-from backend.app.db.upload_delete_repository import UploadDeleteRepository
-from backend.app.db.upload_job_repository import UploadJobRepository
+from backend.app.services.startup_recovery import recover_interrupted_work
 
 
 API_PREFIX_SEGMENT = "api"
@@ -145,10 +142,16 @@ def create_app() -> FastAPI:
         settings.state_db_path,
         writes_enabled=settings.effective_row_attribution_writes_enabled,
     ).bootstrap()
-    PreviewRepository(settings.state_db_path).mark_interrupted_active_runs()
-    UploadJobRepository(settings.state_db_path).mark_interrupted_active_jobs()
-    UploadDeleteRepository(settings.state_db_path).mark_interrupted_active_delete_runs()
-    RuntimeRepository(settings.state_db_path).mark_interrupted_active_operations()
+    recovery = recover_interrupted_work(settings.state_db_path)
+    _LOGGER.info(
+        "Startup interruption recovery: preview_runs=%d upload_jobs=%d delete_runs=%d "
+        "runtime_operations=%d total=%d",
+        recovery.preview_runs,
+        recovery.upload_jobs,
+        recovery.delete_runs,
+        recovery.runtime_operations,
+        recovery.total,
+    )
     docs_enabled = api_docs_enabled(settings)
     app = FastAPI(
         title=settings.app_name,
