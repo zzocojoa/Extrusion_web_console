@@ -15,7 +15,11 @@ All notable changes to Extrusion Web Console are documented here.
   rejection now atomically fails the queued run with audit evidence and a
   launcher restart contract, DB-unobserved items preserve `dbMatchCount=null`,
   and the UI opens the persisted failed Preview without enabling LAN access or
-  running operational Preview/Supabase actions.
+  enabling upload, delete, Settings-save, or deployment mutations.
+- Resolved read-only operational Preview QA findings by warning when a stale
+  repo `.env` DB target differs from the package DB port and synchronizing
+  Dashboard, Upload, Logs, and Settings navigation with direct links, refresh,
+  and browser back/forward history.
 - Hardened Upload Job terminal sealing so late cancellation cleanup cannot mutate
   file rows after terminal commit, and made worker submission plus failure-state
   persistence failures return an explicit launcher-restart-required contract

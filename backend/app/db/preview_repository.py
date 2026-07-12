@@ -442,10 +442,7 @@ class PreviewRepository:
 
     def get_run(self, preview_run_id: str) -> sqlite3.Row | None:
         with self.connect() as connection:
-            return connection.execute(
-                "SELECT * FROM preview_runs WHERE preview_run_id = ?",
-                (preview_run_id,),
-            ).fetchone()
+            return self.get_run_in_transaction(connection, preview_run_id)
 
     def get_latest_run(self, completed_only: bool = False) -> sqlite3.Row | None:
         where = ""
