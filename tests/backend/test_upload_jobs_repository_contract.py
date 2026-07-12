@@ -445,10 +445,59 @@ def test_terminal_upload_job_seals_event_stream_and_rolls_back_late_file_updates
         repository.append_event("upl_sealed", event_type="log.info", level="info", message="late")
     with pytest.raises(UploadJobEventStreamSealedError):
         repository.mark_file_running(file_id)
+    with pytest.raises(UploadJobEventStreamSealedError):
+        repository.mark_remaining_cancelled("upl_sealed")
 
     assert repository.latest_event_seq("upl_sealed") == final_seq
     assert final_event["event_type"] == "job.succeeded"
     assert repository.get_job_file(file_id)["status"] == "queued"
+
+
+def test_reconcile_worker_failure_rolls_back_every_write_when_audit_persistence_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "state.db"
+    create_preview_with_items(db_path)
+    repository = UploadJobRepository(db_path)
+    repository.create_job_from_preview(
+        job_id="upl_atomic_failure",
+        preview_run_id="prv_done",
+        expected_target_rows=2,
+        expected_target_files=1,
+        options={},
+        config_snapshot={},
+        preview_gate_snapshot=PREVIEW_GATE_SNAPSHOT,
+    )
+    file_id = repository.list_job_files("upl_atomic_failure")[0]["job_file_id"]
+    before_job = dict(repository.get_job("upl_atomic_failure"))
+    before_file = dict(repository.get_job_file(file_id))
+    with repository.connect() as connection:
+        before_counts = {
+            table: int(connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
+            for table in ("upload_file_state", "job_events", "audit_log")
+        }
+
+    def fail_audit_write(*_args, **_kwargs) -> None:
+        raise RuntimeError("synthetic audit persistence failure")
+
+    monkeypatch.setattr(repository, "_append_audit_in_connection", fail_audit_write)
+
+    with pytest.raises(RuntimeError, match="synthetic audit persistence failure"):
+        repository.reconcile_worker_failure(
+            "upl_atomic_failure",
+            "upload_worker_failed",
+            "Upload job worker stopped unexpectedly (RuntimeError).",
+        )
+
+    assert dict(repository.get_job("upl_atomic_failure")) == before_job
+    assert dict(repository.get_job_file(file_id)) == before_file
+    with repository.connect() as connection:
+        after_counts = {
+            table: int(connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
+            for table in ("upload_file_state", "job_events", "audit_log")
+        }
+    assert after_counts == before_counts
 
 
 def test_append_event_rejects_missing_job_without_writing_event(tmp_path: Path) -> None:

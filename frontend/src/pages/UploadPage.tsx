@@ -392,6 +392,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
   const [mockJobPaused, setMockJobPaused] = useState(false);
   const [mockJobCancelled, setMockJobCancelled] = useState(false);
   const [sseEvents, setSseEvents] = useState<JobEvent[]>([]);
+  const [workerFailureError, setWorkerFailureError] = useState<UploadWorkerUnavailableError | null>(null);
   const latestSeqRef = useRef(0);
 
   useEffect(() => {
@@ -680,6 +681,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
   });
 
   const openUploadJobFromError = (error: Error) => {
+    setWorkerFailureError(error instanceof UploadWorkerUnavailableError ? error : null);
     const failedJobId =
       error instanceof ActiveUploadJobError
         ? error.activeJobId
@@ -706,6 +708,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       return createUploadJob(activePreviewRunId, approval);
     },
     onSuccess: (response) => {
+      setWorkerFailureError(null);
       latestSeqRef.current = 0;
       setSseEvents([]);
       setJobId(response.jobId);
@@ -766,6 +769,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       return retryUploadJob(currentJob.job.jobId, approval);
     },
     onSuccess: (response) => {
+      setWorkerFailureError(null);
       latestSeqRef.current = 0;
       setSseEvents([]);
       setJobId(response.jobId);
@@ -881,7 +885,7 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
           detail={currentJob}
           loading={jobQuery.isLoading || latestJobQuery.isLoading || retryMutation.isPending || controlMutation.isPending}
           retryPending={retryMutation.isPending}
-          error={jobQuery.error ?? latestJobQuery.error ?? retryMutation.error ?? controlMutation.error}
+          error={workerFailureError ?? jobQuery.error ?? latestJobQuery.error ?? retryMutation.error ?? controlMutation.error}
           onPause={() => controlMutation.mutate("pause")}
           onResume={() => controlMutation.mutate("resume")}
           onCancel={() => controlMutation.mutate("cancel")}
@@ -2037,6 +2041,7 @@ function JobTab({
               <Metric label={t("upload.job.metrics.accepted")} value={formatNumber(job.summary.acceptedRows)} />
               <Metric label={t("upload.job.metrics.failures")} value={formatNumber(job.summary.failedFiles)} danger={job.summary.failedFiles > 0} />
             </div>
+            {error ? <div className="error-banner" role="alert">{formatOperatorError(error, t("upload.job.loadError"))}</div> : null}
             {job.errorMessage ? <div className="error-banner" role="alert">{job.errorMessage}</div> : null}
           </div>
         </div>
@@ -2173,6 +2178,7 @@ function RetryConfirmationModal({
 
 function formatOperatorError(error: Error, fallback: string): string {
   if (isLocalTokenApiError(error)) return error.message;
+  if (error instanceof UploadWorkerUnavailableError) return error.recovery;
   return fallback;
 }
 

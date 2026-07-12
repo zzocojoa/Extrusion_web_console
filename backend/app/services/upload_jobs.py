@@ -327,8 +327,11 @@ class UploadJobService:
             else:
                 self.repository.finish_job(job_id, UploadJobStatus.succeeded)
         except UploadJobCancelled:
-            self.repository.mark_remaining_cancelled(job_id)
-            self.repository.finish_job(job_id, UploadJobStatus.cancelled)
+            try:
+                self.repository.mark_remaining_cancelled(job_id)
+                self.repository.finish_job(job_id, UploadJobStatus.cancelled)
+            except UploadJobEventStreamSealedError:
+                return
         except (UploadJobStopped, UploadJobEventStreamSealedError):
             return
         except Exception as error:

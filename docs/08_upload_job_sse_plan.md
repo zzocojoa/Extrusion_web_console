@@ -178,12 +178,16 @@ Worker unavailable `503`:
 {
   "detail": {
     "reason": "upload_worker_unavailable",
-    "jobId": "upl_abc123"
+    "jobId": "upl_abc123def456",
+    "restartRequired": true,
+    "recovery": "Restart the web console from the launcher, then inspect the persisted failed upload job before retrying."
   }
 }
 ```
 
-The response includes `Location: /api/upload/jobs/upl_abc123`. The persisted job and its queued/running files are already failed atomically and remain discoverable for event/audit review and retry.
+The response includes `Location: /api/upload/jobs/upl_abc123def456`. The persisted job and its queued/running files are already failed atomically and remain discoverable for event/audit review after the required launcher restart. A real `ThreadPoolExecutor` submission rejection is not recoverable in-process, so retry must wait until restart.
+
+If worker submission and failure-state reconciliation both fail, the response keeps the same `jobId` and `Location` but uses `reason: upload_worker_reconciliation_failed`, `restartRequired: true`, and `recovery: Restart the web console from the launcher before starting or retrying an upload job.` The job may still appear active because its failure state could not be persisted. The operator must restart through the launcher; startup recovery then marks the stale active job interrupted before another upload or retry is attempted.
 
 ### `GET /api/upload/jobs`
 
@@ -266,7 +270,7 @@ Rules:
 - Retry does not mutate the original job.
 - Retry snapshots the failed file rows into a new job with `retryOfJobId`.
 - Retry uses stored `resumeOffset` where safe.
-- If worker submission fails, return the same `503` body and `Location` contract as `POST /api/upload/jobs` for the newly persisted failed retry job.
+- If worker submission fails, return the same `503` body and `Location` contract as `POST /api/upload/jobs`. Every submission rejection requires launcher restart; `reason` distinguishes a persisted failed retry job from a reconciliation failure that may leave the retry job active until startup recovery.
 
 ### `POST /api/upload/jobs/{jobId}/pause`
 

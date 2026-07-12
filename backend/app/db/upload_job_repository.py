@@ -1068,6 +1068,14 @@ class UploadJobRepository:
         now = iso_now()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            job = connection.execute(
+                "SELECT status FROM upload_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if job is None:
+                return
+            if str(job["status"]) in TERMINAL_JOB_STATUSES:
+                raise UploadJobEventStreamSealedError(f"Upload job event stream is sealed: {job_id}")
             rows = connection.execute(
                 """
                 SELECT *

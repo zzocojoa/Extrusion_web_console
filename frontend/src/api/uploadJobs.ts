@@ -1,4 +1,10 @@
 import { apiFetch } from "./client";
+import {
+  parseUploadWorkerUnavailableError,
+  UploadWorkerUnavailableError,
+} from "./uploadJobErrors";
+
+export { UploadWorkerUnavailableError } from "./uploadJobErrors";
 
 export type UploadJobMode = "preview_targets" | "retry_failed";
 export type UploadJobStatus =
@@ -122,16 +128,6 @@ export class ActiveUploadJobError extends Error {
   }
 }
 
-export class UploadWorkerUnavailableError extends Error {
-  jobId: string;
-
-  constructor(jobId: string) {
-    super("The upload job was persisted, but its worker was unavailable");
-    this.name = "UploadWorkerUnavailableError";
-    this.jobId = jobId;
-  }
-}
-
 const defaultOptions: UploadJobOptions = {
   batchRows: 2000,
   chunkRows: 10000,
@@ -195,24 +191,9 @@ async function throwUploadJobRequestError(response: Response, fallbackMessage: s
     const activeJobId = detail?.activeJobId;
     if (typeof activeJobId === "string" && activeJobId) throw new ActiveUploadJobError(activeJobId);
   }
-  if (response.status === 503 && detail?.reason === "upload_worker_unavailable") {
-    const jobId = workerUnavailableJobId(response, detail?.jobId);
-    if (jobId) throw new UploadWorkerUnavailableError(jobId);
-  }
+  const workerUnavailableError = parseUploadWorkerUnavailableError(response, detail);
+  if (workerUnavailableError) throw workerUnavailableError;
   throw new Error(detail?.reason ?? fallbackMessage);
-}
-
-function canonicalUploadJobId(value: unknown): string | null {
-  return typeof value === "string" && /^upl_[0-9a-f]{12}$/.test(value) ? value : null;
-}
-
-function workerUnavailableJobId(response: Response, bodyJobId: unknown): string | null {
-  const prefix = "/api/upload/jobs/";
-  const location = response.headers.get("Location");
-  const locationJobId = location?.startsWith(prefix) ? canonicalUploadJobId(location.slice(prefix.length)) : null;
-  if (bodyJobId === undefined || bodyJobId === null) return locationJobId;
-  const canonicalBodyJobId = canonicalUploadJobId(bodyJobId);
-  return canonicalBodyJobId && canonicalBodyJobId === locationJobId ? canonicalBodyJobId : null;
 }
 
 export async function fetchLatestUploadJob(): Promise<UploadJobDetail | null> {

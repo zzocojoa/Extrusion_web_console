@@ -4,6 +4,7 @@ import time
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import uuid4
 
@@ -45,8 +46,27 @@ from backend.app.services.upload_jobs import UploadJobService, is_jwt_like_key
 router = APIRouter(prefix="/api/upload/jobs", tags=["upload-jobs"])
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upload-job")
 _LOGGER = logging.getLogger(__name__)
+UPLOAD_WORKER_UNAVAILABLE_REASON = "upload_worker_unavailable"
+UPLOAD_WORKER_RECONCILIATION_FAILED_REASON = "upload_worker_reconciliation_failed"
+UPLOAD_WORKER_RETRY_RECOVERY = (
+    "Restart the web console from the launcher, then inspect the persisted failed upload job before retrying."
+)
+UPLOAD_WORKER_RESTART_RECOVERY = (
+    "Restart the web console from the launcher before starting or retrying an upload job."
+)
+
+
+class UploadWorkerFailureReconciliation(str, Enum):
+    reconciled = "reconciled"
+    not_active = "not_active"
+    persistence_failed = "persistence_failed"
+
+
 UPLOAD_WORKER_UNAVAILABLE_RESPONSE = {
-    "description": "The job was persisted but the background worker could not be submitted.",
+    "description": (
+        "The job was persisted but the background worker could not be submitted. "
+        "A launcher restart is required; reason reports whether failure-state reconciliation also failed."
+    ),
     "content": {
         "application/json": {
             "schema": {
@@ -55,10 +75,18 @@ UPLOAD_WORKER_UNAVAILABLE_RESPONSE = {
                 "properties": {
                     "detail": {
                         "type": "object",
-                        "required": ["reason", "jobId"],
+                        "required": ["reason", "jobId", "restartRequired", "recovery"],
                         "properties": {
-                            "reason": {"type": "string", "enum": ["upload_worker_unavailable"]},
+                            "reason": {
+                                "type": "string",
+                                "enum": [
+                                    UPLOAD_WORKER_UNAVAILABLE_REASON,
+                                    UPLOAD_WORKER_RECONCILIATION_FAILED_REASON,
+                                ],
+                            },
                             "jobId": {"type": "string"},
+                            "restartRequired": {"type": "boolean"},
+                            "recovery": {"type": "string"},
                         },
                     }
                 },
@@ -67,7 +95,7 @@ UPLOAD_WORKER_UNAVAILABLE_RESPONSE = {
     },
     "headers": {
         "Location": {
-            "description": "Detail URL for the persisted failed upload job.",
+            "description": "Detail URL for the persisted upload job.",
             "schema": {"type": "string"},
         }
     },
@@ -118,10 +146,10 @@ def _reconcile_upload_worker_failure(
     *,
     error_code: str,
     error_type: str,
-) -> bool:
+) -> UploadWorkerFailureReconciliation:
     message = f"Upload job worker stopped unexpectedly ({error_type})."
     try:
-        return repository.reconcile_worker_failure(job_id, error_code, message)
+        reconciled = repository.reconcile_worker_failure(job_id, error_code, message)
     except Exception as persistence_error:
         _LOGGER.error(
             "Upload job worker failure reconciliation failed: job_id=%s error_type=%s persistence_error_type=%s",
@@ -129,7 +157,10 @@ def _reconcile_upload_worker_failure(
             error_type,
             type(persistence_error).__name__,
         )
-        return False
+        return UploadWorkerFailureReconciliation.persistence_failed
+    if reconciled:
+        return UploadWorkerFailureReconciliation.reconciled
+    return UploadWorkerFailureReconciliation.not_active
 
 
 def _run_upload_job_worker(settings: Settings, repository: UploadJobRepository, job_id: str) -> None:
@@ -179,12 +210,26 @@ def _submit_upload_job(settings: Settings, repository: UploadJobRepository, job_
     try:
         future = executor.submit(_run_upload_job_worker, settings, repository, job_id)
     except Exception as error:
-        _reconcile_upload_worker_failure(
+        reconciliation = _reconcile_upload_worker_failure(
             repository,
             job_id,
             error_code="upload_worker_failed",
             error_type=type(error).__name__,
         )
+        restart_required = True
+        reconciliation_failed = reconciliation is UploadWorkerFailureReconciliation.persistence_failed
+        reason = (
+            UPLOAD_WORKER_RECONCILIATION_FAILED_REASON
+            if reconciliation_failed
+            else UPLOAD_WORKER_UNAVAILABLE_REASON
+        )
+        recovery = UPLOAD_WORKER_RESTART_RECOVERY if reconciliation_failed else UPLOAD_WORKER_RETRY_RECOVERY
+        if reconciliation_failed:
+            _LOGGER.critical(
+                "Upload job worker submission and failure reconciliation both failed: "
+                "job_id=%s restart_required=true",
+                job_id,
+            )
         _LOGGER.error(
             "Upload job worker submission failed: job_id=%s error_type=%s",
             job_id,
@@ -192,7 +237,12 @@ def _submit_upload_job(settings: Settings, repository: UploadJobRepository, job_
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"reason": "upload_worker_unavailable", "jobId": job_id},
+            detail={
+                "reason": reason,
+                "jobId": job_id,
+                "restartRequired": restart_required,
+                "recovery": recovery,
+            },
             headers={"Location": f"/api/upload/jobs/{job_id}"},
         ) from None
     future.add_done_callback(lambda completed: _observe_upload_job_future(job_id, repository, completed))
