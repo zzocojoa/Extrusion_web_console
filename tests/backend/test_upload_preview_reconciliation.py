@@ -6,6 +6,8 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from backend.app.core.settings import Settings
 from backend.app.db.audit_repository import AuditLogFilters, AuditRepository, decode_params_json
 from backend.app.db.preview_repository import PreviewRepository
@@ -75,6 +77,26 @@ class MixedDbFailureReconciler:
         if self.calls == 1:
             raise PreviewDbQueryError("permission denied for all_metrics")
         raise PreviewDbUnavailableError("connection refused")
+
+
+class SuccessThenOutcomeReconciler:
+    def __init__(self, outcome: str, cancel_callback=None) -> None:
+        self.outcome = outcome
+        self.cancel_callback = cancel_callback
+        self.calls = 0
+
+    def find_existing_keys(self, _keys, **_kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return set()
+        if self.outcome == "query_failed":
+            raise PreviewDbQueryError("permission denied for all_metrics")
+        if self.outcome == "timed_out":
+            raise TimeoutError("Preview run exceeded the configured time limit")
+        if self.outcome == "cancelled" and self.cancel_callback is not None:
+            self.cancel_callback()
+            return set()
+        raise AssertionError(f"Unsupported outcome: {self.outcome}")
 
 
 class SchemaMismatchExtractor:
@@ -696,6 +718,7 @@ def test_preview_service_marks_db_unreachable_candidates_risky(tmp_path: Path) -
     assert total == 1
     assert items[0]["status"] == "risky"
     assert items[0]["reason_code"] == "db_unreachable"
+    assert items[0]["db_match_count"] is None
     assert items[0]["upload_row_estimate"] == 0
 
 
@@ -1143,6 +1166,7 @@ def test_preview_service_keeps_db_not_checked_when_no_candidate_reaches_reconcil
     assert total == 1
     assert items[0]["status"] == "excluded"
     assert items[0]["reason_code"] == "no_valid_keys"
+    assert items[0]["db_match_count"] is None
 
 
 def test_preview_service_distinguishes_db_query_failure_from_unreachable(
@@ -1194,6 +1218,7 @@ def test_preview_service_distinguishes_db_query_failure_from_unreachable(
     assert items[0]["status"] == "risky"
     assert items[0]["reason_code"] == "db_query_failed"
     assert items[0]["error_message"] == DB_QUERY_FAILED_MESSAGE
+    assert items[0]["db_match_count"] is None
     assert items[0]["upload_row_estimate"] == 0
     assert "secret-token" not in caplog.text
     assert "postgresql://" not in caplog.text
@@ -1249,3 +1274,70 @@ def test_preview_service_keeps_query_failure_message_aligned_for_mixed_db_failur
         "db_query_failed",
         "db_unreachable",
     }
+    assert all(item["db_match_count"] is None for item in items)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected_status", "expected_db_status", "expected_second_reason"),
+    [
+        ("query_failed", "partial_failed", "query_failed", "db_query_failed"),
+        ("timed_out", "timed_out", "reachable", "timeout"),
+        ("cancelled", "cancelled", "reachable", "cancelled"),
+    ],
+)
+def test_preview_service_preserves_successful_db_observation_before_later_terminal_outcome(
+    tmp_path: Path,
+    outcome: str,
+    expected_status: str,
+    expected_db_status: str,
+    expected_second_reason: str,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    for suffix, minute in (("090000", "00"), ("090100", "01")):
+        write_csv(
+            plc_dir / f"Factory_Integrated_Log_20260601_{suffix}.csv",
+            ["Date,Time,Mold1", f"2026-06-01,09:{minute}:00,1"],
+        )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    preview_run_id = f"prv_success_then_{outcome}"
+    repository.create_run(
+        preview_run_id=preview_run_id,
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+    reconciler = SuccessThenOutcomeReconciler(
+        outcome,
+        cancel_callback=lambda: repository.request_cancel(preview_run_id),
+    )
+
+    PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=reconciler,
+    ).run_preview(preview_run_id, request)
+
+    row = repository.get_run(preview_run_id)
+    items, total = repository.list_items(preview_run_id, sort="filename", order="asc")
+    assert row is not None
+    assert row["status"] == expected_status
+    assert row["db_status"] == expected_db_status
+    assert total == 2
+    assert items[0]["status"] == "target"
+    assert items[0]["db_match_count"] == 0
+    assert items[1]["reason_code"] == expected_second_reason
+    assert items[1]["db_match_count"] is None

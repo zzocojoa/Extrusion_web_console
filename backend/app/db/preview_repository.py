@@ -360,7 +360,30 @@ class PreviewRepository:
         timing: dict[str, Any] | None = None,
     ) -> None:
         with self.connect() as connection:
-            rows = connection.execute(
+            self.recompute_summary_in_transaction(
+                connection,
+                preview_run_id,
+                status=status,
+                db_status=db_status,
+                error_code=error_code,
+                error_message=error_message,
+                timeout_stage=timeout_stage,
+                timing=timing,
+            )
+
+    def recompute_summary_in_transaction(
+        self,
+        connection: sqlite3.Connection,
+        preview_run_id: str,
+        *,
+        status: PreviewRunStatus,
+        db_status: PreviewDbStatus,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        timeout_stage: str | None = None,
+        timing: dict[str, Any] | None = None,
+    ) -> None:
+        rows = connection.execute(
                 """
                 SELECT status, COUNT(*) AS count,
                        COALESCE(SUM(upload_row_estimate), 0) AS upload_rows,
@@ -371,41 +394,51 @@ class PreviewRepository:
                 """,
                 (preview_run_id,),
             ).fetchall()
-            counts = {row["status"]: int(row["count"]) for row in rows}
-            total = sum(counts.values())
-            upload_rows = sum(int(row["upload_rows"]) for row in rows)
-            db_matches = sum(int(row["db_matches"]) for row in rows)
-            connection.execute(
-                """
-                UPDATE preview_runs
-                SET status = ?, finished_at = COALESCE(finished_at, ?), db_status = ?,
-                    total_files = ?, target_count = ?, already_in_db_count = ?,
-                    partial_overlap_count = ?, risky_count = ?, excluded_count = ?,
-                    upload_row_estimate = ?, db_match_count = ?,
-                    timeout_stage = ?, timing_json = ?,
-                    error_code = ?, error_message = ?, updated_at = ?
-                WHERE preview_run_id = ?
-                """,
-                (
-                    status.value,
-                    iso_now(),
-                    db_status.value,
-                    total,
-                    counts.get(PreviewItemStatus.target.value, 0),
-                    counts.get(PreviewItemStatus.already_in_db.value, 0),
-                    counts.get(PreviewItemStatus.partial_overlap.value, 0),
-                    counts.get(PreviewItemStatus.risky.value, 0),
-                    counts.get(PreviewItemStatus.excluded.value, 0),
-                    upload_rows,
-                    db_matches,
-                    timeout_stage,
-                    _json(timing or {}),
-                    error_code,
-                    error_message,
-                    iso_now(),
-                    preview_run_id,
-                ),
-            )
+        counts = {row["status"]: int(row["count"]) for row in rows}
+        total = sum(counts.values())
+        upload_rows = sum(int(row["upload_rows"]) for row in rows)
+        db_matches = sum(int(row["db_matches"]) for row in rows)
+        connection.execute(
+            """
+            UPDATE preview_runs
+            SET status = ?, finished_at = COALESCE(finished_at, ?), db_status = ?,
+                total_files = ?, target_count = ?, already_in_db_count = ?,
+                partial_overlap_count = ?, risky_count = ?, excluded_count = ?,
+                upload_row_estimate = ?, db_match_count = ?,
+                timeout_stage = ?, timing_json = ?,
+                error_code = ?, error_message = ?, updated_at = ?
+            WHERE preview_run_id = ?
+            """,
+            (
+                status.value,
+                iso_now(),
+                db_status.value,
+                total,
+                counts.get(PreviewItemStatus.target.value, 0),
+                counts.get(PreviewItemStatus.already_in_db.value, 0),
+                counts.get(PreviewItemStatus.partial_overlap.value, 0),
+                counts.get(PreviewItemStatus.risky.value, 0),
+                counts.get(PreviewItemStatus.excluded.value, 0),
+                upload_rows,
+                db_matches,
+                timeout_stage,
+                _json(timing or {}),
+                error_code,
+                error_message,
+                iso_now(),
+                preview_run_id,
+            ),
+        )
+
+    @staticmethod
+    def get_run_in_transaction(
+        connection: sqlite3.Connection,
+        preview_run_id: str,
+    ) -> sqlite3.Row | None:
+        return connection.execute(
+            "SELECT * FROM preview_runs WHERE preview_run_id = ?",
+            (preview_run_id,),
+        ).fetchone()
 
     def get_run(self, preview_run_id: str) -> sqlite3.Row | None:
         with self.connect() as connection:

@@ -222,6 +222,12 @@ export function parsePreviewWorkerUnavailableError(
   return new PreviewWorkerUnavailableError(previewRunId, reason, restartRequired, recovery);
 }
 
+export function previewRunIdFromStartError(error: unknown): string | null {
+  if (error instanceof ActivePreviewRunError) return error.activePreviewRunId;
+  if (error instanceof PreviewWorkerUnavailableError) return error.previewRunId;
+  return null;
+}
+
 function canonicalPreviewRunId(value: unknown): string | null {
   return typeof value === "string" && /^prv_[0-9a-f]{12}$/.test(value) ? value : null;
 }

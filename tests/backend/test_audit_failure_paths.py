@@ -17,7 +17,8 @@ from backend.app.db.audit_repository import AuditRepository
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.main import app
 from backend.app.schemas.upload_preview import PreviewDbStatus, PreviewRunStatus
-from tests.backend.preview_test_support import approval_scope
+from backend.app.services.upload_preview import PreviewDbQueryError, SupabaseExactReconciler
+from tests.backend.preview_test_support import approval_scope, run_in_future
 from tests.backend.test_runtime_control import (
     FakeRunner,
     install_synthetic_runtime_network_probes,
@@ -60,7 +61,7 @@ def test_audit_api_surfaces_representative_failure_and_blocked_paths(
     app.dependency_overrides[get_config_audit_repository] = lambda: audit_repository
     app.dependency_overrides[get_audit_repository] = lambda: audit_repository
     app.dependency_overrides[get_command_runner] = lambda: fake_runner
-    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda fn, *args: fn(*args))
+    monkeypatch.setattr(upload_preview_api.executor, "submit", run_in_future)
     monkeypatch.setattr(runtime_api.executor, "submit", lambda fn, *args: fn(*args))
     client = TestClient(app)
 
@@ -124,6 +125,36 @@ def test_audit_api_surfaces_representative_failure_and_blocked_paths(
             },
         )
         preview_detail = client.get(db_unreachable.json()["pollUrl"])
+
+        query_failed_settings = settings.model_copy(
+            update={"supabase_db_url": "postgresql://operator:secret-token@localhost/db"}
+        )
+        app.dependency_overrides[get_settings] = lambda: query_failed_settings
+
+        def fail_query_after_connect(*_args, **_kwargs):
+            raise PreviewDbQueryError(
+                "permission denied at postgresql://operator:secret-token@localhost/db"
+            )
+
+        monkeypatch.setattr(SupabaseExactReconciler, "find_existing_keys", fail_query_after_connect)
+        query_failed = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "custom",
+                "startDate": "2026-06-06",
+                "endDate": "2026-06-06",
+                "sources": ["plc"],
+                "options": {"stableLagMinutes": 0},
+                "approvalScope": approval_scope(
+                    source_class="drive_letter",
+                    range_mode="custom",
+                    start_date="2026-06-06",
+                    end_date="2026-06-06",
+                    applied_profile="large_source_operational",
+                ),
+            },
+        )
+        query_failed_detail = client.get(query_failed.json()["pollUrl"])
         failures = client.get("/api/audit?result=failure&limit=200")
         blocked = client.get("/api/audit?result=blocked&limit=200")
     finally:
@@ -137,6 +168,11 @@ def test_audit_api_surfaces_representative_failure_and_blocked_paths(
     assert preview_detail.status_code == 200
     assert preview_detail.json()["run"]["status"] == "partial_failed"
     assert preview_detail.json()["run"]["dbStatus"] == "unreachable"
+    assert query_failed.status_code == 202
+    assert query_failed_detail.status_code == 200
+    assert query_failed_detail.json()["run"]["status"] == "partial_failed"
+    assert query_failed_detail.json()["run"]["dbStatus"] == "query_failed"
+    assert query_failed_detail.json()["items"][0]["dbMatchCount"] is None
     assert fake_runner.commands
     assert ("supabase", "start") not in fake_runner.commands
 
@@ -148,6 +184,7 @@ def test_audit_api_surfaces_representative_failure_and_blocked_paths(
         "preview_request_json_invalid",
         "config_validation_failed",
         "db_unreachable",
+        "db_query_failed",
     }.issubset(failure_codes)
     assert {"required_container_missing", "active_preview_run"}.issubset(blocked_codes)
 

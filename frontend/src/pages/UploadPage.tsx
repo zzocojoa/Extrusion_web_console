@@ -33,12 +33,12 @@ import {
   type UploadJobStatus,
 } from "../api/uploadJobs";
 import {
-  ActivePreviewRunError,
   cancelUploadPreview,
   createLargeSourceOperationalPreviewRequest,
   createUploadPreview,
   fetchLatestUploadPreview,
   fetchUploadPreview,
+  previewRunIdFromStartError,
   previewWorkerRecoveryTranslationKey,
   PreviewWorkerUnavailableError,
   type PreviewApprovalScope,
@@ -675,8 +675,9 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       setActiveTab("preview");
     },
     onError: (error) => {
-      if (error instanceof ActivePreviewRunError) {
-        setPreviewRunId(error.activePreviewRunId);
+      const failedPreviewRunId = previewRunIdFromStartError(error);
+      if (failedPreviewRunId) {
+        setPreviewRunId(failedPreviewRunId);
         setActiveTab("preview");
       }
     },

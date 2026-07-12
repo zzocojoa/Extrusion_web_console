@@ -54,7 +54,7 @@ def write_large_integrated_fixture(path: Path) -> None:
     os.utime(path, (old_mtime, old_mtime))
 
 
-def test_synthetic_large_csv_preview_soak_is_bounded_and_db_checkable(
+def test_synthetic_large_csv_preview_soak_records_resources_and_is_db_checkable(
     tmp_path: Path,
     record_property,
 ) -> None:

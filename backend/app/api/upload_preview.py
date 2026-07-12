@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from datetime import datetime
 import json
 import logging
@@ -48,6 +48,86 @@ PREVIEW_WORKER_RETRY_RECOVERY = (
 PREVIEW_WORKER_RESTART_RECOVERY = (
     "Restart the web console from the launcher before running Preview again."
 )
+PREVIEW_WORKER_UNAVAILABLE_RESPONSE = {
+    "description": (
+        "The Preview run was persisted but its background worker could not start. "
+        "A launcher restart is required; reason reports whether atomic failure-state reconciliation also failed."
+    ),
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["detail"],
+                "properties": {
+                    "detail": {
+                        "type": "object",
+                        "required": ["reason", "previewRunId", "restartRequired", "recovery"],
+                        "properties": {
+                            "reason": {
+                                "type": "string",
+                                "enum": [
+                                    PREVIEW_WORKER_UNAVAILABLE_REASON,
+                                    PREVIEW_WORKER_RECONCILIATION_FAILED_REASON,
+                                ],
+                            },
+                            "previewRunId": {"type": "string"},
+                            "restartRequired": {"type": "boolean"},
+                            "recovery": {
+                                "type": "string",
+                                "enum": [
+                                    PREVIEW_WORKER_RETRY_RECOVERY,
+                                    PREVIEW_WORKER_RESTART_RECOVERY,
+                                ],
+                            },
+                        },
+                    }
+                },
+            }
+        }
+    },
+    "headers": {
+        "Location": {
+            "description": "Detail URL for the persisted Preview run.",
+            "schema": {"type": "string"},
+        }
+    },
+}
+
+
+def _observe_preview_future(
+    preview_run_id: str,
+    request: PreviewCreateRequest,
+    service: PreviewService,
+    future: Future[None],
+) -> None:
+    try:
+        error = future.exception()
+    except CancelledError:
+        error = CancelledError()
+    if error is None:
+        return
+    reconciliation_failed = False
+    try:
+        row = service.repository.get_run(preview_run_id)
+        if row is not None and str(row["status"]) in {"queued", "running", "cancelling"}:
+            service.reconcile_worker_execution_failure(preview_run_id, request)
+    except Exception as reconciliation_error:
+        reconciliation_failed = True
+        _LOGGER.critical(
+            "Preview worker failure could not be reconciled: "
+            "preview_run_id=%s error_type=%s reconciliation_error_type=%s "
+            "restart_required=true",
+            preview_run_id,
+            type(error).__name__,
+            type(reconciliation_error).__name__,
+        )
+    _LOGGER.error(
+        "Preview worker exited unexpectedly: preview_run_id=%s error_type=%s "
+        "reconciliation_failed=%s",
+        preview_run_id,
+        type(error).__name__,
+        str(reconciliation_failed).lower(),
+    )
 
 
 def is_large_preview_range(request: PreviewCreateRequest) -> bool:
@@ -256,11 +336,7 @@ def item_dto(row: Any) -> PreviewItemDto:
     "",
     response_model=PreviewCreateResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    responses={
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "The Preview run was persisted but its background worker could not start."
-        }
-    },
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: PREVIEW_WORKER_UNAVAILABLE_RESPONSE},
 )
 async def create_preview(
     raw_request: Request,
@@ -379,7 +455,7 @@ async def create_preview(
         )
     service = PreviewService(settings, repository, audit_repository=audit_repository)
     try:
-        executor.submit(service.run_preview, preview_run_id, request)
+        future = executor.submit(service.run_preview, preview_run_id, request)
     except Exception as error:
         reconciliation_failed = False
         try:
@@ -417,6 +493,9 @@ async def create_preview(
             },
             headers={"Location": f"/api/upload/preview/{preview_run_id}"},
         ) from None
+    future.add_done_callback(
+        lambda completed: _observe_preview_future(preview_run_id, request, service, completed)
+    )
     return PreviewCreateResponse(
         preview_run_id=preview_run_id,
         status=PreviewRunStatus.queued,

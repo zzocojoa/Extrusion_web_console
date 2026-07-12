@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
+from typing import Any, Callable
+
 
 def approval_scope(
     *,
@@ -16,3 +19,18 @@ def approval_scope(
         "expectedEndDate": end_date,
         "expectedAppliedProfile": applied_profile,
     }
+
+
+def pending_future() -> Future[None]:
+    return Future()
+
+
+def run_in_future(function: Callable[..., Any], *args: Any) -> Future[None]:
+    future: Future[None] = Future()
+    try:
+        function(*args)
+    except Exception as error:
+        future.set_exception(error)
+    else:
+        future.set_result(None)
+    return future

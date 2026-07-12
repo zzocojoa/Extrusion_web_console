@@ -12,9 +12,10 @@ All notable changes to Extrusion Web Console are documented here.
   a deterministic 25,000-row synthetic Preview soak and representative Audit
   Logs failure-path integration coverage, and removed the duplicate
   `v2_lan_access_enabled` settings declaration. Preview worker submission
-  rejection now fails the queued run safely with audit evidence and a launcher
-  restart contract, without enabling LAN access or running operational
-  Preview/Supabase actions.
+  rejection now atomically fails the queued run with audit evidence and a
+  launcher restart contract, DB-unobserved items preserve `dbMatchCount=null`,
+  and the UI opens the persisted failed Preview without enabling LAN access or
+  running operational Preview/Supabase actions.
 - Hardened Upload Job terminal sealing so late cancellation cleanup cannot mutate
   file rows after terminal commit, and made worker submission plus failure-state
   persistence failures return an explicit launcher-restart-required contract

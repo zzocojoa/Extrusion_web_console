@@ -29,6 +29,7 @@ await compileModule("uploadPreview.ts", "uploadPreview.mjs", (source) =>
 const {
   createUploadPreview,
   parsePreviewWorkerUnavailableError,
+  previewRunIdFromStartError,
   previewWorkerRecoveryTranslationKey,
   PREVIEW_WORKER_RESTART_RECOVERY,
   PREVIEW_WORKER_RETRY_RECOVERY,
@@ -50,6 +51,10 @@ after(async () => {
 });
 
 const previewRunId = "prv_abc123def456";
+const sharedContract = JSON.parse(await readFile(
+  path.resolve(testDirectory, "../../tests/contracts/upload_preview_worker_error_contract.json"),
+  "utf8",
+));
 
 function workerFailureResponse(reason, recovery) {
   return new Response(JSON.stringify({
@@ -69,6 +74,16 @@ function workerFailureResponse(reason, recovery) {
 }
 
 test("preserves the two trusted Preview worker recovery contracts", () => {
+  assert.deepEqual(sharedContract, {
+    unavailable: {
+      reason: "preview_worker_unavailable",
+      recovery: PREVIEW_WORKER_RETRY_RECOVERY,
+    },
+    reconciliationFailed: {
+      reason: "preview_worker_reconciliation_failed",
+      recovery: PREVIEW_WORKER_RESTART_RECOVERY,
+    },
+  });
   const submissionError = parsePreviewWorkerUnavailableError(
     workerFailureResponse("preview_worker_unavailable", PREVIEW_WORKER_RETRY_RECOVERY),
     {
@@ -98,6 +113,7 @@ test("preserves the two trusted Preview worker recovery contracts", () => {
     previewWorkerRecoveryTranslationKey(reconciliationError),
     "upload.preview.workerReconciliationFailedRecovery",
   );
+  assert.equal(previewRunIdFromStartError(submissionError), previewRunId);
 });
 
 test("rejects forged or inconsistent Preview worker recovery payloads", () => {
