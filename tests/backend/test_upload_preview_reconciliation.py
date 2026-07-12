@@ -6,6 +6,8 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from backend.app.core.settings import Settings
 from backend.app.db.audit_repository import AuditLogFilters, AuditRepository, decode_params_json
 from backend.app.db.preview_repository import PreviewRepository
@@ -13,7 +15,9 @@ from backend.app.schemas.upload_preview import PreviewCreateRequest, PreviewOpti
 from backend.app.services.upload_preview import (
     CandidateScanner,
     CsvKeyExtractor,
+    DB_QUERY_FAILED_MESSAGE,
     PreviewCancelledError,
+    PreviewDbQueryError,
     PreviewDbUnavailableError,
     ReconciliationProgress,
     PreviewSchemaMismatchError,
@@ -56,6 +60,45 @@ class TimeoutReconciler:
         raise TimeoutError("Preview run exceeded the configured time limit")
 
 
+class QueryFailureReconciler:
+    def find_existing_keys(self, keys: set[tuple[str, str]], **_kwargs) -> set[tuple[str, str]]:
+        raise PreviewDbQueryError(
+            f"synthetic query failure for {len(keys)} keys at "
+            "postgresql://operator:secret-token@localhost/db"
+        )
+
+
+class MixedDbFailureReconciler:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def find_existing_keys(self, _keys: set[tuple[str, str]], **_kwargs) -> set[tuple[str, str]]:
+        self.calls += 1
+        if self.calls == 1:
+            raise PreviewDbQueryError("permission denied for all_metrics")
+        raise PreviewDbUnavailableError("connection refused")
+
+
+class SuccessThenOutcomeReconciler:
+    def __init__(self, outcome: str, cancel_callback=None) -> None:
+        self.outcome = outcome
+        self.cancel_callback = cancel_callback
+        self.calls = 0
+
+    def find_existing_keys(self, _keys, **_kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return set()
+        if self.outcome == "query_failed":
+            raise PreviewDbQueryError("permission denied for all_metrics")
+        if self.outcome == "timed_out":
+            raise TimeoutError("Preview run exceeded the configured time limit")
+        if self.outcome == "cancelled" and self.cancel_callback is not None:
+            self.cancel_callback()
+            return set()
+        raise AssertionError(f"Unsupported outcome: {self.outcome}")
+
+
 class SchemaMismatchExtractor:
     def extract(self, *_args, **_kwargs):
         raise PreviewSchemaMismatchError("missing required columns")
@@ -74,6 +117,13 @@ def write_csv(path: Path, rows: list[str]) -> None:
 
 def copy_fixture(source_name: str, destination: Path) -> None:
     destination.write_text((FIXTURES / source_name).read_text(encoding="utf-8"), encoding="utf-8")
+    old_mtime = datetime.now().timestamp() - 600
+    os.utime(destination, (old_mtime, old_mtime))
+
+
+def copy_fixture_as_cp949(source_name: str, destination: Path) -> None:
+    source = (FIXTURES / source_name).read_text(encoding="utf-8")
+    destination.write_bytes(source.encode("cp949"))
     old_mtime = datetime.now().timestamp() - 600
     os.utime(destination, (old_mtime, old_mtime))
 
@@ -433,6 +483,97 @@ def test_csv_key_extractor_streams_legacy_korean_temperature_keys(tmp_path: Path
     }
 
 
+def test_csv_key_extractor_streams_cp949_legacy_plc_aliases(tmp_path: Path) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    csv_path = plc_dir / "260603_legacy_plc.csv"
+    copy_fixture_as_cp949("legacy_plc_cp949_source.csv", csv_path)
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-03",
+            "endDate": "2026-06-03",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(plc_data_dir=str(plc_dir))).scan(request)[0][0]
+
+    result = CsvKeyExtractor().extract(
+        candidate,
+        max_file_seconds=5,
+        sample_rows=2,
+        force_full_scan=False,
+    )
+
+    assert result.row_count == 2
+    assert result.local_keys == {
+        ("2026-06-03T09:10:00+09:00", "extruder_plc"),
+        ("2026-06-03T09:11:00+09:00", "extruder_plc"),
+    }
+
+
+def test_csv_key_extractor_streams_cp949_legacy_temperature_aliases(tmp_path: Path) -> None:
+    temperature_dir = tmp_path / "temperature"
+    temperature_dir.mkdir()
+    csv_path = temperature_dir / "temperature_2026-06-03.csv"
+    copy_fixture_as_cp949("legacy_temperature_cp949_source.csv", csv_path)
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-03",
+            "endDate": "2026-06-03",
+            "sources": ["temperature"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(temperature_data_dir=str(temperature_dir))).scan(request)[0][0]
+
+    result = CsvKeyExtractor().extract(
+        candidate,
+        max_file_seconds=5,
+        sample_rows=2,
+        force_full_scan=False,
+    )
+
+    assert result.row_count == 2
+    assert result.local_keys == {
+        ("2026-06-03T10:00:00.250000+09:00", "spot_temperature_sensor"),
+        ("2026-06-03T10:01:00.000000+09:00", "spot_temperature_sensor"),
+    }
+
+
+def test_csv_key_extractor_streams_integrated_plc_date_variants(tmp_path: Path) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    csv_path = plc_dir / "Factory_Integrated_Log_20260604_110000.csv"
+    copy_fixture("legacy_integrated_plc.csv", csv_path)
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-04",
+            "endDate": "2026-06-04",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    candidate = CandidateScanner(Settings(plc_data_dir=str(plc_dir))).scan(request)[0][0]
+
+    result = CsvKeyExtractor().extract(
+        candidate,
+        max_file_seconds=5,
+        sample_rows=2,
+        force_full_scan=False,
+    )
+
+    assert result.row_count == 2
+    assert result.device_ids == ["extruder_integrated"]
+    assert result.local_keys == {
+        ("2026-06-04T11:00:00.125000+09:00", "extruder_integrated"),
+        ("2026-06-04T11:01:00.000000+09:00", "extruder_integrated"),
+    }
+
+
 def test_csv_key_extractor_uses_sample_rows_for_schema_mismatch(tmp_path: Path) -> None:
     plc_dir = tmp_path / "plc"
     plc_dir.mkdir()
@@ -518,6 +659,19 @@ def test_classification_uses_exact_keys_not_latest_timestamp() -> None:
     assert result["db_match_count"] == 0
     assert result["upload_row_estimate"] == 1
 
+    query_failed = classify_reconciliation(
+        local_keys={csv_key},
+        matched_keys=set(),
+        db_status="query_failed",
+    )
+    assert query_failed == {
+        "status": query_failed["status"],
+        "reason_code": "db_query_failed",
+        "db_match_count": None,
+        "upload_row_estimate": 0,
+    }
+    assert query_failed["status"].value == "risky"
+
 
 def test_preview_service_marks_db_unreachable_candidates_risky(tmp_path: Path) -> None:
     plc_dir = tmp_path / "plc"
@@ -564,6 +718,7 @@ def test_preview_service_marks_db_unreachable_candidates_risky(tmp_path: Path) -
     assert total == 1
     assert items[0]["status"] == "risky"
     assert items[0]["reason_code"] == "db_unreachable"
+    assert items[0]["db_match_count"] is None
     assert items[0]["upload_row_estimate"] == 0
 
 
@@ -964,3 +1119,225 @@ def test_preview_service_non_timeout_extract_errors_do_not_persist_timeout_stage
         item_timing = json.loads(items[0]["timing_json"])
         assert "extractMs" in item_timing
         assert "timeoutStage" not in item_timing
+
+
+def test_preview_service_keeps_db_not_checked_when_no_candidate_reaches_reconciliation(
+    tmp_path: Path,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        ["Date,Time,Mold1", "2026-06-01,,1"],
+    )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_no_db_check",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=FakeReconciler(),
+    )
+    service.run_preview("prv_no_db_check", request)
+
+    row = repository.get_run("prv_no_db_check")
+    items, total = repository.list_items("prv_no_db_check")
+    assert row is not None
+    assert row["status"] == "succeeded"
+    assert row["db_status"] == "not_checked"
+    assert total == 1
+    assert items[0]["status"] == "excluded"
+    assert items[0]["reason_code"] == "no_valid_keys"
+    assert items[0]["db_match_count"] is None
+
+
+def test_preview_service_distinguishes_db_query_failure_from_unreachable(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    write_csv(
+        plc_dir / "Factory_Integrated_Log_20260601_090000.csv",
+        ["Date,Time,Mold1", "2026-06-01,09:00:00,1"],
+    )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_query_failed",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=QueryFailureReconciler(),
+    )
+    service.run_preview("prv_query_failed", request)
+
+    row = repository.get_run("prv_query_failed")
+    items, total = repository.list_items("prv_query_failed")
+    assert row is not None
+    assert row["status"] == "partial_failed"
+    assert row["db_status"] == "query_failed"
+    assert row["error_code"] == "db_query_failed"
+    assert row["error_message"] == DB_QUERY_FAILED_MESSAGE
+    assert total == 1
+    assert items[0]["status"] == "risky"
+    assert items[0]["reason_code"] == "db_query_failed"
+    assert items[0]["error_message"] == DB_QUERY_FAILED_MESSAGE
+    assert items[0]["db_match_count"] is None
+    assert items[0]["upload_row_estimate"] == 0
+    assert "secret-token" not in caplog.text
+    assert "postgresql://" not in caplog.text
+
+
+def test_preview_service_keeps_query_failure_message_aligned_for_mixed_db_failures(
+    tmp_path: Path,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    for suffix, minute in (("090000", "00"), ("090100", "01")):
+        write_csv(
+            plc_dir / f"Factory_Integrated_Log_20260601_{suffix}.csv",
+            ["Date,Time,Mold1", f"2026-06-01,09:{minute}:00,1"],
+        )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    repository.create_run(
+        preview_run_id="prv_mixed_db_failures",
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+
+    service = PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=MixedDbFailureReconciler(),
+    )
+    service.run_preview("prv_mixed_db_failures", request)
+
+    row = repository.get_run("prv_mixed_db_failures")
+    items, total = repository.list_items("prv_mixed_db_failures")
+    assert row is not None
+    assert row["status"] == "partial_failed"
+    assert row["db_status"] == "query_failed"
+    assert row["error_code"] == "db_query_failed"
+    assert row["error_message"] == DB_QUERY_FAILED_MESSAGE
+    assert total == 2
+    assert {item["reason_code"] for item in items} == {
+        "db_query_failed",
+        "db_unreachable",
+    }
+    assert all(item["db_match_count"] is None for item in items)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected_status", "expected_db_status", "expected_second_reason"),
+    [
+        ("query_failed", "partial_failed", "query_failed", "db_query_failed"),
+        ("timed_out", "timed_out", "reachable", "timeout"),
+        ("cancelled", "cancelled", "reachable", "cancelled"),
+    ],
+)
+def test_preview_service_preserves_successful_db_observation_before_later_terminal_outcome(
+    tmp_path: Path,
+    outcome: str,
+    expected_status: str,
+    expected_db_status: str,
+    expected_second_reason: str,
+) -> None:
+    plc_dir = tmp_path / "plc"
+    plc_dir.mkdir()
+    for suffix, minute in (("090000", "00"), ("090100", "01")):
+        write_csv(
+            plc_dir / f"Factory_Integrated_Log_20260601_{suffix}.csv",
+            ["Date,Time,Mold1", f"2026-06-01,09:{minute}:00,1"],
+        )
+    request = PreviewCreateRequest.model_validate(
+        {
+            "rangeMode": "custom",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-01",
+            "sources": ["plc"],
+            "options": {"stableLagMinutes": 0},
+        }
+    )
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    preview_run_id = f"prv_success_then_{outcome}"
+    repository.create_run(
+        preview_run_id=preview_run_id,
+        range_mode=request.range_mode.value,
+        start_date="2026-06-01",
+        end_date="2026-06-01",
+        sources=["plc"],
+        options=request.options.model_dump(by_alias=True),
+        config_snapshot={},
+        retry_of_run_id=None,
+    )
+    reconciler = SuccessThenOutcomeReconciler(
+        outcome,
+        cancel_callback=lambda: repository.request_cancel(preview_run_id),
+    )
+
+    PreviewService(
+        Settings(plc_data_dir=str(plc_dir)),
+        repository,
+        reconciler=reconciler,
+    ).run_preview(preview_run_id, request)
+
+    row = repository.get_run(preview_run_id)
+    items, total = repository.list_items(preview_run_id, sort="filename", order="asc")
+    assert row is not None
+    assert row["status"] == expected_status
+    assert row["db_status"] == expected_db_status
+    assert total == 2
+    assert items[0]["status"] == "target"
+    assert items[0]["db_match_count"] == 0
+    assert items[1]["reason_code"] == expected_second_reason
+    assert items[1]["db_match_count"] is None

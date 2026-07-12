@@ -33,12 +33,14 @@ import {
   type UploadJobStatus,
 } from "../api/uploadJobs";
 import {
-  ActivePreviewRunError,
   cancelUploadPreview,
   createLargeSourceOperationalPreviewRequest,
   createUploadPreview,
   fetchLatestUploadPreview,
   fetchUploadPreview,
+  previewRunIdFromStartError,
+  previewWorkerRecoveryTranslationKey,
+  PreviewWorkerUnavailableError,
   type PreviewApprovalScope,
   type PreviewItem,
   type PreviewItemStatus,
@@ -673,8 +675,9 @@ export function UploadPage({ requestedTab }: UploadPageProps) {
       setActiveTab("preview");
     },
     onError: (error) => {
-      if (error instanceof ActivePreviewRunError) {
-        setPreviewRunId(error.activePreviewRunId);
+      const failedPreviewRunId = previewRunIdFromStartError(error);
+      if (failedPreviewRunId) {
+        setPreviewRunId(failedPreviewRunId);
         setActiveTab("preview");
       }
     },
@@ -2189,6 +2192,9 @@ function RetryConfirmationModal({
 
 function formatOperatorError(error: Error, fallback: string, t: TFunction): string {
   if (isLocalTokenApiError(error)) return error.message;
+  if (error instanceof PreviewWorkerUnavailableError) {
+    return t(previewWorkerRecoveryTranslationKey(error));
+  }
   if (error instanceof UploadWorkerUnavailableError) {
     return t(uploadWorkerRecoveryTranslationKey(error));
   }

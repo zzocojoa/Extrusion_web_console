@@ -6,6 +6,20 @@ All notable changes to Extrusion Web Console are documented here.
 
 ### Changed
 
+- Completed the automated V2 WP-01 reliability foundation: corrected Upload
+  Preview DB-status semantics, distinguished post-connect query failures,
+  expanded legacy UTF-8/CP949 and integrated CSV compatibility fixtures, added
+  a deterministic 25,000-row synthetic Preview soak and representative Audit
+  Logs failure-path integration coverage, and removed the duplicate
+  `v2_lan_access_enabled` settings declaration. Preview worker submission
+  rejection now atomically fails the queued run with audit evidence and a
+  launcher restart contract, DB-unobserved items preserve `dbMatchCount=null`,
+  and the UI opens the persisted failed Preview without enabling LAN access or
+  enabling upload, delete, Settings-save, or deployment mutations.
+- Resolved read-only operational Preview QA findings by warning when a stale
+  repo `.env` DB target differs from the package DB port and synchronizing
+  Dashboard, Upload, Logs, and Settings navigation with direct links, refresh,
+  and browser back/forward history.
 - Hardened Upload Job terminal sealing so late cancellation cleanup cannot mutate
   file rows after terminal commit, and made worker submission plus failure-state
   persistence failures return an explicit launcher-restart-required contract

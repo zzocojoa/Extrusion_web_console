@@ -217,7 +217,28 @@ Grafana down               -> status degraded, link still shown, smoke test
 ```
 Critical silent-failure gap: none allowed by design. PR #229 is an Upload Job SSE/startup-recovery reliability patch, not completion of the requested V2 WP-01. It covers the two former “test needed” items with unit, temporary-SQLite integration, API contract, deterministic terminal-commit concurrency, and synthetic reconnect soak coverage. SSE replay now honors the higher persisted cursor from `afterSeq` or valid `Last-Event-ID`, reads event backlog and job status from one SQLite snapshot before deciding to close, drains backlog without poll sleeps, and returns HTTP 204 for a terminal stream whose reconnect cursor is already current so native `EventSource` clients stop reconnecting. Terminal jobs reject late event/file writes, including cancellation cleanup, and workers treat that seal as a stop condition. Constructor, execution, cancellation, or executor-submission failures atomically reconcile still-active jobs and queued/running files to retryable failed state with a visible terminal event/audit and sanitized metadata; terminal jobs remain unchanged. A submission failure returns HTTP 503 with the persisted job ID, `Location`, and `restartRequired: true` because a rejected in-process executor cannot recover without launcher restart. If failure-state reconciliation also cannot be persisted, the response uses `upload_worker_reconciliation_failed` instead of falsely claiming the job is failed; startup recovery then marks any still-active job interrupted after restart. Startup recovery reports non-secret interruption counts, propagates only sanitized stage/type failures, preserves upload `resume_offset`, and leaves interrupted files eligible for an explicitly requested retry. No operational CSV, Supabase, Docker, upload, delete, deployment, or production migration action is part of this coverage.
 
-The requested V2 WP-01 remains open for Upload Preview DB-status correctness, representative legacy CSV compatibility fixtures, a synthetic large CSV Preview soak, Audit Logs failure-path coverage, and duplicate `v2_lan_access_enabled` cleanup.
+The remaining V2 WP-01 reliability foundation is implemented in the current codebase.
+Upload Preview now reports `reachable` only after a completed exact-key query,
+keeps `not_checked` when no candidate reaches reconciliation, distinguishes
+connection/config failures as `unreachable`, and persists post-connect query
+failures as `query_failed` with `risky/db_query_failed` items. Representative
+legacy compatibility coverage now includes UTF-8 and CP949 PLC/temperature
+aliases plus integrated PLC date/time variants, checked against the legacy
+transform in full and chunked modes. A deterministic 25,000-row synthetic
+Preview soak verifies completion inside the configured run budget, exact key
+counts, DB-checkable classification, and audit redaction while recording peak
+Python allocation for trend evidence. A separate instrumented 25,000-key
+`SupabaseExactReconciler` regression verifies production sorting/staging batch
+counts and the single exact-key join without an operational DB. Audit API integration coverage exercises
+malformed Preview, invalid Settings, DB unreachable, active Preview conflict,
+and blocked runtime start paths without operational services. The duplicate
+`v2_lan_access_enabled` declaration is removed and guarded by an AST regression
+test. Preview worker submission rejection now atomically reconciles the queued
+run and its audit row to a safe failed state before returning a 503 restart
+contract; if either write fails, both roll back and the queued run remains
+visible for startup interruption recovery.
+This automated package does not replace real operator CSV, local
+Supabase, or operator-PC validation.
 
 **Launcher phase 1 implementation status**
 

@@ -14,7 +14,7 @@ The current local console baseline is in place:
   - `GET /api/upload/preview/latest`
   - `GET /api/upload/preview/{previewRunId}`
   - `POST /api/upload/preview/{previewRunId}/cancel`
-- Upload Preview now writes `upload.preview` audit rows for success, DB unreachable, missing source, malformed request validation, and active preview conflict paths.
+- Upload Preview now distinguishes DB unavailable from post-connect query failure, writes safe `upload.preview` audit rows for both paths, and returns a structured restart-required 503 if a persisted Preview worker cannot start.
 - React + Vite + TypeScript frontend.
 - Dashboard Variant D UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
@@ -35,9 +35,9 @@ Legacy upload state import is not implemented in this baseline.
 
 In API mode, Dashboard endpoints read the active backend state instead of scaffold mock data. The response aggregates the active state DB latest upload job, runtime readiness summary, and safe audit summary. If the active state DB context is empty or different from a reviewed QA state DB, Dashboard shows that real empty/different state instead of fabricating a running upload.
 
-Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. If the DB URL is missing or unreachable, DB-dependent files are shown as `risky/db_unreachable`; they are not silently treated as upload targets.
+Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp, device_id)` keys, persists preview results in SQLite, and compares those keys with local Supabase when `EWC_SUPABASE_DB_URL` is configured. Missing/configuration/connect failures produce `unreachable` runs with `risky/db_unreachable` items. Failures after a DB connection is established produce `query_failed` runs with `risky/db_query_failed` items. Neither path is silently treated as an upload target.
 
-Preview requests are audit logged as `upload.preview`. Successful previews write `success` rows; DB unreachable, missing source, malformed JSON, and validation failures write `failure` rows; active preview conflicts write `blocked` rows. Audit params use safe summary fields such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`. Raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
+Preview requests are audit logged as `upload.preview`. Successful previews write `success` rows; DB unavailable, DB query failure, missing source, malformed JSON, validation failure, and worker submission failure write `failure` rows; active preview conflicts write `blocked` rows. Worker submission failure finalizes the run and audit atomically; if either write fails, both roll back so startup interruption recovery can repair the still-active run after the required launcher restart. Audit params use safe summary fields such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`. Raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
 
 Already-in-DB hard delete is a production-critical maintenance flow, not a general database cleanup tool. It can target only selected Preview items whose status is `already_in_db`. The backend rebuilds exact keys from current source files, verifies rollback readiness, proves the configured DB is the expected local Supabase target, checks DELETE privilege non-destructively, writes `delete_run` state and `upload.delete_start` audit before DB mutation, then performs an all-or-nothing transaction. API responses and audits expose counts, hashes, status, and safe reason codes only; raw `(timestamp, device_id)` values, source paths, filenames, DB URLs, tokens, Authorization values, JWTs, and secrets are not returned.
 
@@ -263,7 +263,7 @@ For developer API-mode runs started through `launcher/start_web_console.ps1`, th
 
 The API-mode frontend does not use Settings mock fallback values for active source binding. Settings, Upload Preview, and Start Upload readiness must be judged from the backend `/api/config` response and its sanitized `items` / `targetClasses` fields. The default frontend mock build may show development sample values only; it is for screenshot QA and UI development, not operational source evidence.
 
-`EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB is unreachable, preview runs still persist and DB-dependent CSV candidates are shown as `risky/db_unreachable` under a `partial_failed` run.
+`EWC_SUPABASE_DB_URL` is optional for mock UI/dev smoke checks. It is required for real Upload Preview exact reconciliation. Without it, or when the local Supabase DB cannot be connected, preview runs persist as `partial_failed/unreachable` and DB-dependent CSV candidates are shown as `risky/db_unreachable`. A post-connect query failure instead persists `partial_failed/query_failed` with `risky/db_query_failed` candidates.
 
 `EWC_SUPABASE_ANON_KEY` and either `EWC_SUPABASE_EDGE_URL` or `EWC_SUPABASE_URL` are required for real Start Upload and Retry Failed execution. Preview-origin upload disables the legacy latest-timestamp Smart Sync filter and relies on the existing `all_metrics(timestamp, device_id)` upsert safety for final duplicate protection.
 
@@ -571,6 +571,7 @@ Browser QA has been run against:
 - `docs/08_upload_job_sse_plan.md`
 - `docs/09_local_supabase_control_plan.md`
 - `docs/10_audit_logs_plan.md`
+- `docs/11_upload_preview_large_csv_soak.md`
 - `docs/01-plan/features/operator-ui-density-and-navigation.plan.md`
 - `docs/02-design/features/operator-ui-density-and-navigation.design.md`
 - `docs/01-plan/features/upload-preview-range-options.plan.md`
@@ -643,3 +644,7 @@ If Upload Preview reports `partial_failed` with `risky/db_unreachable`, check:
 - The local database contains `public.all_metrics` with the existing `timestamp, device_id` uniqueness policy.
 
 This failure state is expected when the DB cannot be checked. The app should show the risk in the UI instead of treating files as upload targets.
+
+If the run instead reports `query_failed` with `risky/db_query_failed`, the DB connection was established but the exact-key query did not complete. Check `public.all_metrics` schema/permissions and backend logs for the sanitized failure class; do not treat the displayed zero upload estimate as proof that the DB has zero matches.
+
+If Preview creation returns `503 preview_worker_unavailable` or `preview_worker_reconciliation_failed`, restart the web console from the launcher. The UI selects the persisted Preview run when available; a reconciliation-failed response intentionally leaves the run active so startup interruption recovery can mark it failed after restart.

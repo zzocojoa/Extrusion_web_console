@@ -205,33 +205,62 @@ class AuditRepository:
         job_id: str | None = None,
         request_id: str | None = None,
     ) -> int:
+        with self.connect() as connection:
+            return self.insert_audit_in_transaction(
+                connection,
+                action=action,
+                target_type=target_type,
+                target_id=target_id,
+                params=params,
+                result=result,
+                actor=actor,
+                error_code=error_code,
+                error_message=error_message,
+                job_id=job_id,
+                request_id=request_id,
+            )
+
+    def insert_audit_in_transaction(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        action: str,
+        target_type: str,
+        target_id: str | None,
+        params: dict[str, Any],
+        result: AuditResult | str,
+        actor: str = "local_operator",
+        error_code: str | None = None,
+        error_message: str | None = None,
+        job_id: str | None = None,
+        request_id: str | None = None,
+    ) -> int:
         now = iso_now()
         result_value = result.value if isinstance(result, AuditResult) else result
-        with self.connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO audit_log(
-                  ts, actor, action, target_type, target_id, params_json_redacted,
-                  result, error_code, error_message, job_id, request_id, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    now,
-                    actor,
-                    action,
-                    target_type,
-                    target_id,
-                    _json(params),
-                    result_value,
-                    error_code,
-                    sanitize_text(error_message),
-                    job_id,
-                    request_id,
-                    now,
-                ),
+        cursor = connection.execute(
+            """
+            INSERT INTO audit_log(
+              ts, actor, action, target_type, target_id, params_json_redacted,
+              result, error_code, error_message, job_id, request_id, created_at
             )
-            return int(cursor.lastrowid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                now,
+                actor,
+                action,
+                target_type,
+                target_id,
+                _json(params),
+                result_value,
+                error_code,
+                sanitize_text(error_message),
+                job_id,
+                request_id,
+                now,
+            ),
+        )
+        return int(cursor.lastrowid)
 
     def list_audit_logs(self, filters: AuditLogFilters) -> AuditLogQueryResult:
         where_sql, params = self._where_clause(filters)

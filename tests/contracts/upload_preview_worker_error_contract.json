@@ -1,0 +1,10 @@
+{
+  "unavailable": {
+    "reason": "preview_worker_unavailable",
+    "recovery": "Restart the web console from the launcher, inspect the persisted failed Preview, then run Preview again."
+  },
+  "reconciliationFailed": {
+    "reason": "preview_worker_reconciliation_failed",
+    "recovery": "Restart the web console from the launcher before running Preview again."
+  }
+}

@@ -269,6 +269,29 @@ function Get-DotenvValue {
   return $null
 }
 
+function Write-DotenvDbTargetDriftWarning {
+  param(
+    [string]$RepoRoot,
+    [int]$ExpectedDbPort
+  )
+
+  $processValue = [Environment]::GetEnvironmentVariable("EWC_SUPABASE_DB_URL", "Process")
+  if (-not [string]::IsNullOrWhiteSpace($processValue)) {
+    return
+  }
+
+  $dotenvValue = Get-DotenvValue -RepoRoot $RepoRoot -Name "EWC_SUPABASE_DB_URL"
+  if ([string]::IsNullOrWhiteSpace($dotenvValue)) {
+    return
+  }
+
+  $dotenvUri = $null
+  $parsed = [Uri]::TryCreate($dotenvValue, [UriKind]::Absolute, [ref]$dotenvUri)
+  if (-not $parsed -or $null -eq $dotenvUri -or $dotenvUri.Port -ne $ExpectedDbPort) {
+    Write-LauncherLog "Repo .env DB target differs from the configured package DB port; launcher process target will use the package port. Update the local .env before direct backend or Settings runs. Raw value hidden." "WARNING"
+  }
+}
+
 function Get-ConfigJsonValue {
   param(
     [string]$ConfigPath,
@@ -361,6 +384,8 @@ function Set-OperatorPackageTargetDefaults {
   if ([string]::IsNullOrWhiteSpace($projectId)) {
     $projectId = "Extrusion_web_console"
   }
+
+  Write-DotenvDbTargetDriftWarning -RepoRoot $RepoRoot -ExpectedDbPort $dbPort
 
   Set-EnvDefault -Name "EWC_LOCAL_SUPABASE_PROJECT_PATH" -Value $RepoRoot
   Set-EnvDefault -Name "EWC_LOCAL_SUPABASE_PROJECT_ID" -Value $projectId

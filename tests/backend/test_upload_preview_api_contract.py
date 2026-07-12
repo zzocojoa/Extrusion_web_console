@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import Future
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -13,23 +15,8 @@ from backend.app.db.audit_repository import AuditLogFilters, AuditRepository, de
 from backend.app.db.preview_repository import PreviewRepository
 from backend.app.main import app, create_app
 from backend.app.schemas.upload_preview import PreviewDbStatus, PreviewRunStatus
-
-
-def approval_scope(
-    *,
-    source_class: str = "local",
-    range_mode: str = "today",
-    start_date: str | None = None,
-    end_date: str | None = None,
-    applied_profile: str = "default",
-) -> dict[str, object]:
-    return {
-        "expectedSourceClasses": {"plc": source_class},
-        "expectedRangeMode": range_mode,
-        "expectedStartDate": start_date,
-        "expectedEndDate": end_date,
-        "expectedAppliedProfile": applied_profile,
-    }
+from backend.app.services.upload_preview import PREVIEW_FAILED_MESSAGE
+from tests.backend.preview_test_support import approval_scope, pending_future, run_in_future
 
 
 def test_upload_preview_routes_are_registered_in_openapi(monkeypatch) -> None:
@@ -49,7 +36,39 @@ def test_upload_preview_routes_are_registered_in_openapi(monkeypatch) -> None:
     assert "get" in paths["/api/upload/preview/{previewRunId}"]
     assert "/api/upload/preview/{previewRunId}/cancel" in paths
     assert "post" in paths["/api/upload/preview/{previewRunId}/cancel"]
+    worker_response = paths["/api/upload/preview"]["post"]["responses"]["503"]
+    detail_schema = worker_response["content"]["application/json"]["schema"]["properties"]["detail"]
+    assert worker_response["description"].startswith("The Preview run was persisted")
+    assert set(detail_schema["required"]) == {
+        "reason",
+        "previewRunId",
+        "restartRequired",
+        "recovery",
+    }
+    assert detail_schema["properties"]["reason"]["enum"] == [
+        "preview_worker_unavailable",
+        "preview_worker_reconciliation_failed",
+    ]
+    assert "Location" in worker_response["headers"]
     get_settings.cache_clear()
+
+
+def test_upload_preview_worker_contract_matches_frontend_fixture() -> None:
+    contract = json.loads(
+        (Path(__file__).parents[1] / "contracts" / "upload_preview_worker_error_contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert contract == {
+        "unavailable": {
+            "reason": upload_preview_api.PREVIEW_WORKER_UNAVAILABLE_REASON,
+            "recovery": upload_preview_api.PREVIEW_WORKER_RETRY_RECOVERY,
+        },
+        "reconciliationFailed": {
+            "reason": upload_preview_api.PREVIEW_WORKER_RECONCILIATION_FAILED_REASON,
+            "recovery": upload_preview_api.PREVIEW_WORKER_RESTART_RECOVERY,
+        },
+    }
 
 
 def test_upload_preview_create_rejects_invalid_custom_range_before_work_starts(tmp_path) -> None:
@@ -114,7 +133,9 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_operational_
     monkeypatch.setattr(
         upload_preview_api.executor,
         "submit",
-        lambda fn, preview_run_id, request: submitted.append((preview_run_id, request)),
+        lambda fn, preview_run_id, request: (
+            submitted.append((preview_run_id, request)) or pending_future()
+        ),
     )
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_preview_repository] = lambda: repository
@@ -168,7 +189,7 @@ def test_upload_preview_create_preserves_explicit_bounded_profile_for_operationa
     repository = PreviewRepository(str(tmp_path / "state.db"))
     audit_repository = AuditRepository(str(tmp_path / "state.db"))
     settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="//operator-share/plc")
-    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: pending_future())
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_preview_repository] = lambda: repository
     app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
@@ -212,7 +233,7 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_large_date_r
     repository = PreviewRepository(str(tmp_path / "state.db"))
     audit_repository = AuditRepository(str(tmp_path / "state.db"))
     settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
-    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: pending_future())
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_preview_repository] = lambda: repository
     app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
@@ -255,7 +276,7 @@ def test_upload_preview_create_auto_applies_large_source_budget_for_folder_all(
     repository = PreviewRepository(str(tmp_path / "state.db"))
     audit_repository = AuditRepository(str(tmp_path / "state.db"))
     settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
-    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: pending_future())
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_preview_repository] = lambda: repository
     app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
@@ -296,7 +317,7 @@ def test_upload_preview_create_keeps_default_budget_for_small_local_source(
     repository = PreviewRepository(str(tmp_path / "state.db"))
     audit_repository = AuditRepository(str(tmp_path / "state.db"))
     settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
-    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(upload_preview_api.executor, "submit", lambda *_args, **_kwargs: pending_future())
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_preview_repository] = lambda: repository
     app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
@@ -626,6 +647,324 @@ def test_upload_preview_conflict_returns_active_run_location(tmp_path) -> None:
     row = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
     assert row["result"] == "blocked"
     assert row["error_code"] == "active_preview_run"
+
+
+def test_upload_preview_submit_failure_reconciles_run_and_returns_safe_503(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+
+    def reject_submission(*_args, **_kwargs):
+        raise RuntimeError("sensitive-preview-submit-detail")
+
+    monkeypatch.setattr(upload_preview_api.executor, "submit", reject_submission)
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "approvalScope": approval_scope(),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    detail = response.json()["detail"]
+    preview_run_id = detail["previewRunId"]
+    run = repository.get_run(preview_run_id)
+    audit = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
+    assert response.status_code == 503
+    assert detail == {
+        "reason": "preview_worker_unavailable",
+        "previewRunId": preview_run_id,
+        "restartRequired": True,
+        "recovery": upload_preview_api.PREVIEW_WORKER_RETRY_RECOVERY,
+    }
+    assert response.headers["location"] == f"/api/upload/preview/{preview_run_id}"
+    assert run is not None
+    assert run["status"] == "failed"
+    assert run["error_code"] == "preview_worker_unavailable"
+    assert "sensitive-preview-submit-detail" not in run["error_message"]
+    assert repository.has_active_run() is None
+    assert audit["result"] == "failure"
+    assert audit["error_code"] == "preview_worker_unavailable"
+    assert "sensitive-preview-submit-detail" not in audit["error_message"]
+    assert "sensitive-preview-submit-detail" not in caplog.text
+
+
+def test_upload_preview_submit_audit_failure_rolls_back_run_and_recovers_on_startup(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+
+    def reject_submission(*_args, **_kwargs):
+        raise RuntimeError("sensitive-submit-detail")
+
+    def reject_audit_insert(*_args, **_kwargs):
+        raise RuntimeError("sensitive-reconciliation-detail")
+
+    monkeypatch.setattr(upload_preview_api.executor, "submit", reject_submission)
+    monkeypatch.setattr(
+        AuditRepository,
+        "insert_audit_in_transaction",
+        reject_audit_insert,
+    )
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "approvalScope": approval_scope(),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    detail = response.json()["detail"]
+    preview_run_id = detail["previewRunId"]
+    assert response.status_code == 503
+    assert detail == {
+        "reason": "preview_worker_reconciliation_failed",
+        "previewRunId": preview_run_id,
+        "restartRequired": True,
+        "recovery": upload_preview_api.PREVIEW_WORKER_RESTART_RECOVERY,
+    }
+    assert response.headers["location"] == f"/api/upload/preview/{preview_run_id}"
+    assert repository.get_run(preview_run_id)["status"] == "queued"
+    assert repository.has_active_run() == preview_run_id
+    assert audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).total_items == 0
+    assert "sensitive-submit-detail" not in caplog.text
+    assert "sensitive-reconciliation-detail" not in caplog.text
+
+    assert repository.mark_interrupted_active_runs() == 1
+    assert repository.has_active_run() is None
+    assert repository.get_run(preview_run_id)["status"] == "failed"
+
+
+def test_upload_preview_observes_async_finalization_failure_and_requires_restart(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(
+        state_db_path=str(tmp_path / "state.db"),
+        plc_data_dir=str(tmp_path / "missing-source"),
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+
+    def reject_audit_insert(*_args, **_kwargs):
+        raise RuntimeError("sensitive-async-audit-detail")
+
+    monkeypatch.setattr(upload_preview_api.executor, "submit", run_in_future)
+    monkeypatch.setattr(
+        AuditRepository,
+        "insert_audit_in_transaction",
+        reject_audit_insert,
+    )
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "approvalScope": approval_scope(
+                    source_class="drive_letter",
+                    applied_profile="large_source_operational",
+                ),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    preview_run_id = response.json()["previewRunId"]
+    run = repository.get_run(preview_run_id)
+    assert response.status_code == 202
+    assert run is not None
+    assert run["status"] == "running"
+    assert repository.has_active_run() == preview_run_id
+    assert audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).total_items == 0
+    assert "restart_required=true" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sensitive-async-audit-detail" not in caplog.text
+
+    assert repository.mark_interrupted_active_runs() == 1
+    assert repository.has_active_run() is None
+    assert repository.get_run(preview_run_id)["status"] == "failed"
+
+
+def test_upload_preview_future_observer_sanitizes_repository_read_failure(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(state_db_path=str(tmp_path / "state.db"), plc_data_dir="local-plc")
+    request = upload_preview_api.PreviewCreateRequest.model_validate(
+        {"rangeMode": "today", "sources": ["plc"]}
+    )
+    service = upload_preview_api.PreviewService(
+        settings,
+        repository,
+        audit_repository=audit_repository,
+    )
+    future: Future[None] = Future()
+    future.set_exception(RuntimeError("sensitive-worker-detail"))
+
+    def reject_run_read(*_args, **_kwargs):
+        raise RuntimeError("postgresql://operator:secret-token@localhost/state")
+
+    monkeypatch.setattr(repository, "get_run", reject_run_read)
+
+    upload_preview_api._observe_preview_future("prv_abc123def456", request, service, future)
+
+    assert "restart_required=true" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "reconciliation_error_type=RuntimeError" in caplog.text
+    assert "sensitive-worker-detail" not in caplog.text
+    assert "secret-token" not in caplog.text
+    assert "postgresql://" not in caplog.text
+
+
+def test_upload_preview_transient_audit_failure_persists_only_safe_fallback(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(
+        state_db_path=str(tmp_path / "state.db"),
+        plc_data_dir=str(tmp_path / "missing-source"),
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    original_insert = AuditRepository.insert_audit_in_transaction
+    calls = 0
+
+    def fail_once(self, connection, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("postgresql://operator:secret-token@localhost/internal-state")
+        return original_insert(self, connection, **kwargs)
+
+    monkeypatch.setattr(upload_preview_api.executor, "submit", run_in_future)
+    monkeypatch.setattr(AuditRepository, "insert_audit_in_transaction", fail_once)
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "approvalScope": approval_scope(
+                    source_class="drive_letter",
+                    applied_profile="large_source_operational",
+                ),
+            },
+        )
+        detail = client.get(response.json()["pollUrl"])
+    finally:
+        app.dependency_overrides.clear()
+
+    preview_run_id = response.json()["previewRunId"]
+    run = detail.json()["run"]
+    audit = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview")).rows[0]
+    serialized = detail.text + str(dict(audit)) + caplog.text
+    assert response.status_code == 202
+    assert detail.status_code == 200
+    assert calls == 2
+    assert run["previewRunId"] == preview_run_id
+    assert run["status"] == "failed"
+    assert run["errorCode"] == "preview_failed"
+    assert run["errorMessage"] == PREVIEW_FAILED_MESSAGE
+    assert audit["error_code"] == "preview_failed"
+    assert "secret-token" not in serialized
+    assert "postgresql://" not in serialized
+
+
+def test_upload_preview_callback_reconciles_accepted_worker_as_preview_failed(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    repository = PreviewRepository(str(tmp_path / "state.db"))
+    audit_repository = AuditRepository(str(tmp_path / "state.db"))
+    settings = Settings(
+        state_db_path=str(tmp_path / "state.db"),
+        plc_data_dir=str(tmp_path / "missing-source"),
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_preview_repository] = lambda: repository
+    app.dependency_overrides[get_preview_audit_repository] = lambda: audit_repository
+    original_insert = AuditRepository.insert_audit_in_transaction
+    calls = 0
+
+    def fail_twice(self, connection, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls <= 2:
+            raise RuntimeError("postgresql://operator:secret-token@localhost/internal-state")
+        return original_insert(self, connection, **kwargs)
+
+    monkeypatch.setattr(upload_preview_api.executor, "submit", run_in_future)
+    monkeypatch.setattr(AuditRepository, "insert_audit_in_transaction", fail_twice)
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/api/upload/preview",
+            json={
+                "rangeMode": "today",
+                "sources": ["plc"],
+                "approvalScope": approval_scope(
+                    source_class="drive_letter",
+                    applied_profile="large_source_operational",
+                ),
+            },
+        )
+        detail = client.get(response.json()["pollUrl"])
+    finally:
+        app.dependency_overrides.clear()
+
+    run = detail.json()["run"]
+    audits = audit_repository.list_audit_logs(AuditLogFilters(action="upload.preview"))
+    serialized = detail.text + str([dict(row) for row in audits.rows]) + caplog.text
+    assert response.status_code == 202
+    assert detail.status_code == 200
+    assert calls == 3
+    assert run["status"] == "failed"
+    assert run["errorCode"] == "preview_failed"
+    assert run["errorMessage"] == PREVIEW_FAILED_MESSAGE
+    assert audits.total_items == 1
+    assert audits.rows[0]["error_code"] == "preview_failed"
+    assert "preview_worker_unavailable" not in serialized
+    assert "secret-token" not in serialized
+    assert "postgresql://" not in serialized
 
 
 def test_upload_preview_audit_rows_are_queryable_through_audit_api(tmp_path) -> None:

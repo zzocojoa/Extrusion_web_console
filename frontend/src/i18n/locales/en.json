@@ -350,7 +350,9 @@
       "partialOverlapRows": "Partial overlap rows",
       "interimSummary": "Interim counts from rows already processed. Final upload eligibility is available only after Preview succeeds.",
       "loading": "Checking local CSV files and DB reconciliation...",
-      "error": "Upload preview status could not be loaded."
+      "error": "Upload preview status could not be loaded.",
+      "workerUnavailableRecovery": "Restart the web console from the launcher, inspect the persisted failed Preview, then run Preview again.",
+      "workerReconciliationFailedRecovery": "Restart the web console from the launcher before running Preview again."
     },
     "actions": {
       "runPreview": "Preview",
@@ -458,6 +460,7 @@
       "schema_mismatch": "CSV schema is incomplete. Timestamp or device_id could not be confirmed.",
       "file_unstable": "File was modified inside the configured stability lag window.",
       "db_unreachable": "Local Supabase DB could not be reached.",
+      "db_query_failed": "Local Supabase DB query failed.",
       "timeout": "Preview run exceeded the configured time limit.",
       "cancelled": "Preview run was cancelled.",
       "transform_error": "CSV transform failed.",

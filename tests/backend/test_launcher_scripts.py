@@ -252,6 +252,60 @@ def test_launcher_check_only_sets_package_independent_target_defaults_without_ra
     assert "Bearer " not in combined
 
 
+def test_launcher_warns_when_repo_dotenv_db_target_drift_is_safely_overridden(tmp_path: Path) -> None:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    package_root = tmp_path / "ExtrusionWebConsole"
+    launcher_dir = package_root / "launcher"
+    launcher_dir.mkdir(parents=True)
+    (package_root / "frontend" / "dist").mkdir(parents=True)
+    (package_root / "frontend" / "dist" / "index.html").write_text("<html></html>\n", encoding="utf-8")
+    (package_root / ".venv" / "Scripts").mkdir(parents=True)
+    (package_root / ".venv" / "Scripts" / "python.exe").write_text("stub\n", encoding="utf-8")
+    (package_root / "supabase").mkdir()
+    (package_root / "supabase" / "config.toml").write_text(
+        '\n'.join(
+            [
+                'project_id = "Extrusion_web_console"',
+                "[api]",
+                "port = 55321",
+                "[db]",
+                "port = 25433",
+                "[studio]",
+                "port = 55323",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    stale_target = "postgres" + "ql://operator:hidden-value@127.0.0.1:25432/postgres"
+    (package_root / ".env").write_text(f"EWC_SUPABASE_DB_URL={stale_target}\n", encoding="utf-8")
+    shutil.copy2(LAUNCHER_PS1, launcher_dir / "start_web_console.ps1")
+
+    command = (
+        "$env:APPDATA = '" + str(tmp_path / "appdata") + "'; "
+        "Remove-Item Env:EWC_SUPABASE_DB_URL -ErrorAction SilentlyContinue; "
+        "& '" + str(launcher_dir / "start_web_console.ps1") + "' -CheckOnly; "
+        "Write-Output ('db-class=' + $(if ($env:EWC_SUPABASE_DB_URL -like '*:25433/*') { 'independent' } else { 'unknown' }))"
+    )
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert result.returncode == 0, result.stderr
+    combined = f"{result.stdout}\n{result.stderr}"
+    assert "Repo .env DB target differs from the configured package DB port" in combined
+    assert "launcher process target will use the package port" in combined
+    assert "db-class=independent" in combined
+    assert stale_target not in combined
+    assert "hidden-value" not in combined
+
+
 def test_launcher_check_only_preserves_explicit_supabase_overrides_without_overstating_class(tmp_path: Path) -> None:
     powershell = shutil.which("powershell") or shutil.which("pwsh")
     if powershell is None:

@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 
@@ -32,6 +33,23 @@ CONFIG_ENV_KEYS = (
     "EWC_V2_DATE_SCOPED_DELETE_UI_ENABLED",
     "EWC_V2_LAN_ACCESS_ENABLED",
 )
+
+
+def test_settings_declares_v2_lan_access_gate_once() -> None:
+    settings_path = Path(__file__).parents[2] / "backend" / "app" / "core" / "settings.py"
+    tree = ast.parse(settings_path.read_text(encoding="utf-8"))
+    settings_class = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Settings"
+    )
+    declarations = [
+        node
+        for node in settings_class.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "v2_lan_access_enabled"
+    ]
+
+    assert len(declarations) == 1
 
 
 def _clear_config_env(monkeypatch) -> None:
