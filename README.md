@@ -595,6 +595,7 @@ Browser QA has been run against:
 - `docs/179_operator_pc_read_only_smoke_evidence_after_backend_readiness.md`
 - `docs/180_backend_availability_root_cause_diagnostic_plan.md`
 - `docs/181_backend_availability_read_only_diagnostic_approval_record.md`
+- `docs/182_v1_cutover_read_only_inventory_evidence.md`
 
 ## Reference Project
 
