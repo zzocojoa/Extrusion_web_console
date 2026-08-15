@@ -1,6 +1,8 @@
 # V2 Operational Upload Verification Gate
 
-Date: 2026-06-22 Asia/Seoul
+Created: 2026-06-22 Asia/Seoul
+
+Last updated: 2026-08-15 Asia/Seoul
 
 Status: `deferred_no_operational_upload`
 
@@ -52,10 +54,12 @@ Minimum fields:
 | `packageSourceCommit` | Source commit from accepted package metadata. |
 | `packageLabel` | Safe package label. |
 | `zipSha256` | Required when `zipCreated=true`; otherwise `not_applicable`. |
+| `inventoryEvidenceRecordId` | Random, path-independent id for the execution-adjacent inventory record. |
+| `operatorPcClass` | Human-supplied safe class for the exact operator PC. |
+| `sourceAlias` | Human-supplied privacy-safe alias, confirmed out of band for the exact configured source. |
 | `sourceClass` | Safe class such as `drive_letter`, `network`, or `mounted`; never a raw path. |
 | `inventoryObservedFiles` | Observed file count from fresh read-only inventory. |
 | `inventoryApprovedPhysicalRowsCeiling` | Approved physical row ceiling from the same inventory. |
-| `inventoryEvidenceHash` | Safe hash or record id for the inventory evidence. |
 | `previewApprovalId` | Approval id for exactly one Preview-only run. |
 | `previewRunId` | Filled only after Preview-only runs. |
 | `previewStatus` | Preview result class. |
@@ -85,24 +89,35 @@ functions, change Settings, or alter source files.
 
 Inventory may record only:
 
+- a random, path-independent inventory evidence record id;
+- safe operator PC class;
+- a privacy-safe source alias that is random or otherwise resistant to path
+  guessing and is confirmed out of band for the exact configured source;
 - source class;
 - observed file count;
 - physical data-line count or approved conservative physical row ceiling;
-- inventory evidence hash or record id;
 - safe go/no-go reason classes.
 
-`fileCount` and `rowLimit` in the Preview-only approval must come from this
-fresh inventory. They must not be guesses, old run values, long-term defaults,
-or blanket approval for future folder growth.
+Do not publish a deterministic hash or fingerprint derived from a raw source
+path. Such a value can disclose the path through candidate-path guessing.
+
+`inventoryEvidenceRecordId`, `operatorPcClass`, `sourceAlias`, `fileCount`, and
+`rowLimit` in the Preview-only approval must come from this fresh inventory.
+They must not be guesses, old run values, long-term defaults, or blanket
+approval for future folder growth.
 
 ## Phase 2: Preview-Only
 
 Preview-only remains blocked unless the exact wording in `docs/164` is supplied
-for the accepted package metadata.
+for the accepted package metadata and names the execution-adjacent inventory
+record id, operator PC class, and privacy-safe source alias.
 
 After Preview-only, record:
 
 - preview run id;
+- inventory evidence record id;
+- operator PC class;
+- privacy-safe source alias;
 - source class;
 - run status;
 - total files and status counts;
@@ -170,6 +185,8 @@ Stop before any operational upload mutation when any of these are true:
 
 - package metadata or checksum differs from the accepted package record;
 - inventory is missing, stale, guessed, or broader than the requested approval;
+- inventory evidence record id, operator PC class, or privacy-safe source alias
+  is missing or differs from approval;
 - source class differs from approval;
 - raw operational path, filename, key, DB URL, token, credential, raw SQL, or
   secret would be written into evidence;

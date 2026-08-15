@@ -2,7 +2,9 @@
 
 Status: `mutation_deferred_until_separate_approval`
 
-Date: 2026-06-22
+Created: 2026-06-22
+
+Last updated: 2026-08-15 Asia/Seoul
 
 ## Decision
 
@@ -83,11 +85,14 @@ Preview-only may be considered only after all of these are true:
   document;
 - launcher first-launch smoke remains passed or is rerun successfully;
 - `/api/config` confirms the active source class and target class are expected;
-- source path is confirmed outside chat by the operator or maintainer;
+- the exact source is confirmed outside chat by the operator or maintainer and
+  bound to a human-supplied privacy-safe `sourceAlias` plus
+  `operatorPcClass`;
 - local Supabase DB reachability is understood before interpreting DB-dependent
   preview states;
-- a fresh read-only inventory precheck produced the observed file count and
-  approved physical row ceiling for the intended approval scope;
+- a fresh read-only inventory precheck produced a random, path-independent
+  `inventoryEvidenceRecordId`, the observed file count, and the approved
+  physical row ceiling for the intended approval scope;
 - no Start Upload, Retry Failed, Delete, Settings save, or feature-gate change is
   bundled into the approval.
 
@@ -104,9 +109,16 @@ changes, Supabase cleanup, Docker cleanup, LAN enablement, or deployment.
 The precheck may record only safe inventory evidence:
 
 - source class such as `drive_letter`, `network`, or `mounted`, not raw path;
+- safe operator PC class;
+- a privacy-safe source alias that is random or otherwise resistant to path
+  guessing and is confirmed out of band to map to the exact source;
+- a random, path-independent inventory evidence record id;
 - observed files count for the intended scope;
 - physical data-line count or a conservative approved physical row ceiling;
 - source eligibility or go/no-go reason classes.
+
+Do not publish a deterministic hash or fingerprint derived from a raw source
+path. Such a value can disclose the path through candidate-path guessing.
 
 The approval `<fileCount>` and `<rowLimit>` must come from a fresh read-only
 inventory precheck completed immediately before that approval. They must not be
@@ -122,18 +134,21 @@ Required approval wording:
 
 ```text
 I approve exactly one Upload Preview-only run from package sourceCommit cb8a3c8.
-The approved source class is <sourceClass>, expected files is <fileCount>, and expected physical rows is <= <rowLimit>.
+The approved inventory record is <inventoryEvidenceRecordId> on operator PC class <operatorPcClass>.
+The approved source alias is <sourceAlias>, the source class is <sourceClass>, expected files is <fileCount>, and expected physical rows is <= <rowLimit>.
 This approval does not approve Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, or Docker cleanup.
 ```
 
 In this wording, `expected files` means observed files from the fresh read-only
 inventory, and `expected physical rows` means the approved physical row ceiling
-from that same inventory.
+from that same inventory. The inventory record id, operator PC class, and source
+alias must match that execution-adjacent inventory record exactly.
 
 Evidence to record after Preview-only:
 
 - package label and source commit;
 - preview run id;
+- inventory evidence record id, operator PC class, and privacy-safe source alias;
 - source class, not raw path;
 - run status;
 - total files, status counts, target row count, risky count, already-in-DB
@@ -316,6 +331,8 @@ Stop before any mutation when any of these are true:
   document;
 - `main` and `origin/main` do not match the recorded source commit;
 - active source class is unexpected;
+- the inventory evidence record id, operator PC class, or privacy-safe source
+  alias is missing or differs from the exact Preview-only approval;
 - fresh read-only inventory was not run, is stale, or did not produce observed
   file count and approved physical row ceiling;
 - file count or row limit is a user guess, an earlier-run value, a long-term

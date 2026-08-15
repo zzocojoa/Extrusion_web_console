@@ -50,7 +50,8 @@ currently executing on the operator PC.
 | `sourceScope` | `folder_all` |
 | `sourceOriginClass` | `operator_config` |
 | `sourceClass` | `drive_letter` |
-| `sourceFingerprint` | `8823e8a110b1eae4` |
+| `sourceAlias` | `human_input_required_before_preview_approval` |
+| `operatorPcClass` | `human_input_required_before_preview_approval` |
 | `inventoryObservedFiles` | `12` |
 | `inventoryObservedPhysicalDataLines` | `3451430` |
 | `inventoryApprovedPhysicalRowsCeiling` | `3451430` |
@@ -60,11 +61,17 @@ currently executing on the operator PC.
 | Read errors | `0` |
 | Files changed during read | `0` |
 | Scope changed during inventory | `false` |
-| `inventoryEvidenceHash` | `e0f051d2a2b158a076d50b4d617dce41ecf0dac9a328e35682e04048c28b790c` |
+| `inventoryEvidenceBinding` | `inventoryEvidenceRecordId` |
 
 The physical data-line count is the sum of physical file lines after removing
-one header line from each non-empty CSV. It is not a transformed exact-key
-count, Preview target-row count, database match count, or database row count.
+one header line from each non-empty CSV. The counter includes a final
+non-empty line even when a file has no terminal newline. It is not a
+transformed exact-key count, Preview target-row count, database match count, or
+database row count.
+
+An EOF-aware review recount at `2026-08-15T03:41:14.0385877Z` observed the same
+12 files and 3,451,430 physical data lines, with zero files lacking a terminal
+newline, zero read errors, and zero files changed during that recount.
 
 ## Human Confirmation
 
@@ -79,6 +86,12 @@ Preview execution is not approved.
 
 The reviewer is recorded as the sanitized role class `human_operator`; no
 personal identifier is stored in this repository record.
+
+The operator PC class and a privacy-safe alias for the exact configured source
+folder were not supplied by the human and are not inferred here. Both missing
+values are hard stops before any Preview-only approval may be issued. The
+future alias must be random or otherwise resistant to path guessing, and the
+human must confirm out of band that it maps to the exact configured folder.
 
 ## Required Evidence Fields
 
@@ -113,13 +126,19 @@ only direct child files with the `.csv` extension. It:
 1. read the configured source using UTF-8;
 2. classified the source without recording its raw path;
 3. captured file size and modification metadata before reading;
-4. streamed file bytes only to count physical newline boundaries;
+4. streamed file bytes to count physical newline boundaries and included a
+   non-empty EOF line without a terminal newline;
 5. removed one header line from each non-empty CSV;
 6. compared size, modification time, and scope before and after the scan; and
-7. emitted only sanitized classes, counts, ids, fingerprints, and hashes.
+7. emitted only safe classes, counts, and the random inventory record id.
 
 It did not call the Upload Preview API, start a backend, query Supabase, call an
 Edge function, write audit or local application state, or modify a source file.
+
+No deterministic raw-path fingerprint or inventory digest derived from one is
+published. A predictable path can be recovered by testing candidate paths
+against an unsalted digest. The random inventory record id plus version-control
+history is the repository binding for this sanitized record.
 
 ## Redaction And Safety Validation
 
@@ -136,22 +155,37 @@ Edge function, write audit or local application state, or modify a source file.
 
 ## Staleness And Stop Conditions
 
-This record is valid only for the recorded package identity, source class,
-source fingerprint, file count, and physical-row ceiling. Before any separate
-Preview approval is used, stop and repeat inventory if:
+This record is historical baseline evidence for the recorded package identity,
+source class, file count, and physical-row ceiling. It is not a reusable
+long-term approval input. Repeat the same read-only inventory immediately
+before any separate Preview-only approval, create a successor evidence record,
+and stop if:
 
-- the configured source class or fingerprint differs;
+- the human has not supplied the safe operator PC class or privacy-safe source
+  alias;
+- the operator PC, privacy-safe source alias, or configured source class
+  differs;
 - observed CSV files are not exactly `12`;
 - physical data lines exceed `3451430`;
 - any file is unstable, unreadable, or changes during inventory;
 - the source scope changes;
 - the package label, source commit, or ZIP hash differs; or
-- Preview approval wording does not name this exact inventory record.
+- Preview approval wording does not name the execution-adjacent successor
+  inventory record.
 
 ## Next Gate
 
-No next execution gate is approved by this document. A future Preview-only
-request must be separate, name this inventory record and package source commit,
-use `sourceClass=drive_letter`, `expectedFiles=12`, and
-`expectedPhysicalRows<=3451430`, and repeat inventory first if any staleness
-condition is present.
+No next execution gate is approved by this document. This record is a baseline,
+not the record id for a later Preview approval. Immediately before requesting
+any future Preview-only approval, the operator and maintainer must repeat the
+read-only inventory and create a new record id, timestamp, and reviewer
+confirmation bound to the exact package, a human-supplied safe operator PC
+class, and a privacy-safe source alias that the human confirms out of band maps
+to the exact configured folder.
+
+Any separate human approval must name that execution-adjacent successor record
+and package source commit and state `sourceClass=drive_letter`,
+`expectedFiles=12`, and `expectedPhysicalRows<=3451430`. These are human
+approval fields, not request-body fields accepted or enforced by the current
+Preview API. Stop on any mismatch or if the binding and manual comparison
+cannot be evidenced. Preview remains unapproved.

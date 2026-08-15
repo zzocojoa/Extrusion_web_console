@@ -20,10 +20,13 @@ operator-PC Preview-only run and later read-only observations now prove
 representative CSV compatibility, synthetic large-Preview behavior, real
 `folder_all` Preview completion, API/DB readiness, failure visibility, Job Logs
 visibility, and Core Ops route rendering. The current recommendation is
-`NO-GO` for cutover execution. Accepted package metadata, a compliant
-pre-Preview inventory record, human disposition of partial-overlap rows, final
-sign-off, and explicit ownership of the non-core Grafana/Vector attention state
-remain hard gates before a `CONDITIONAL GO` candidate can proceed.
+`NO-GO` for cutover execution. `docs/182` records package/inventory baseline
+evidence but not an executing package, complete operator/source binding, or
+approved Preview. Exact executing-package verification, an execution-adjacent
+successor inventory record, a separately approved current Preview, any required
+disposition of partial-overlap rows, final sign-off, and explicit ownership of
+the non-core Grafana/Vector attention state remain hard gates before a
+`CONDITIONAL GO` candidate can proceed.
 
 ## Decision Scope
 
@@ -70,8 +73,8 @@ Relationship to source documents:
 
 | State | Meaning | Required evidence | Example |
 | --- | --- | --- | --- |
-| `GO` | V1 Core Ops replacement is approved for the named package, operator PC, source class, and evidence window. | All required non-destructive evidence is current; Preview-only evidence is fresh and succeeded; Start Upload evidence exists if target rows were approved; Audit Logs and Job Logs visibility are proven; final sign-off is complete. | Preview proves target rows, a separately approved Start Upload succeeds, no retryable rows remain, and sanitized evidence is reviewed. |
-| `CONDITIONAL GO` | Replacement may proceed only inside named limits with explicit residual risk acceptance. | All hard stop conditions are clear, but one non-core caveat remains documented with an owner and rollback/stop procedure. | Grafana status is attention-only while API, DB, Preview, Audit, and upload evidence are normal. |
+| `GO` | V1 Core Ops replacement is approved for the named package, inventory record, operator PC, privacy-safe exact-source alias, source class, and evidence window. | All required non-destructive evidence and exact bindings are current; Preview-only evidence is fresh and succeeded; Start Upload evidence exists if target rows were approved; Audit Logs and Job Logs visibility are proven; final sign-off is complete. | Preview proves target rows, a separately approved Start Upload succeeds, no retryable rows remain, and sanitized evidence is reviewed. |
+| `CONDITIONAL GO` | Replacement may proceed only inside the same named package/inventory/operator/source bindings and evidence window, with explicit residual risk acceptance. | All hard stop conditions and exact bindings are clear, but one non-core caveat remains documented with an owner and rollback/stop procedure. | Grafana status is attention-only while API, DB, Preview, Audit, and upload evidence are normal. |
 | `NO-GO` | Replacement must not proceed. | One or more required V1 cutover evidence items failed or is missing. | Large Preview soak fails, Audit Logs do not show failure rows, or target row counts mismatch between UI/API/approval. |
 | `BLOCKED` | The decision cannot be made because evidence or approval is unavailable. | The blocker is documented and no workaround is allowed without violating a safety gate. | Operator PC cannot reach the configured local Supabase DB, or package metadata cannot be matched to source commit. |
 | `DEFERRED / NOT V1 SCOPE` | Item is intentionally excluded from the V1 cutover decision. | Source document classification shows deferred or excluded status. | Multi-user LAN, executable date-scoped delete UI, Supabase schema attribution migration, and legacy upload state import. |
@@ -90,7 +93,7 @@ LAN, deployment, migration, reset, cleanup, or data mutation.
 | `wp02-main-5695b93` | `main` and `origin/main` matched `5695b93802f78f2e04a1aa83662e9400e1d49db2`, containing merged PR #229 and V2 WP-01 PR #230. | Pass |
 | `wp02-wp01-automated-5695b93` | Full backend suite previously passed with 437 tests; frontend unit, typecheck, build, and routing checks passed. Representative UTF-8/CP949/integrated fixtures, deterministic 25,000-row Preview soak, DB-status semantics, and Audit failure paths are covered. | Pass |
 | `wp02-config-runtime-20260713` | Sanitized config target classes passed and upload/runtime targets were aligned. Docker, WSL, CLI, API, DB, Studio, and Edge were ready with no missing required container. Overall status was `attention` because Grafana was unreachable and Vector unhealthy. | Conditional: core ready, non-core caveat open |
-| `wp02-preview-prv_ca38650a9e7d` | Separately approved `folder_all` large-source Preview persisted local run/audit state and completed `succeeded/reachable`: 12 total, 11 already in DB, 1 partial overlap, 0 target, 0 risky, 0 excluded, 0 target rows, 64,766 partial-overlap rows, 3,386,260 DB-matched rows, and Start Upload disabled. Partial-overlap rows are excluded from the target-only upload path. | Preview behavior passed; formal inventory/package gate and partial-overlap disposition pending |
+| `wp02-preview-prv_ca38650a9e7d` | Separately approved `folder_all` large-source Preview persisted local run/audit state and completed `succeeded/reachable`: 12 total, 11 already in DB, 1 partial overlap, 0 target, 0 risky, 0 excluded, 0 target rows, 64,766 partial-overlap rows, 3,386,260 DB-matched rows, and Start Upload disabled. Partial-overlap rows are excluded from the target-only upload path. | Preview behavior passed; the run predates `docs/182`, and partial-overlap disposition remains pending |
 | `wp02-audit-readonly-20260713` | Read-only Audit API inspection returned existing success, failure, blocked, and cancelled classes; the approved Preview had matching success evidence. No new failure was manufactured. | Pass |
 | `wp02-joblogs-readonly-20260713` | Latest Upload Job was terminal `succeeded` with persisted files/events, and Job Logs rendered without browser errors. No job was created. | Pass |
 | `wp02-responsive-core-routes-20260713` | Dashboard, Upload Preview, Upload Job, Job Logs, Audit Logs, and Settings passed the existing 390-1440 px backend-served QA with zero layout issues, console errors, or failed requests. | Pass |
@@ -98,26 +101,31 @@ LAN, deployment, migration, reset, cleanup, or data mutation.
 
 Technical recommendation: `NO-GO` for V1 Core Ops cutover execution on the
 current evidence set. The implementation and Preview behavior support a future
-`CONDITIONAL GO` candidate, but the executing artifact is not bound to accepted
-package metadata, the required pre-Preview inventory record is not identified,
-64,766 partial-overlap rows have no recorded human disposition, final sign-off
-is blank, and Grafana/Vector attention has no acceptance owner.
+`CONDITIONAL GO` candidate. `docs/182` binds a later package artifact to a
+human-confirmed inventory baseline, but it does not prove the artifact is
+installed or executing, supply complete operator/source binding, or
+retroactively validate the earlier Preview. Exact executing-package
+verification, an execution-adjacent successor inventory record, a separately
+approved current Preview, any required disposition of partial-overlap rows,
+final sign-off, and a Grafana/Vector acceptance owner remain pending.
 
 Conditions to reach a `CONDITIONAL GO` candidate:
 
-1. Verify the accepted package label and `package-build-info.json` source commit
+1. Verify the package label, ZIP hash, and source commit recorded in `docs/182`
    against the artifact that the operator will actually run.
-2. Identify the compliant inventory evidence created before Preview approval,
-   including source class, observed files, physical-row ceiling, record id, and
-   reviewer. If it does not exist, do not infer or autofill it from Preview;
-   repeat the precheck/Preview chain only under a future separate approval.
+2. Use `docs/182` only as baseline evidence. Immediately before any future
+   Preview approval, repeat the inventory and create a successor record bound
+   to a human-supplied safe operator PC class and privacy-safe alias for the
+   exact configured source. Do not infer that the baseline existed before, or
+   retroactively validates, the earlier Preview.
 3. Record human disposition of the 64,766 partial-overlap rows, which remain
    excluded from target-only upload, without treating them as zero unmatched
    local rows.
 4. Resolve Grafana/Vector attention or record explicit residual-risk acceptance,
    an owner, and the non-destructive stop/rollback procedure.
 5. Complete the final human sign-off record below for the exact package,
-   operator PC class, source class, and evidence window.
+   execution-adjacent inventory record id, operator PC class, privacy-safe
+   exact-source alias, source class, and evidence window.
 
 The zero-target Preview supports `no target-only upload` for this evidence
 window. It does not mean every local row is DB-matched: 64,766 rows are in the
@@ -133,8 +141,8 @@ should be created merely to turn a not-applicable gate into a test case.
 | GET `/api/config` safe snapshot | Sanitized config evidence showing source class, target classes, mode, and override classes | `GET /api/config` against an already running local operator backend; store sanitized classes only | `PUT /api/config`, Settings save, raw path or secret capture | Snapshot confirms expected API mode/source class without raw paths or secret values | Config source class is wrong, raw sensitive value would be recorded, or endpoint unavailable | Maintainer/operator | `backend/app/api/config.py`; `backend/app/services/config_service.py`; `README.md` |
 | Local Supabase status evidence | Sanitized runtime readiness/status-class output | Read-only dashboard/runtime status observation and existing status endpoints | Start/stop/reset/cleanup/init/migration | Status proves local Supabase readiness class or a clear blocked class | DB-dependent class is blocked and unresolved | Maintainer/operator | `docs/00_product_scope.md`; `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
 | Local Supabase start/stop evidence, only if separately approved | Operation id, event ids, before/after status classes, and audit ids | Runtime start/stop only after separate approval and no active job/preview | Supabase init/reset, Docker create/rm/prune/up/down, volume deletion | Start/stop is bounded, audited, and returns expected readiness or stopped class | Required containers missing, active job/preview, broad cleanup requested, or audit unavailable | Maintainer/operator | `backend/app/services/runtime_control.py`; `backend/app/services/command_runner.py` |
-| Read-only inventory precheck | Filled inventory template with counts, row ceiling, excluded data, and reviewer | Read-only file inventory/count procedure that stores no raw names, paths, content, or keys | Preview, upload, delete, settings save, cleanup, LAN, deployment | File count and approved physical row ceiling are current and reviewer-signed | Guessed count, stale inventory, source class mismatch, or raw sensitive evidence | Maintainer with operator review | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
-| Preview-only evidence | Preview approval id, preview run id, summary counts, DB status class, audit evidence | Exactly one separately approved Preview-only run | Start Upload, Retry Failed, Delete, Settings save, reset, cleanup, LAN, deployment | Preview is latest, fresh, succeeded, DB reachable, and counts match approval ceiling | Risky count > 0, DB unreachable, count mismatch, stale preview, active conflict unresolved | Maintainer/operator | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_preview.py` |
+| Read-only inventory precheck | Filled inventory template with random record id, operator PC class, privacy-safe exact-source alias, counts, row ceiling, excluded data, and reviewer | Read-only file inventory/count procedure that stores no raw names, paths, content, or keys | Preview, upload, delete, settings save, cleanup, LAN, deployment | Exact bindings, file count, and approved physical row ceiling are current and reviewer-signed | Missing/mismatched binding, guessed count, stale inventory, source class mismatch, or raw sensitive evidence | Maintainer with operator review | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
+| Preview-only evidence | Preview approval id, preview run id, inventory record id, operator PC class, privacy-safe source alias, summary counts, DB status class, audit evidence | Exactly one separately approved Preview-only run | Start Upload, Retry Failed, Delete, Settings save, reset, cleanup, LAN, deployment | Preview is latest, fresh, succeeded, DB reachable, and bindings/counts match approval | Risky count > 0, DB unreachable, binding/count mismatch, stale preview, active conflict unresolved | Maintainer/operator | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_preview.py` |
 | Start Upload approval package, separate and optional | Exact approval text and record naming preview run, target rows, source class, and package commit | Approval preparation only until the operator explicitly approves | Running Start Upload from this plan; bundling Retry Failed/Delete/Settings save | Fresh Preview proves target rows and approval text matches exact target-only rows | Zero target rows, mismatch across UI/API/approval, stale preview, or missing approval | Operator approval with maintainer evidence | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_jobs.py` |
 | Retry Failed approval package, separate and conditional | Retry approval record naming job id and remaining physical rows | Approval preparation only after failed/retryable job evidence | Automatic retry, broad cleanup, DB reset, or retry without exact remaining rows | Failed/retryable rows are known and separate approval exists | No retryable rows, count unknown, root failure not preserved, or approval missing | Operator approval with maintainer evidence | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_jobs.py`; `frontend/src/pages/UploadPage.tsx` |
 | Audit Logs success/failure visibility | Sanitized Audit Logs API/UI evidence for success, failure, and blocked classes | `GET /api/audit?limit=1`; UI Audit Logs observation; non-destructive failure-path validation | Raw params JSON search, arbitrary SQL, secret capture, destructive failure creation | Operators can see relevant safe action/result/reason evidence | Audit unavailable, missing failure rows, unsafe raw values displayed | Maintainer QA and operator | `backend/app/api/audit.py`; `backend/app/db/audit_repository.py`; `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
@@ -146,8 +154,8 @@ should be created merely to turn a not-applicable gate into a test case.
 | Destructive delete exclusion or separate `docs/171` package | Either explicit exclusion or a complete destructive approval package | Documentation-only exclusion for V1 cutover; `docs/171` package if delete is requested | Operational DB delete from this plan | Delete is excluded from cutover or separately approved with exact-key scope | Request bundles delete with Preview/Start/Retry/settings/reset/LAN | Operator approval plus maintainer evidence | `docs/171_v2_operational_delete_verification_gate.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
 | LAN exclusion | Localhost-only sign-off | Config/doc review; `/api/health` sanitized LAN state if available | LAN enablement, non-loopback bind, LAN CORS widening, auth/session rollout | V1 remains localhost-only and LAN stays deferred | Non-loopback access requested or LAN feature gate enabled | Release owner | `docs/00_product_scope.md`; `backend/app/core/lan_security.py`; `docs/165_v2_status_matrix.md` |
 | Supabase reset/cleanup exclusion | Explicit exclusion record | Documentation review and command-policy review | `supabase init`, `supabase db reset`, Docker rm/prune/compose up/down, volume delete | No reset/cleanup/create command is part of cutover evidence | Missing containers trigger cleanup request instead of blocked evidence | Release owner/maintainer | `README.md`; `backend/app/services/command_runner.py` |
-| Security/secrets redaction | Sanitized evidence review checklist | Redaction review before attaching evidence | Raw paths, filenames, CSV content, DB URLs, tokens, JWTs, Authorization values, exact keys, internal URLs, secrets | Evidence contains only safe ids, classes, counts, hashes, and reason codes | Sensitive value would be written or screenshot cannot be safely redacted | Maintainer/security reviewer | `README.md`; `backend/app/db/audit_repository.py`; `docs/171_v2_operational_delete_verification_gate.md` |
-| Final sign-off record | Completed sign-off table with decision, evidence ids, accepted package, residual risks, and next action | Documentation-only sign-off | Treating old evidence or future folder growth as approval | Approver accepts exact evidence set and residual risks | Evidence ids missing, package mismatch, stale preview, or unresolved stop condition | Release owner/operator approver | `docs/173_v2_operational_upload_verification_gate.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
+| Security/secrets redaction | Sanitized evidence review checklist | Redaction review before attaching evidence | Raw paths, filenames, CSV content, DB URLs, tokens, JWTs, Authorization values, exact keys, internal URLs, secrets | Evidence contains only path-independent ids, safe classes/counts, approved package hashes, and reason codes | Sensitive value or a deterministic raw-path-derived digest would be written, or screenshot cannot be safely redacted | Maintainer/security reviewer | `README.md`; `backend/app/db/audit_repository.py`; `docs/171_v2_operational_delete_verification_gate.md` |
+| Final sign-off record | Completed sign-off table with decision, evidence ids, accepted package, inventory evidence record id, operator PC class, privacy-safe source alias, source class, residual risks, and next action | Documentation-only sign-off | Treating old evidence or future folder growth as approval | Approver accepts the exact package/inventory/operator/source bindings, evidence set, and residual risks | Any binding or evidence id is missing/mismatched, Preview is stale, or a stop condition is unresolved | Release owner/operator approver | `docs/173_v2_operational_upload_verification_gate.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
 
 ## Non-Destructive Validation Package
 
@@ -220,21 +228,25 @@ classes, not raw operational data.
 
 | Field | Value |
 | --- | --- |
-| Evidence id | `<inventoryEvidenceId>` |
+| Inventory evidence record id | `<inventoryEvidenceRecordId>` |
 | Date/time | `<ISO-8601 local time>` |
 | Operator PC class | `<operatorPcClass>` |
 | Package source commit | `<sourceCommit>` |
 | Package label | `<packageLabel>` |
+| Privacy-safe exact-source alias | `<sourceAlias>` |
 | Source class, not raw path | `<sourceClass>` |
 | Observed file count | `<fileCount>` |
 | Approved physical row ceiling | `<rowLimit>` |
-| Inventory evidence hash or internal record id | `<inventoryHashOrRecordId>` |
 | Excluded data | `<excludedDataClasses>` |
 | Stop condition result | `<clear \| blocked: reason>` |
 | Reviewer | `<reviewer>` |
 
 Do not record raw filenames, raw paths, raw CSV content, raw timestamp/device_id
 keys, DB URLs, tokens, JWTs, Authorization values, internal URLs, or secrets.
+The record id must be random and path-independent. Do not publish a
+deterministic hash or fingerprint derived from a raw path; it can disclose the
+path through candidate-path guessing. The human must confirm out of band that
+the privacy-safe source alias maps to the exact configured source.
 
 ## Preview-Only Approval Template
 
@@ -243,6 +255,8 @@ fresh read-only inventory precheck.
 
 ```text
 I approve exactly one Upload Preview-only run from package sourceCommit <sourceCommit>.
+The approved inventory record is <inventoryEvidenceRecordId> on operator PC class <operatorPcClass>.
+The approved source alias is <sourceAlias>.
 The approved source class is <sourceClass>.
 The approved file count is <fileCount>.
 The approved physical row ceiling is <rowLimit>.
@@ -250,8 +264,9 @@ This approval does not approve Start Upload, Retry Failed, Delete, Settings save
 feature gate enablement, Supabase reset/cleanup, Docker cleanup, LAN, or deployment.
 ```
 
-Stop if the requested source class, file count, row ceiling, package commit, or
-operator PC differs from the fresh inventory evidence.
+Stop if the requested inventory record id, operator PC class, source alias,
+source class, file count, row ceiling, or package commit differs from the fresh
+inventory evidence.
 
 ## Preview-Only Evidence Template
 
@@ -259,6 +274,9 @@ operator PC differs from the fresh inventory evidence.
 | --- | --- |
 | Preview approval id | `<previewApprovalId>` |
 | Preview run id | `<previewRunId>` |
+| Inventory evidence record id | `<inventoryEvidenceRecordId>` |
+| Operator PC class | `<operatorPcClass>` |
+| Privacy-safe exact-source alias | `<sourceAlias>` |
 | Source class | `<sourceClass>` |
 | Status | `<succeeded \| failed \| blocked \| cancelled>` |
 | Total files | `<totalFiles>` |
@@ -400,7 +418,7 @@ data.
 | Local token protection confirmation, if available | `not assessed` | `pending/not applicable to read-only route smoke` | Config secret masking was observed, but token enforcement was not exercised and is not claimed here. |
 | Config snapshot | `wp02-config-runtime-20260713` | `pass` | Only classes and booleans are retained here. |
 | Runtime readiness | `wp02-config-runtime-20260713` | `conditional` | Core services ready; Grafana/Vector non-core attention remains. |
-| Preview-only readiness | `wp02-preview-prv_ca38650a9e7d` | `partial` | Execution succeeded with zero target/risky and DB reachable; inventory/package binding and disposition of 64,766 partial-overlap rows remain pending. |
+| Preview-only readiness | `wp02-preview-prv_ca38650a9e7d`; `docs/182` | `partial` | The earlier execution succeeded with zero target/risky and DB reachable, but it predates `docs/182`. A separately approved current Preview and any required disposition of partial-overlap rows remain pending. |
 | Logs/audit visibility | `wp02-audit-readonly-20260713`; `wp02-joblogs-readonly-20260713` | `pass` | Existing success/failure/blocked and terminal-job evidence were visible. |
 
 Screenshots are allowed only if they do not expose secrets, raw paths, filenames,
@@ -415,8 +433,8 @@ or exact keys.
 | README/API smoke contract | Yes | `wp02-wp01-automated-5695b93` | `pass` | `<approver>` | Approval-count contract is covered. |
 | Sanitized config snapshot | Yes | `wp02-config-runtime-20260713` | `pass` | `<approver>` | Safe classes only. |
 | Local Supabase readiness | Yes | `wp02-config-runtime-20260713` | `pass` | `<approver>` | API/DB/Studio/Edge ready; non-core attention recorded separately. |
-| Read-only inventory precheck | Yes | `<inventoryEvidenceId>` | `pending: record not identified` | `<approver>` | Preview results cannot retroactively prove the required precheck, row ceiling, record id, or reviewer. |
-| Preview-only evidence | Yes, if upload cutover is being evaluated | `wp02-preview-prv_ca38650a9e7d` | `partial` | `<approver>` | Run succeeded/reachable with zero target/risky, but package/inventory record binding is pending and 64,766 partial-overlap rows need disposition. |
+| Read-only inventory precheck | Yes | `docs/182`; `inv_20260815T031829Z_0d41338f` | `partial: operator/source binding missing` | `human_operator` | Package-bound baseline counts and ceiling are confirmed. The safe operator PC class, privacy-safe exact-source alias, and execution-adjacent successor record remain required; this later record cannot retroactively validate the earlier Preview. |
+| Preview-only evidence | Yes, if upload cutover is being evaluated | `wp02-preview-prv_ca38650a9e7d` | `partial` | `<approver>` | The earlier run succeeded/reachable with zero target/risky but predates `docs/182`. A separately approved current Preview and any required partial-overlap disposition remain pending. |
 | Start Upload evidence | Yes when Preview proves approved target rows | `wp02-preview-prv_ca38650a9e7d` | `not applicable` | `<approver>` | Target rows were zero; Start Upload was disabled and not executed. |
 | Retry Failed evidence | Conditional | `wp02-preview-prv_ca38650a9e7d` | `not applicable` | `<approver>` | No new upload or retryable rows. |
 | Audit Logs failure visibility | Yes | `wp02-audit-readonly-20260713` | `pass` | `<approver>` | Existing safe success/failure/blocked classes visible. |
@@ -436,7 +454,7 @@ or exact keys.
 | Risk statement | Severity | Likelihood | Mitigation | Owner or approval gate | Required evidence |
 | --- | --- | --- | --- | --- | --- |
 | Accepted package metadata is not bound to the verified source tree before final sign-off. | High | Medium | Verify `package-build-info.json`, package label, and source commit for the executing artifact. | Release owner/operator | Accepted package metadata and final sign-off |
-| Missing pre-Preview inventory/package binding or unresolved partial-overlap rows are hidden by the zero-target result. | High | Medium | Do not infer the precheck from Preview; bind the package, locate or repeat the formal gate, and record disposition of all 64,766 partial-overlap rows. | Operator approval plus maintainer evidence capture | Fresh inventory/Preview record, package metadata, partial-overlap disposition; Start only if target rows exist |
+| The later `docs/182` inventory is misapplied retroactively to the old zero-target Preview, reused without exact operator/source binding, or unresolved partial-overlap rows are hidden. | High | Medium | Treat `docs/182` as baseline only; create an execution-adjacent successor record with human-supplied operator/source bindings, verify the executing package, and record any required partial-overlap disposition. | Operator approval plus maintainer evidence capture | Current successor inventory/Preview record, executing-package metadata, partial-overlap disposition; Start only if target rows exist |
 | Grafana/Vector non-core attention is silently ignored or confused with core readiness. | Medium | Medium | Resolve it or record owner, residual-risk acceptance, and non-destructive stop/rollback procedure. | Release owner/operator | Sanitized runtime state and signed caveat |
 | A new CSV or failure class escapes the current fixture/Audit coverage. | High | Low-medium | Add representative fixtures and keep failure-path API/UI checks in regression and approved operations. | Maintainer QA and operator sign-off | Fixture/soak and safe Audit/Job Logs evidence |
 | Accidental destructive delete or cleanup is bundled into validation. | Production-critical | Low | Treat delete, reset, cleanup, and Docker destructive commands as hard exclusions unless separately approved. | `docs/171` or new destructive plan | Exclusion record or exact approval package |
@@ -461,6 +479,8 @@ cutover decision when any of these are true:
 - target rows mismatch between UI, API, approval text, and evidence;
 - Audit Logs evidence is unavailable;
 - Job Logs evidence is unavailable for an upload decision;
+- inventory evidence record id, operator PC class, or privacy-safe source alias
+  differs between inventory, Preview approval/evidence, and final sign-off;
 - source class differs between inventory, Preview, approval, and config evidence;
 - Grafana/Vector attention lacks resolution or explicit residual-risk acceptance,
   an owner, and a non-destructive stop/rollback procedure;
@@ -481,7 +501,10 @@ cutover decision when any of these are true:
 | Evidence ids | `<evidenceIds>` |
 | Accepted package commit | `<sourceCommit>` |
 | Accepted package label | `<packageLabel>` |
-| Operator PC | `<operatorPcClass>` |
+| Inventory evidence record id | `<inventoryEvidenceRecordId>` |
+| Operator PC class | `<operatorPcClass>` |
+| Privacy-safe exact-source alias | `<sourceAlias>` |
+| Source class | `<sourceClass>` |
 | Reviewer | `<reviewer>` |
 | Approver | `<approver>` |
 | Date/time | `<ISO-8601 local time>` |
@@ -492,8 +515,9 @@ Approver acknowledgement:
 
 ```text
 I reviewed the evidence ids above and approve the recorded decision only for the
-accepted package commit, package label, operator PC class, source class, and time
-window named in this record. This sign-off does not approve any future upload,
+accepted package commit, package label, inventory evidence record id, operator
+PC class, privacy-safe exact-source alias, source class, and time window named
+in this record. This sign-off does not approve any future upload,
 retry, delete, reset, cleanup, migration, LAN exposure, deployment, or feature
 gate change outside the evidence and approvals listed here.
 ```
@@ -508,17 +532,21 @@ mutation. Accepted package metadata remains a final sign-off condition.
 
 ### WP-B: read-only inventory precheck evidence
 
-Status: pending. No compliant pre-Preview inventory record is identified in this
-branch. Do not infer or autofill its package/source scope, physical-row ceiling,
-record id, or reviewer from the later Preview result. Locate the original record
-or repeat the gate only under a future separate approval.
+Status: partial baseline only in `docs/182`, record
+`inv_20260815T031829Z_0d41338f`. The record binds a newly assembled package
+artifact and read-only inventory counts, but the safe operator PC class and
+privacy-safe exact-source alias are missing. It does not prove that package is
+installed or executing and does not retroactively validate the earlier Preview.
+Refresh the inventory and create a successor record before any approval.
 
 ### WP-C: Preview-only approval and evidence capture
 
 Status: partial for run `prv_ca38650a9e7d`. The separately approved run
 succeeded with DB reachable, zero target/risky files, 64,766 partial-overlap
-rows, matching Audit evidence, and no operational DB mutation. It cannot satisfy
-cutover until package/inventory binding and partial-overlap disposition exist.
+rows, matching Audit evidence, and no operational DB mutation. It predates
+`docs/182` and cannot be bound to that later inventory retroactively. A future
+Preview requires a refreshed successor inventory record with complete
+operator/source binding and its own exact approval naming that new record.
 
 ### WP-D: Start Upload approval package, only if Preview proves target rows
 
@@ -549,11 +577,13 @@ synthetic soak and separately approved real `folder_all` Preview both passed.
 
 ### WP-I: final package binding and human cutover sign-off
 
-Goal: verify the exact executing package label/source commit, identify the
-pre-Preview inventory record, record human disposition of partial-overlap rows,
-resolve or accept the Grafana/Vector caveat with an owner and stop/rollback
-procedure, and fill the Final Sign-Off Record. This is documentation/sign-off
-work only and does not approve or execute any mutation.
+Goal: verify the exact executing package label/source commit against `docs/182`,
+repeat the read-only inventory immediately before any Preview approval, create a
+successor record with human-supplied safe operator PC and privacy-safe
+exact-source bindings, record any required human disposition of partial-overlap
+rows, resolve or accept the Grafana/Vector caveat with an owner and
+stop/rollback procedure, and fill the Final Sign-Off Record. This is
+documentation/sign-off work only and does not approve or execute any mutation.
 
 ## WP-02 Verification Performed
 

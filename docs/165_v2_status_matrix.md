@@ -1,8 +1,8 @@
 # V2 Status Matrix
 
-Date: 2026-07-13 Asia/Seoul
+Date: 2026-08-15 Asia/Seoul
 
-Status: `main_baseline_with_wp01_and_operator_preview_evidence`
+Status: `main_baseline_with_wp01_historical_preview_and_future_inventory_baseline`
 
 ## Purpose
 
@@ -17,8 +17,12 @@ commit, push, or PR creation.
 
 ## Evidence Reviewed
 
-- Current `main` and `origin/main` baseline:
-  `5695b93802f78f2e04a1aa83662e9400e1d49db2`.
+- `docs/182` package/evidence source baseline before these documentation
+  changes: `d16b822d4a461fc7705c5aca9cebd40cb19fe918`.
+- `docs/182` records a 2026-08-15 package-bound read-only inventory baseline.
+  It is not execution-adjacent approval evidence: the operator PC class and a
+  privacy-safe alias for the exact configured source remain human-input hard
+  stops, and no Preview is approved.
 - PR #229 is merged as the narrow Upload Job SSE/startup-recovery reliability
   patch. PR #230 is merged as the actual V2 WP-01 reliability foundation,
   including Preview DB-status correctness, representative legacy fixtures,
@@ -85,7 +89,7 @@ commit, push, or PR creation.
 
 | # | Item | Current status | Evidence | Remaining gate |
 | ---: | --- | --- | --- | --- |
-| 1 | Operational upload verification | `Partial` | One separately approved post-merge `folder_all` Preview-only run succeeded on the operator PC with DB reachable, 12 files, `target=0`, `risky=0`, 64,766 partial-overlap rows excluded from target-only upload, matching Audit evidence, and Start Upload disabled. `docs/173` remains the evidence-chain source and `docs/164` remains the approval-wording source. | Start Upload is not applicable to the observed zero-target-only run. Formal inventory/package binding and partial-overlap disposition remain pending; any future action requires fresh scope evidence and its own exact approval. |
+| 1 | Operational upload verification | `Partial` | One separately approved post-merge `folder_all` Preview-only run succeeded on the operator PC with DB reachable, 12 files, `target=0`, `risky=0`, 64,766 partial-overlap rows excluded from target-only upload, matching Audit evidence, and Start Upload disabled. `docs/182` binds a later package artifact and read-only inventory baseline. `docs/173` remains the evidence-chain source and `docs/164` remains the approval-wording source. | Start Upload is not applicable to the observed zero-target-only run. `docs/182` does not retroactively validate that earlier Preview, prove the package is executing, or supply the missing operator/source bindings. A future Preview still requires an execution-adjacent successor inventory record and exact approval; partial-overlap disposition and final cutover gates remain pending. |
 | 2 | API-mode package full runtime smoke and zip handoff | `Completed` | `docs/166` records API-mode build, package assembly, zip/SHA-256 metadata, launcher/shortcut `-CheckOnly`, and read-only HTTP smoke. | Does not approve operator mutation or replace the accepted mutation package in `docs/164`. |
 | 3 | Operator-facing date-scoped delete UI | `Deferred` | `docs/168` completes only the default-off, non-mutating review shell for copy, i18n, and runbook review. | Executable/operator-facing date-scoped delete remains blocked until role matrix, policy/preflight, fixture evidence, production approval record, rollback evidence, and separate gate enablement are approved. |
 | 4 | Delete expansion | `Deferred` | `docs/170` defines the fixture-first gate; `docs/160` defines the design constraints; `docs/161` leaves numeric limits and broader policy unapproved. | Concrete policy limits, fixture DB evidence, preflight/reconcile/audit/rollback proof, and separate approval. |
@@ -124,8 +128,8 @@ commit, push, or PR creation.
 The current safe statement is:
 
 ```text
-V2 is not complete. Current main at `5695b93` includes the merged evidence
-foundation, upload readiness hardening, operator mutation gates, API-mode
+V2 is not complete. The historical WP-01 baseline at `5695b93` includes the
+merged evidence foundation, upload readiness hardening, operator mutation gates, API-mode
 package evidence, Grafana/Vector status hardening, default-off date-scoped
 delete review shell, default-off LAN guard, Upload Job SSE/startup-recovery
 patch, and V2 WP-01 reliability foundation. One separately approved Preview-only
@@ -133,7 +137,10 @@ operator-PC run persisted local run/audit state without operational DB mutation
 and succeeded with zero target and risky files but 64,766 partial-overlap rows
 excluded from target-only upload. Operational upload verification is Partial;
 Start Upload and Retry Failed were not applicable and were not executed.
-Package/inventory binding and partial-overlap disposition remain pending.
+The package/inventory baseline is recorded in `docs/182`, but exact
+executing-package verification, human-supplied operator/source bindings, an
+execution-adjacent successor inventory record, a separately approved current
+Preview, and any required partial-overlap disposition remain pending.
 Executable date-scoped delete, delete expansion execution,
 operational DB delete verification, Multi-user LAN, Supabase schema
 attribution, and the overall V2 release remain deferred or excluded.
