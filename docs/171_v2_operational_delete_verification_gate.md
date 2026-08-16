@@ -41,12 +41,12 @@ reconcile, feature-gate enablement, Upload Preview, Start Upload, Retry Failed,
 Settings save, Supabase reset/cleanup, Docker cleanup, LAN exposure,
 deployment, production DB schema/recovery-store migration, or fixture mutation.
 
-The current executable delete baseline remains
-`docs/156_operator_already_in_db_delete_contract.md`: selected Upload Preview
-items with status `already_in_db`, exact-key preflight, typed exact count,
-no-undo acknowledgement, rollback-limitation acknowledgement, local DB target
-guard, DELETE privilege preflight, audit evidence, and all-or-nothing delete
-semantics.
+`docs/156_operator_already_in_db_delete_contract.md` is only a legacy
+implementation/API reference. It is non-operational, non-authorizing, and
+superseded for readiness and execution decisions by this document together with
+`docs/164_operator_data_mutation_safety_gate.md`. Its source-derived rollback,
+coarse-target, and row-count reconciliation rules do not satisfy this gate and
+must not be used to authorize or execute Delete.
 
 ## Plain-Language Rule
 

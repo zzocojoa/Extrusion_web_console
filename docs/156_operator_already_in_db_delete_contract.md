@@ -2,19 +2,37 @@
 
 Date: 2026-06-18 Asia/Seoul
 
-Status: `implementation_contract_for_review`
+Status: `superseded_historical_implementation_reference_non_operational_no_delete_authorized`
+
+> **Mandatory supersession blocker:** This document is a historical
+> implementation/API reference only. It is not an approved current contract,
+> readiness proof, runbook, approval template, or authorization for Delete,
+> preflight, reconciliation, fixture smoke, DB access, or any runtime/data
+> action. Its source-derived rollback assumption, coarse loopback/fingerprint
+> target guard, source reopen/reparse requirement, public source-derived hashes,
+> and row-count outcome reconciliation do not satisfy the current safety model.
+> Do not implement, call, test operationally, or execute any procedure below on
+> the basis of this file. Current non-executable Delete requirements are defined
+> jointly by `docs/164_operator_data_mutation_safety_gate.md`,
+> `docs/171_v2_operational_delete_verification_gate.md`, and
+> `docs/173_v2_operational_upload_verification_gate.md`; V1 cutover disposition
+> remains governed by `docs/176_v1_cutover_go_no_go_validation_plan.md`. Those
+> documents require production implementation, deterministic tests, protected
+> exact-target/coordinator/snapshot/before-image/marker lifecycles, and new
+> explicit human approvals before any action.
 
 ## Purpose
 
-This document records the approved implementation contract for deleting only
-selected Upload Preview items with status `already_in_db` from local Supabase
-`public.all_metrics`.
+This document preserves the former implementation contract considered on its
+date for deleting selected Upload Preview items with status `already_in_db` from
+local Supabase `public.all_metrics`. That contract is superseded and must not be
+used as current approval or implementation guidance.
 
 This is not a general cleanup feature. It is not a substitute for Upload
 Preview, Start Upload, Retry Failed, DB reset, Docker cleanup, or Supabase
 lifecycle work.
 
-## API Contract
+## Historical API Contract (Non-Authorizing)
 
 | Endpoint | Mutation class | Purpose |
 | --- | --- | --- |
@@ -166,7 +184,7 @@ startup recovery, start-time status drift blocking, source/keyset rebuild
 failure reconciliation, DB count failure reconciliation, and commit-unknown
 reconciliation.
 
-## Disposable Fixture DB Smoke Procedure
+## Historical Disposable Fixture DB Smoke Procedure (Do Not Run From This Record)
 
 Status: `not_run_requires_separate_approval`
 
@@ -212,7 +230,7 @@ Required evidence:
 - marker scan showing no raw source paths, operational filenames, DB URLs,
   tokens, Authorization values, JWTs, secrets, or raw exact keys.
 
-## PR Ready Gate Checklist
+## Historical PR Ready Gate Checklist (Superseded)
 
 PR #182 must stay Draft until all merge gates are recorded:
 
@@ -231,3 +249,15 @@ PR #182 must stay Draft until all merge gates are recorded:
 - no operational Upload Preview, Start Upload, Retry Failed, runtime mutation,
   Docker/Supabase lifecycle, or operational DB delete was executed during PR
   readiness checks.
+
+## Current Successor Gate
+
+Nothing in this historical file makes Delete implementation-ready or
+operationally approvable. A successor implementation must satisfy every current
+field, state machine, deadline, exact-target trust binding, singleton
+coordinator/fence, immutable source-provenance snapshot, atomic DB before-image,
+target mutation marker, marker-first reconciliation, recovery-disposition, and
+deterministic concurrency/crash test requirement in `docs/164`, `docs/171`, and
+`docs/173`. Until that complete contract exists and a new human approval is
+issued through its protected lifecycle, stop before any Delete-related DB read
+or write.

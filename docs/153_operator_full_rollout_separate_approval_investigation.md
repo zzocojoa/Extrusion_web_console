@@ -2,6 +2,20 @@
 
 Date: 2026-06-17 Asia/Seoul
 
+Status: `superseded_historical_investigation_non_authorizing`
+
+> **Superseded historical record:** This document preserves the investigation
+> and repository state observed on its date. It is not current operating policy,
+> implementation-readiness evidence, or approval wording. Do not use
+> `docs/151_operator_upload_gate_runbook.md` or any instruction in this report to
+> approve or run Preview, Start Upload, Retry Failed, full rollout, or another
+> runtime/data action. Current non-executable safety and verification contracts
+> are `docs/164_operator_data_mutation_safety_gate.md`,
+> `docs/173_v2_operational_upload_verification_gate.md`, and
+> `docs/176_v1_cutover_go_no_go_validation_plan.md`. They require later
+> production implementation, deterministic tests, protected approval records,
+> and new explicit human approval before any action.
+
 Scope: report-only P1 investigation for full rollout approval boundaries,
 Preview-only approval boundaries, mutating action protection, audit evidence,
 and stop-condition clarity.
@@ -82,7 +96,7 @@ that specific Preview.
 | Document | Finding |
 | --- | --- |
 | `AGENTS.md` | Core Ops includes Preview, Start Upload, Retry, logs, and audit. Dangerous operations must be audit logged. |
-| `README.md` | Day-to-day upload decisions must follow `docs/151_operator_upload_gate_runbook.md`; future uploads require fresh Preview, target count review, and separate approval. |
+| `README.md` | Historical finding at the investigation date only. `docs/151_operator_upload_gate_runbook.md` is now superseded and must not be used for current decisions. |
 | `docs/00_product_scope.md` | Preview reconciliation is required before upload; DB upsert remains final duplicate protection. |
 | `docs/01_development_roadmap.md` | Upload jobs, retry, audit, token guard, and accepted row semantics are implemented Core Ops, not a full rollout shortcut. |
 | `docs/03_ui_ux_plan.md` | Upload UI separates Preview and Job tabs; risky/partial rows are excluded by default; Start Upload is disabled for stale, blocked, or absent Preview. |
@@ -291,8 +305,10 @@ that should be a separate feature.
 
 ## Recommendations
 
-1. Treat `docs/76`, `docs/100`, and `docs/151` as the controlling operating
-   policy for full rollout and future upload gates.
+1. For current decisions, use only the later non-executable safety and
+   verification contracts in `docs/164`, `docs/173`, and `docs/176`. The former
+   recommendation to treat `docs/76`, `docs/100`, and `docs/151` as controlling
+   policy is superseded.
 2. Do not interpret `docs/110` or `docs/140` as approval for any future upload
    activity. They accept only the already executed target in each report.
 3. Keep full rollout as a separate execution approval with:
@@ -350,10 +366,9 @@ values, or package output paths.
 
 ## Next Action
 
-Publish this docs-only report for review if the team wants this P1 decision on
-main.
-
+This historical report requires no execution follow-up and grants no authority.
 No full rollout, additional Preview, Start Upload, or Retry Failed is approved
-by this report. Any future upload work must start with a fresh Preview-only
-approval, target count review, and a separate explicit Start Upload or Retry
-Failed approval.
+by it. Any future upload work must follow the complete current chain in
+`docs/164`, `docs/173`, and `docs/176`, including implementation and deterministic
+test prerequisites, protected lifecycle records, current evidence, and a new
+explicit human approval for each applicable stage.

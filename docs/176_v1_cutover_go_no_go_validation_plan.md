@@ -423,30 +423,14 @@ operational-table reads/DB writes.
 
 ## Preview-Only Approval Template
 
-This approval is separate from the validation plan. It must be filled from a
-fresh read-only inventory precheck and the later protected manifest-preparation
-result.
-
-```text
-TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
-The Preview approval id is <previewApprovalId> and it binds manifest-preparation approval <manifestPreparationApprovalId>.
-It binds pre-existing trusted target baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>.
-It also binds consumed target-identity preparation approval <targetIdentityPreparationApprovalId>, completed by <targetIdentityPreparationExecuteByUtc>, and prepared target DB binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, with safe evidence <targetDbBindingEvidenceId>.
-It binds singleton exact-target coordinator <targetGlobalCoordinatorId> in expected state <idle | terminal | invalidated_terminal>, expected owner <targetGlobalCoordinatorOwnerFenceId or none>, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, safe evidence <targetGlobalCoordinatorEvidenceId>, and pre-reserved next chain fence <targetOperationFenceId>. Preview claim must atomically CAS that generation and install only that fence; any nonterminal older chain or stale owner/generation must fail.
-I approve exactly one Upload Preview-only run from package sourceCommit <sourceCommit>.
-The approved inventory record is <inventoryEvidenceRecordId> on operator PC class <operatorPcClass>.
-The approved protected content manifest is <contentManifestRecordId>, prepared at <contentManifestPreparedAtUtc>, and it must be consumed no later than <contentManifestExecuteByUtc>.
-The approved immutable content snapshot is <contentSnapshotRecordId> in state prepared.
-The inventory-observed source bytes are <inventoryObservedBytes>; the separately human-approved maximum size is <contentSnapshotMaxBytes> bytes and must satisfy contentSnapshotMaxBytes >= inventoryObservedBytes. The snapshot may be read only until <contentSnapshotRetainUntilUtc>, and its disposition state is scheduled.
-The approved source alias is <sourceAlias>.
-The approved source class is <sourceClass>.
-The approved file count is <fileCount>.
-The approved physical row ceiling is <rowLimit>.
-The approved exact operational DB target is protected binding <targetDbBindingId>; safe target/readiness classes do not replace it.
-The inventory was observed at <inventoryObservedAtUtc>, its approved maximum age is <inventoryMaxAgeSeconds> seconds, and Preview must start no later than <previewExecuteByUtc>.
-This approval does not approve Start Upload, Retry Failed, Delete, Settings save,
-feature gate enablement, Supabase reset/cleanup, Docker cleanup, LAN, or deployment.
-```
+This approval is separate from the validation plan. This plan intentionally does
+not duplicate a copyable approval block. The sole authoritative wording is the
+non-executable future Preview template under **Required approval wording** in
+`docs/164_operator_data_mutation_safety_gate.md`. It may be filled only from a
+fresh read-only inventory precheck and later protected manifest-preparation
+result, after every documented implementation/test gate and protected approval
+lifecycle exists and a new human approval explicitly releases Preview. Any
+locally copied or shortened variant is non-authoritative and must be rejected.
 
 Immediately before the API call, repeat the read-only scan and record only the
 safe check timestamp plus `preCallSnapshotUnchanged=true`. Stop if the deadline
@@ -574,7 +558,7 @@ As part of that one Start action, I approve creation of exactly one target-side 
 That transaction must first revalidate the exact target identity and unexpired target binding using the authoritative target DB clock, then serializably revalidate every key in the protected approved-absent set, use canonical key fences honored by every application writer and conflict-rejecting conditional inserts, and commit only if the exact inserted keyset/count equals the binding. Any expired/substituted target, preexisting/concurrent key, or mismatch must roll back every action all_metrics write without overwrite and require a fresh Preview and approval.
 I approve bounded read-only target-outcome reconciliation for that same actionMutationId within this window and, only if its immutable aborted marker is finalized and observed before lease expiry, exactly one whole-attempt exact DB reconciliation plus protected retry-reconciliation evidence record. Timeout, response loss, or lease expiry must become commit_unknown_blocked unless the immutable target marker proves committed or aborted/complete rollback.
 This authorization explicitly excludes Start target-absence drift/conflict. For that failure class the reconciliation-creation entitlement must become invalid, no reconciliation DB read or record is allowed, and a fresh Preview/manifest/snapshot approval chain is required.
-Any eligible reconciliation must atomically claim the source action's unique single-use creation entitlement before any DB read, durably recording and binding its source action class, safe terminal failure class, owner claim id, monotonic fence, and absolute publication deadline no later than the source lease, target-binding validity, and snapshot boundaries. Publication must compare-and-set that exact eligible action/failure class, unexpired token/fence, the same unexpired target binding, and current rollback/snapshot/disposition state; invalidation advances the fence, so a delayed publisher cannot succeed. Duplicate or response-loss recovery may return only the same record. Its exact private subset must remain owner-only, tamper-evident, per-record encrypted, use the named snapshot retention deadline as its non-extendable access ceiling, and be cryptographically disposed earlier on terminal Retry, invalidation, expiry, or snapshot disposition.
+Any eligible reconciliation must atomically claim the source action's unique single-use creation entitlement before any DB read, durably recording and binding its source action class, safe terminal failure class, owner claim id, monotonic fence, and absolute publication deadline no later than the source lease, target-binding validity, and snapshot boundaries. Publication must compare-and-set that exact eligible action/failure class, unexpired token/fence, the same unexpired target binding, and current rollback/snapshot/disposition state; invalidation advances the fence, so a delayed publisher cannot succeed. Duplicate or response-loss recovery may return only the same record. Its exact private subset must remain owner-only, tamper-evident, per-record encrypted, use the named snapshot retention deadline as its non-extendable access ceiling, and be cryptographically disposed earlier on successful/non-retryable terminal Retry, invalidation, expiry, snapshot disposition, or after an eligible retryable rollback's atomic successor publication has claimed/copied the exact subset. A retryable rollback keeps the old record in `awaiting_successor_reconciliation`; expiry before successor publication disposes it and permanently blocks that chain.
 This approval does not approve Retry Failed, Delete, Settings save, or feature gate enablement.
 ```
 
@@ -659,7 +643,7 @@ Required before approval:
 | Target-identity preparation approval id/state/deadline/claim owner/fence | `<targetIdentityPreparationApprovalId> / <consumed> / <targetIdentityPreparationExecuteByUtc> / <targetIdentityPreparationClaimId> / <targetIdentityPreparationFence>` |
 | Protected exact target DB binding id | `<targetDbBindingId>` |
 | Target DB binding state/validity/evidence | `<upload_bound \| retryable \| completed \| invalid> / <targetDbBindingValidUntilUtc> / <targetDbBindingEvidenceId>` |
-| Retry reconciliation source action/failure class, creation state/owner claim/fence/expiry/evidence and record id/state/observation/claim deadline, only after an eligible retryable rollback | `<retryReconciliationSourceActionClass> / <retryReconciliationSourceFailureClass> / <retryReconciliationCreationState> / <retryReconciliationCreationClaimId> / <retryReconciliationCreationFence> / <retryReconciliationCreationExpiresAtUtc> / <retryReconciliationCreationEvidenceId> / <retryReconciliationRecordId> / <available \| consumed \| invalid> / <retryReconciliationObservedAtUtc> / <retryReconciliationExecuteByUtc> \| not_created>` |
+| Retry reconciliation source action/failure class, creation state/owner claim/fence/expiry/evidence and record id/state/observation/claim deadline, only after an eligible retryable rollback | `<retryReconciliationSourceActionClass> / <retryReconciliationSourceFailureClass> / <retryReconciliationCreationState> / <retryReconciliationCreationClaimId> / <retryReconciliationCreationFence> / <retryReconciliationCreationExpiresAtUtc> / <retryReconciliationCreationEvidenceId> / <retryReconciliationRecordId> / <available \| consumed \| awaiting_successor_reconciliation \| invalid> / <retryReconciliationObservedAtUtc> / <retryReconciliationExecuteByUtc> \| not_created>` |
 | Retry reconciliation private-subset retention/disposition/evidence | `<retryReconciliationRetainUntilUtc> / <scheduled \| in_progress \| disposed \| disposal_failed_blocked> / <retryReconciliationDispositionEvidenceId> \| not_created>` |
 | Upload job id | `<uploadJobId>` |
 | Approved target-only row count | `<targetRows>` |
@@ -781,7 +765,7 @@ The random unique actionMutationId above is pre-reserved in this immutable appro
 As part of that one Retry action, I approve creation of exactly one target-side prepared outcome/fence marker for the same actionMutationId before any all_metrics write; it authorizes no other DB mutation. Every retry write and the prepared-to-committed marker transition must share one authoritative target transaction; a guarded prepared-to-aborted finalization may occur only after non-commit is authoritative.
 That transaction must first revalidate the exact target identity and unexpired target binding using the authoritative target DB clock, then serializably revalidate every key in the protected still-absent set, use canonical key fences honored by every application writer and conflict-rejecting conditional inserts, and commit only if the exact inserted keyset/count equals the binding. Any expired/substituted target, preexisting/concurrent key, or mismatch must roll back every action all_metrics write without overwrite and require a fresh whole-attempt reconciliation and approval.
 I approve bounded read-only target-outcome reconciliation for that same actionMutationId within this window and, only if its immutable aborted marker is finalized and observed before lease expiry, exactly one whole-attempt exact DB reconciliation plus a new protected retry-reconciliation evidence record. Timeout, response loss, or lease expiry must become commit_unknown_blocked unless the immutable target marker proves committed or aborted/complete rollback.
-That reconciliation must atomically claim the source action's unique single-use creation entitlement before any DB read, durably recording and binding source action class retry, its safe terminal failure class, an owner claim id, monotonic fence, and absolute publication deadline no later than the source lease, target-binding validity, and snapshot boundaries. Publication must compare-and-set that exact eligible action/failure class, unexpired token/fence, the same unexpired target binding, and current rollback/snapshot/disposition state; invalidation advances the fence, so a delayed publisher cannot succeed. Duplicate or response-loss recovery may return only the same record. Its exact private subset must remain owner-only, tamper-evident, per-record encrypted, use the named snapshot retention deadline as its non-extendable access ceiling, and be cryptographically disposed earlier on terminal Retry, invalidation, expiry, or snapshot disposition.
+That reconciliation must atomically claim the source action's unique single-use creation entitlement before any DB read, durably recording and binding source action class retry, its safe terminal failure class, an owner claim id, monotonic fence, and absolute publication deadline no later than the source lease, target-binding validity, and snapshot boundaries. Publication must compare-and-set that exact eligible action/failure class, unexpired token/fence, the same unexpired target binding, and current rollback/snapshot/disposition state; invalidation advances the fence, so a delayed publisher cannot succeed. Duplicate or response-loss recovery may return only the same record. Its exact private subset must remain owner-only, tamper-evident, per-record encrypted, use the named snapshot retention deadline as its non-extendable access ceiling, and be cryptographically disposed earlier on successful/non-retryable terminal Retry, invalidation, expiry, snapshot disposition, or after an eligible retryable rollback's atomic successor publication has claimed/copied the exact subset. The retryable rollback path must retain the old record as `awaiting_successor_reconciliation`; expiry before publication disposes it and permanently blocks the chain.
 This approval does not approve Start Upload, Delete, Settings save, or feature gate enablement.
 ```
 
@@ -815,7 +799,7 @@ Evidence after retry:
 | Protected exact target DB binding id | `<targetDbBindingId>` |
 | Target DB binding state/validity/evidence | `<upload_bound \| retryable \| completed \| invalid> / <targetDbBindingValidUntilUtc> / <targetDbBindingEvidenceId>` |
 | Retry reconciliation source action/failure class and creation state/owner claim/fence/expiry/evidence id | `<retryReconciliationSourceActionClass=retry> / <retryReconciliationSourceFailureClass> / <record_consumed \| invalid> / <retryReconciliationCreationClaimId> / <retryReconciliationCreationFence> / <retryReconciliationCreationExpiresAtUtc> / <retryReconciliationCreationEvidenceId>` |
-| Claimed retry reconciliation record id/state | `<retryReconciliationRecordId> / <consumed \| invalid>` |
+| Claimed retry reconciliation record id/state | `<retryReconciliationRecordId> / <consumed \| awaiting_successor_reconciliation \| invalid>` |
 | Retry reconciliation observation/deadline UTC | `<retryReconciliationObservedAtUtc> / <retryReconciliationExecuteByUtc>` |
 | Retry reconciliation retention/disposition/evidence | `<retryReconciliationRetainUntilUtc> / <scheduled \| in_progress \| disposed \| disposal_failed_blocked> / <retryReconciliationDispositionEvidenceId>` |
 | Reconciled attempted/still-absent safe counts | `<attemptedFiles>/<attemptedRows> -> <remainingFiles>/<remainingRows>` |
@@ -1002,8 +986,11 @@ not-applicable values and reasons:
   expiry/restart recovery;
 - reconciliation private subset storage is not owner-only, tamper-evident,
   per-record encrypted, bounded by snapshot retention, and cryptographically
-  disposed with safe evidence on terminal Retry/invalidation/expiry/snapshot
-  disposition, or a failed disposal does not block;
+  disposed with safe evidence on successful/non-retryable terminal Retry,
+  invalidation, expiry, snapshot disposition, or completed atomic successor
+  publication; a retryable rollback does not retain the old exact subset as
+  `awaiting_successor_reconciliation` until that publication; or a failed
+  disposal does not block;
 - atomic snapshot binding is absent or untested, or Preview cannot prove it
   parsed the same immutable bytes verified against the approved content
   manifest or prevent replay of that record;
