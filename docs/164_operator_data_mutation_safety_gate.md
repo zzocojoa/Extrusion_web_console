@@ -144,10 +144,13 @@ The precheck may record only safe inventory evidence:
 Do not publish a deterministic hash or fingerprint derived from a raw source
 path. Such a value can disclose the path through candidate-path guessing.
 
-The approval `<fileCount>`, `<rowLimit>`, and `<contentSnapshotMaxBytes>` must come from a fresh read-only
-inventory precheck completed immediately before that approval. They must not be
-user guesses, copied from an earlier run, reused as long-term defaults, or used
-as blanket approval for future folder growth.
+The approval `<fileCount>`, `<rowLimit>`, and `<inventoryObservedBytes>` must come
+from a fresh read-only inventory precheck completed immediately before that
+approval. `<contentSnapshotMaxBytes>` is a separate explicit human-approved
+ceiling that must be at least `<inventoryObservedBytes>`; it must not be inferred
+from the observation. None of these values may be guessed, copied from an earlier
+run, reused as a long-term default, or used as blanket approval for future folder
+growth.
 
 If inventory cannot establish observed files, an approved physical row ceiling,
 and observed bytes, do not request snapshot preparation or Preview-only. If the operational folder grows
@@ -185,10 +188,11 @@ and cryptographically dispose any partial bytes; never publish them as
 Required manifest-preparation approval wording:
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The manifest-preparation approval id is <manifestPreparationApprovalId> and both claim and completed protected publication must occur by <manifestPreparationExecuteByUtc>.
 I approve exactly one protected local content-manifest plus full-byte immutable snapshot preparation from package sourceCommit <sourceCommit> for inventory record <inventoryEvidenceRecordId>.
 That inventory was observed at <inventoryObservedAtUtc> and is approved for at most <inventoryMaxAgeSeconds> seconds; the preparation deadline above is within that window.
-The approved operator PC class is <operatorPcClass>, source alias is <sourceAlias>, source class is <sourceClass>, expected files is <fileCount>, expected physical rows is <= <rowLimit>, and full-byte snapshot size is <= <contentSnapshotMaxBytes> bytes.
+The approved operator PC class is <operatorPcClass>, source alias is <sourceAlias>, source class is <sourceClass>, expected files is <fileCount>, expected physical rows is <= <rowLimit>, inventory-observed source bytes are <inventoryObservedBytes>, and the separately human-approved full-byte snapshot ceiling is <contentSnapshotMaxBytes> bytes with contentSnapshotMaxBytes >= inventoryObservedBytes.
 The snapshot may be read only by the later separately approved Preview/Start/Retry chain and only until <contentSnapshotRetainUntilUtc>.
 I approve automatic bounded cryptographic disposal at terminal chain completion (zero-target Preview or completed Start/Retry), invalidation, or that deadline, whichever occurs first: stop active access, clear buffers, destroy the per-snapshot encryption key first, remove the byte file, verify absence, and record <snapshotDispositionEvidenceId>. A failed removal must leave keyless bytes unreadable, alert the operator, block new snapshot preparation, and retry idempotently only for the same record.
 I acknowledge that this write stores a confidential complete copy of the approved operational CSV bytes in owner-restricted protected storage.
@@ -221,6 +225,7 @@ baseline. If it is absent, stop and use a separate security-reviewed
 installation/provisioning work package with explicit approval.
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The target-identity preparation approval id is <targetIdentityPreparationApprovalId>; claim and protected publication must complete by <targetIdentityPreparationExecuteByUtc>.
 I approve exactly one read-only target-identity preparation for package sourceCommit <sourceCommit>, operator PC class <operatorPcClass>, inventory <inventoryEvidenceRecordId>, manifest <contentManifestRecordId>, snapshot <contentSnapshotRecordId>, and configured safe target class <targetClassStatus>.
 The expected exact target is anchored by pre-existing protected baseline <trustedTargetBaselineId> in state <trustedTargetBaselineState>, human-reviewed privacy-safe alias <trustedTargetAlias>, and safe out-of-band verification evidence <trustedTargetBaselineEvidenceId>. This preparation may not create, replace, or self-attest that baseline from the first DB observation.
@@ -270,6 +275,7 @@ reuse, duplicate/sibling coordinator creation, and zero operational-table reads/
 Required approval wording:
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The Preview approval id is <previewApprovalId> and it binds manifest-preparation approval <manifestPreparationApprovalId>.
 It binds pre-existing trusted target baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>.
 It also binds consumed target-identity preparation approval <targetIdentityPreparationApprovalId>, completed by <targetIdentityPreparationExecuteByUtc>, and prepared target DB binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, with safe evidence <targetDbBindingEvidenceId>.
@@ -278,7 +284,7 @@ I approve exactly one Upload Preview-only run from package sourceCommit <sourceC
 The approved inventory record is <inventoryEvidenceRecordId> on operator PC class <operatorPcClass>.
 The approved protected content manifest is <contentManifestRecordId>, prepared at <contentManifestPreparedAtUtc>, and it must be consumed no later than <contentManifestExecuteByUtc>.
 The approved immutable content snapshot is <contentSnapshotRecordId> in state prepared.
-Its approved maximum size is <contentSnapshotMaxBytes> bytes, it may be read only until <contentSnapshotRetainUntilUtc>, and its disposition state is scheduled.
+The inventory-observed source bytes are <inventoryObservedBytes>; the separately human-approved maximum size is <contentSnapshotMaxBytes> bytes and must satisfy contentSnapshotMaxBytes >= inventoryObservedBytes. The snapshot may be read only until <contentSnapshotRetainUntilUtc>, and its disposition state is scheduled.
 The approved source alias is <sourceAlias>, the source class is <sourceClass>, expected files is <fileCount>, and expected physical rows is <= <rowLimit>.
 The approved exact operational DB target is protected binding <targetDbBindingId>; safe target/readiness classes do not replace it.
 The inventory was observed at <inventoryObservedAtUtc>, its approved maximum age is <inventoryMaxAgeSeconds> seconds, and Preview must start no later than <previewExecuteByUtc>.
@@ -286,8 +292,10 @@ This approval does not approve Start Upload, Retry Failed, Delete, Settings save
 ```
 
 In this wording, `expected files` means observed files from the fresh read-only
-inventory, and `expected physical rows` means the approved physical row ceiling
-from that same inventory. The inventory record id, protected content manifest
+inventory, `expected physical rows` means the approved physical row ceiling,
+and `inventoryObservedBytes` means the total observed source bytes from that
+same inventory. It must equal the manifest-preparation record and must not exceed
+the separately approved `contentSnapshotMaxBytes`. The inventory record id, protected content manifest
 record id, content snapshot record id, operator PC class, source alias, and
 trusted target baseline id/alias/state/evidence,
 `targetIdentityPreparationApprovalId`, and `targetDbBindingId` must match
@@ -315,7 +323,9 @@ Evidence to record after Preview-only:
 
 - package label and source commit;
 - preview run id;
-- inventory evidence record id, operator PC class, and privacy-safe source alias;
+- inventory evidence record id, operator PC class, privacy-safe source alias,
+  exact `inventoryObservedBytes`, and separately approved
+  `contentSnapshotMaxBytes` with equality to the manifest-preparation record;
 - protected content manifest record id, prepared-at/deadline fields, and
   single-use terminal state;
 - protected content snapshot record id and `previewed` state;
@@ -366,6 +376,7 @@ maintainer-approved test backup.
 Required approval wording:
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 I approve exactly one mutation smoke against disposable fixture DB <fixtureId>.
 This approval does not approve operational DB use, operational CSV use, Supabase reset/cleanup, Docker cleanup, LAN, or delete UI expansion.
 ```
@@ -487,6 +498,7 @@ Required preconditions:
 Required approval wording:
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The Start Upload approval id is <startUploadApprovalId> and it must be claimed by <startUploadExecuteByUtc>.
 I approve exactly one Start Upload for preview run <previewRunId> with target files <targetFiles> and target rows <targetRows>.
 The protected exact target-only set binding is <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>.
@@ -634,6 +646,7 @@ deadline exceeds the minimum target-binding/snapshot ceiling.
 Required approval wording:
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The Retry Failed approval id is <retryApprovalId> and it must be claimed by <retryExecuteByUtc>.
 I approve exactly one Retry Failed using protected reconciliation record <retryReconciliationRecordId>, observed at <retryReconciliationObservedAtUtc> and claimable by <retryReconciliationExecuteByUtc>, for upload job <jobId> with freshly reconciled still-absent files <remainingFiles> and physical rows <remainingRows> from the entire prior attempted subset, preserving root failure class <rootFailureClass>.
 That reconciliation record is the protected approved-absent set binding <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>.
@@ -712,6 +725,7 @@ delete, reconcile, Preview, upload, retry, Settings save, runtime lifecycle,
 other cleanup, LAN, or deployment.
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The delete-preflight approval id is <deletePreflightApprovalId>; it must be claimed by <deletePreflightExecuteByUtc>, and protected source-provenance-snapshot plus preflight-result publication must complete by <deletePreflightCompleteByUtc>.
 I approve exactly one read-only operational delete preflight for package <packageSourceCommit>/<packageLabel>/<zipSha256>, Preview <previewRunId>, operator PC <operatorPcClass>, source <sourceAlias>/<sourceClass>, DB target <dbTargetClass> anchored to pre-existing trusted baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>, from consumed target-identity preparation approval <targetIdentityPreparationApprovalId> completed by <targetIdentityPreparationExecuteByUtc>, with protected exact binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, safe evidence <targetDbBindingEvidenceId>, and target operation fence <targetOperationFenceId> in chain state idle with Delete branch delete_preflight_ready, exact generation <targetOperationFenceGeneration>, safe evidence <targetOperationFenceEvidenceId>, expected schema <schemaClass>, selected items <selectedItemCount>, and protected selection-request binding <selectionRequestBindingId>.
 It also binds exact-target singleton coordinator <targetGlobalCoordinatorId>, sole owner fence <targetOperationFenceId>, state chain_ready, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, and safe evidence <targetGlobalCoordinatorEvidenceId>. Preflight creation must atomically claim both generations for consumer delete_preflight; any different Preview-chain owner or concurrent target consumer must fail.
@@ -875,6 +889,7 @@ approver/executor, stop condition, and evidence location, plus
 `deleteExecuteByUtc` and the single-run lifecycle fields below.
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 In addition to every exact field and sentence required by docs/171, including trusted target baseline id/alias/state/evidence, target-identity preparation approval id/state/deadline, target DB binding id/state/validity/evidence, target operation fence id/chain and branch states/consumer/generation/evidence, and <deleteReconcileByUtc>, the protected delete approval id/approvalId is <deleteApprovalId> and it must be claimed by <deleteExecuteByUtc>.
 The ready delete-preflight result <deletePreflightId> is initially ready_available and may be claimed and consumed only by this <deleteApprovalId> and the one deleteRunId generated in the joint claim transaction.
 I approve one atomic transaction that claims both this delete approval and that ready preflight result and durably binds both to exactly one generated deleteRunId; no response loss, commit_unknown result, audit/evidence failure, cancellation, reconciliation, or second approval may create or authorize a second run from either record.

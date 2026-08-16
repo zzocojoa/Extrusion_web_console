@@ -33,10 +33,11 @@ It is a six-step evidence chain:
    reviewed target binding;
 5. exactly one separately approved Start Upload, only if Preview proves target
    rows;
-6. exactly one separately approved Retry Failed, only if authoritative outcome
-   evidence proves rollback, fresh exact DB reconciliation of the entire
-   attempted subset identifies still-absent rows, and a new approval names that
-   exact reconciled subset.
+6. zero or more separately approved Retry Failed attempts, where each approval
+   authorizes exactly one attempt only after authoritative outcome evidence
+   proves rollback, fresh exact DB reconciliation of the entire prior attempted
+   subset identifies still-absent rows, and a new approval names that exact
+   reconciled subset.
 
 Before this chain may start, production Preview must implement deterministic-
 test-covered atomic content binding and a rebuilt package must be verified. The
@@ -85,8 +86,8 @@ Minimum fields:
 | `contentSnapshotRetainUntilUtc` | Human-approved access/retention deadline for the full-byte snapshot. |
 | `contentSnapshotDispositionState` | `scheduled`, `in_progress`, `disposed`, or `disposal_failed_blocked`; preparation approval explicitly authorizes the bounded disposal lifecycle. |
 | `snapshotDispositionEvidenceId` | Opaque safe record proving deadline/terminal trigger, per-snapshot key destruction, byte-file removal result, and final disposition state. |
-| `actionMaxDurationSeconds` | Human-approved hard maximum for each Start/Retry action; no default may be inferred. |
-| `snapshotDispositionMarginSeconds` | Human-approved minimum interval reserved between action-lease expiry and snapshot retention expiry for outcome reconciliation and disposal; no default may be inferred. |
+| `actionMaxDurationSeconds` | Human-approved hard maximum for each Start/Retry action; it must be a positive base-10 integer within the implementation's fixed, versioned, documented, and deterministically tested safety ceiling. No default may be inferred. |
+| `snapshotDispositionMarginSeconds` | Human-approved minimum interval reserved between action-lease expiry and snapshot retention expiry for outcome reconciliation and disposal; it must be a positive base-10 integer within the implementation's fixed, versioned, documented, and deterministically tested safety ceiling. No default may be inferred. |
 | `snapshotActionLeaseId` | Opaque lease atomically created with a Start/Retry job to prevent disposition during its all-or-nothing mutation. |
 | `snapshotActionLeaseExpiresAtUtc` | Exactly claim time plus `actionMaxDurationSeconds`, and plus the approved reconciliation/disposition margin no later than both `targetDbBindingValidUntilUtc` and `contentSnapshotRetainUntilUtc`; it cannot be renewed or extended. |
 | `snapshotActionLeaseState` | `active`, `released_committed`, `released_rolled_back`, `expired_rolled_back`, or `commit_unknown_blocked`; no mutating action may proceed outside `active`, and no terminal state may regress. |
@@ -136,7 +137,7 @@ Minimum fields:
 | `trustedTargetBaselineState` | Must be `verified` and not revoked before preparation; identity rotation requires a new separately verified baseline. |
 | `trustedTargetBaselineEvidenceId` | Random non-derived opaque safe evidence id for out-of-band baseline verification; exact identity and every keyed integrity value remain owner-only. |
 | `targetDbBindingId` | Opaque random id resolving only in the owner-only protected store to authenticated exact target DB-instance and database identity; safe target/readiness classes are diagnostic and cannot replace it. |
-| `targetDbBindingState` | `preparing`, `prepared`, `preview_claimed`, `previewed`, `upload_completed_delete_ready`, `upload_bound`, `retryable`, `delete_bound`, `completed`, or `invalid`; no state may regress or move to a different chain. |
+| `targetDbBindingState` | `preparing`, `prepared`, `preview_claimed`, `previewed`, `upload_completed_delete_ready`, `upload_bound`, `retryable`, `delete_bound`, `completed`, or `invalid`; transitions may follow only the canonical table below. A separately approved Retry may advance `retryable -> upload_bound` only with a strictly newer target-operation fence generation; same-generation or stale-generation reversal and movement to a different chain are forbidden. |
 | `targetDbBindingValidUntilUtc` | Non-extendable identity-binding validity ceiling that must cover the approved Preview/Start/Retry chain and fit within the snapshot retention boundary. |
 | `targetDbBindingEvidenceId` | Opaque safe evidence for the one preparation/verification lifecycle; exact instance/database identity and private MAC remain owner-only. |
 | `targetGlobalCoordinatorId` | Random non-derived opaque id resolving to the one protected coordinator for the trusted baseline's exact DB-instance/database identity; every Preview chain for that target must contend on it. |
@@ -146,7 +147,7 @@ Minimum fields:
 | `targetGlobalCoordinatorGeneration` | Monotonic target-global generation advanced by Preview claim and every claim/invalidation/terminal transition; all chains and actions CAS it. |
 | `targetGlobalCoordinatorEvidenceId` | Opaque safe evidence for the target-global owner/state/generation transition; private target identity remains owner-only. |
 | `targetOperationFenceId` | Random opaque protected single-consumer chain fence bound to the target-global coordinator generation, trusted baseline, target DB binding, Preview, snapshot, and operation chain. |
-| `targetOperationFenceState` | Chain exclusion state `idle`, `claimed`, `active`, `recovery_disposition_pending`, `terminal`, or `invalid`; no state may regress except the explicitly fenced release to `idle` after a non-mutating failed preflight. |
+| `targetOperationFenceState` | Chain exclusion state `idle`, `claimed`, `active`, `recovery_disposition_pending`, `terminal`, or `invalid`; the only backward-looking releases are generation-advancing, CAS-fenced `active -> idle` transitions after successful Preview publication, successful whole-attempt reconciliation publication, or an eligible non-mutating failed preflight whose protected recovery records are terminal. Every other same-generation or stale-generation regression is forbidden. |
 | `targetUploadBranchState` | `preview_pending`, `preview_ready`, `start_claimed`, `upload_active`, `retryable`, `retry_claimed`, `terminal`, `not_eligible`, or `invalid`. Preview claim starts `preview_pending`; positive target rows are required for publication as `preview_ready`. |
 | `targetDeleteBranchState` | `preview_pending`, `delete_preflight_ready`, `delete_preflight_claimed`, `delete_ready`, `delete_claimed`, `delete_active`, `recovery_disposition_pending`, `terminal`, `not_eligible`, or `invalid`. Preview claim starts `preview_pending`; eligible `already_in_db` items, not target rows, control publication as `delete_preflight_ready`. |
 | `targetOperationConsumer` | Exact chain consumer: `preview` while both branches are `preview_pending`; empty after publication in chain `idle`/global `chain_ready`; `start`, `retry`, `delete_preflight`, or `delete` while claimed/active; `delete` while recovery disposition is pending; `delete_disposition` or `delete_restore` during that approved close; empty only again when the chain fence is `terminal` or `invalid` and the target-global coordinator is correspondingly `terminal` or `invalidated_terminal`. |
@@ -195,6 +196,8 @@ Inventory may record only:
 - source class;
 - observed file count;
 - physical data-line count or approved conservative physical row ceiling;
+- total observed source bytes, as the canonical `inventoryObservedBytes` used by
+  the later snapshot ceiling approval;
 - safe go/no-go reason classes.
 
 Do not publish a deterministic hash or fingerprint derived from a raw source
@@ -202,10 +205,10 @@ path. Such a value can disclose the path through candidate-path guessing.
 
 `inventoryEvidenceRecordId`, `inventoryObservedAtUtc`,
 `inventoryMaxAgeSeconds`, `previewExecuteByUtc`, `operatorPcClass`,
-`sourceAlias`, `fileCount`, and `rowLimit` in the Preview-only approval must
-come from this fresh inventory and explicit human wording. They must not be
-guesses, old run values, inferred validity defaults, long-term defaults, or
-blanket approval for future folder growth.
+`sourceAlias`, `fileCount`, `rowLimit`, and `inventoryObservedBytes` in the
+Preview-only approval must come from this fresh inventory and explicit human
+wording. They must not be guesses, old run values, inferred validity defaults,
+long-term defaults, or blanket approval for future folder growth.
 
 ## Phase 1A: Protected Content Manifest Preparation
 
@@ -293,16 +296,35 @@ that is invalid for the current stage, as defined below.
 | Start creation in progress | `consumed` | `consumed` | `start_claimed` | `upload_bound` | `scheduled` | `consumed` | The Start approval, snapshot lease, target binding, and exactly one job are claimed/bound atomically. |
 | Exactly one Start job record commits | `consumed` | `consumed` | `upload_bound` | `upload_bound` | `scheduled` | `consumed` | Worker uses only protected snapshot and exact target binding under the active lease. |
 | Start target marker proves commit | `consumed` | `consumed` | `completed` | `completed` | `scheduled -> in_progress -> disposed\|disposal_failed_blocked` | `consumed` | Outcome evidence is durable; snapshot reads stop and automatic disposition starts. |
-| Start target marker proves rollback after an eligible non-drift failure | `consumed` | `consumed` | `retryable` | `retryable` | `scheduled` | `consumed` | Fresh exact reconciliation on the same bound target defines the later Retry scope; Start target drift still invalidates the chain. |
+| Start target marker proves rollback after an eligible non-drift failure; before reconciliation publication | `consumed` | `consumed` | `upload_bound` | `upload_bound` | `scheduled` | `consumed` | The marker makes the single reconciliation entitlement eligible only; it does not expose Retry. Start target drift still invalidates the chain. |
+| Start whole-attempt reconciliation record publishes | `consumed` | `consumed` | `retryable` | `retryable` | `scheduled` | `consumed` | The same publication CAS creates the one available record, advances both ready generations, empties consumers, and only then exposes the separately approved Retry scope. |
 | Start outcome is unknown | `consumed` | `consumed` | `upload_bound` | `upload_bound` | `scheduled` until bounded reconciliation; mandatory retention disposal then permanently blocks chain if unresolved | `consumed` | `commit_unknown_blocked` forbids Retry/cutover and never implies rollback. |
 | Retry creation in progress | `consumed` | `consumed` | `retry_claimed` | `upload_bound` | `scheduled` | `consumed` | Retry approval, snapshot lease/subset, target binding, and one action are claimed/bound atomically. |
 | Exactly one Retry action record commits | `consumed` | `consumed` | `upload_bound` | `upload_bound` | `scheduled` | `consumed` | Retry worker uses only the same snapshot and exact bound target under the active lease. |
 | Retry target marker proves commit | `consumed` | `consumed` | `completed` | `completed` | `scheduled -> in_progress -> disposed\|disposal_failed_blocked` | `consumed` | Outcome evidence is durable; snapshot reads stop and automatic disposition starts. |
-| Retry target marker proves rollback and retryability | `consumed` | `consumed` | `retryable` | `retryable` | `scheduled` | `consumed` | Fresh exact reconciliation on the same bound target defines any later Retry scope. |
+| Retry target marker proves rollback and eligibility; before reconciliation publication | `consumed` | `consumed` | `upload_bound` | `upload_bound` | `scheduled` | `consumed` | The marker makes one new reconciliation entitlement eligible only; it does not expose another Retry. |
+| Retry whole-attempt reconciliation record publishes | `consumed` | `consumed` | `retryable` | `retryable` | `scheduled` | `consumed` | The same publication CAS creates the new available record, advances both ready generations, empties consumers, and only then exposes another separately approved Retry scope. |
 | Retry outcome is unknown | `consumed` | `consumed` | `upload_bound` | `upload_bound` | `scheduled` until bounded reconciliation; mandatory retention disposal then permanently blocks chain if unresolved | `consumed` | `commit_unknown_blocked` forbids further Retry/cutover and never implies rollback. |
 
+Delete uses this exact target-binding subtable; `docs/171` supplies the remaining
+Delete approval, recovery, and marker fields:
+
+| Delete stage | Required target DB binding state | Next target DB binding state | Required atomic condition |
+| --- | --- | --- | --- |
+| Before/through Delete preflight claim and ready-result publication | `previewed` or `upload_completed_delete_ready`, unexpired | unchanged | Claim/publish the same target-global and chain-fence generations; preflight performs no operational mutation and cannot consume or rewrite the target binding. |
+| Joint hard-Delete approval/preflight-result/run claim | same eligible state, unexpired | `delete_bound` | CAS the binding, approval, ready result, generated run id, coordinator owner/consumer, and both generations in one local transaction; any Start/Retry/different-chain winner rejects the Delete. |
+| Prepared marker, authoritative Delete transaction, or bounded marker-first reconcile | `delete_bound`, unexpired for every target access | `delete_bound` | Revalidate the same exact target on the authoritative session; no current-row inference or state release is allowed. |
+| Marker proves committed or authoritative aborted | `delete_bound` | `delete_bound` | Coordinator/fence enter `recovery_disposition_pending`; the binding remains owned until every recovery record that actually exists is terminal. |
+| Target identity/binding mismatch before any Delete commit | eligible state or `delete_bound` | `invalid` | Fence every claimant and prove zero Delete writes before invalidation publication. |
+| `commit_unknown_blocked`, unresolved marker, or disposal failure | `delete_bound` | `delete_bound` | Remain non-advanceable; no Preview/Start/Retry/Delete replay or terminalization is allowed. |
+| Approved restore-then-dispose or applicable key-first disposal completes | `delete_bound` | `completed` | CAS the same owner/generations only after marker outcome and every applicable source snapshot/DB before-image/disposition record are verified terminal. |
+
 State regression, skipped transitions, duplicate claims, or any combination not
-allowed by this table is a hard stop.
+allowed by this table is a hard stop. The table's separately approved Retry
+cycle (`retryable -> retry_claimed -> upload_bound`) is not a regression only
+when the target-operation fence generation advances atomically and the new
+approval consumes the new whole-attempt reconciliation record; the same or a
+stale generation must be rejected.
 
 ### Cross-Action Target Operation Fence
 
@@ -329,7 +351,9 @@ state `claimed`; only the exact owner/generations may CAS it to `active` before
 the first authoritative Preview DB query. The coordinator remains
 `preview_claimed`, chain fence remains `active`, and both global/chain consumers
 remain `preview` throughout the query. Preview publication must CAS the same
-coordinator owner/generation and target binding: it sets the upload branch to
+coordinator owner and currently claimed coordinator/fence generations, then
+atomically advance both to one new published ready generation with the target
+binding: it sets the upload branch to
 `preview_ready` only for positive target rows or `not_eligible`, and independently
 sets the Delete branch to `delete_preflight_ready` only for eligible
 `already_in_db` items or `not_eligible`, then changes the coordinator to
@@ -350,9 +374,11 @@ and both consumers remain the source `start` or `retry` while the single-use
 whole-attempt reconciliation entitlement is claimed and published. Only the
 same publication CAS that creates exactly one unexpired protected
 `record_available` reconciliation record may recheck the marker/rollback,
-snapshot/target validity, owner and both generations, then atomically set target
-binding/upload branch `retryable`, coordinator `chain_ready`, chain fence `idle`,
-and both consumers empty. Failure, expiry, invalidation, or crash before that CAS
+snapshot/target validity, owner and both currently active generations, then
+atomically increment both generations, set target binding/upload branch
+`retryable`, coordinator `chain_ready`, chain fence `idle`, and both consumers
+empty. The later Retry approval must bind those newly published generations.
+Failure, expiry, invalidation, or crash before that CAS
 never exposes Retry; it remains blocked or advances through `invalidating` after
 fencing/cleanup. From `retryable`, only Retry may atomically claim
 `retry_claimed -> upload_active`. Delete preflight advances
@@ -466,7 +492,12 @@ approval binds `actionMaxDurationSeconds` and
 `snapshotActionLeaseExpiresAtUtc = claimedAtUtc + actionMaxDurationSeconds` and
 must prove it is no later than `contentSnapshotRetainUntilUtc -
 snapshotDispositionMarginSeconds`; the lease cannot be renewed, extended, or
-revived. Job/action creation atomically claims the approval and snapshot, creates
+revived. Every duration/margin parse and deadline add/subtract uses checked
+integer and UTC-instant arithmetic. Non-integer, non-positive, above-ceiling,
+overflow, or underflow input fails before claim with zero DB writes. Equality at
+the final permitted ceiling is valid only when every checked operation succeeds
+and the positive-duration lease still starts before its expiry. Job/action
+creation atomically claims the approval and snapshot, creates
 one lease, and claims the approval's pre-reserved `actionMutationId`.
 Substituted, duplicate, cross-approval, or cross-snapshot mutation ids are
 rejected before any DB write. Disposition cannot claim `scheduled ->
@@ -608,9 +639,10 @@ only exact DB reconciliation of the entire attempted snapshot subset and
 protected local evidence write. Publication uses a compare-and-set transaction
 that rechecks the same source action/failure class, eligibility decision, claim
 id/fence, state `claimed`, unexpired absolute deadline, immutable target marker
-`aborted` observed before source-lease expiry, snapshot state `retryable`,
-disposition `scheduled`, and the same unexpired `targetDbBindingId`/state/
-validity/evidence revalidated on the authoritative target session. It atomically
+`aborted` observed before source-lease expiry, pre-publication snapshot and target
+binding state `upload_bound`, disposition `scheduled`, and the same unexpired
+`targetDbBindingId`/validity/evidence revalidated on the authoritative target
+session. It atomically
 creates
 exactly one immutable/authenticated
 `retryReconciliationRecordId` in state `available`, bound to package/operator/
@@ -620,8 +652,11 @@ source, snapshot and atomic binding evidence, the same exact protected
 subset identity, private exact still-absent key/row subset, safe counts,
 `retryReconciliationObservedAtUtc`, and human-bound
 `retryReconciliationExecuteByUtc`, while the entitlement becomes
-`record_available` and records `retryReconciliationCreationEvidenceId` in the
-same local transaction. A uniqueness constraint on source `actionMutationId`
+`record_available`, records `retryReconciliationCreationEvidenceId`, advances
+the snapshot/target binding/upload branch to `retryable`, CAS-checks the current
+active coordinator/fence generations, and atomically increments both to the new
+published `chain_ready`/`idle` generations with empty consumers in the same local
+transaction. A uniqueness constraint on source `actionMutationId`
 forbids sibling records. Duplicate calls and response-loss recovery return the
 same record. Failure/crash before record publication makes the entitlement
 `invalid`, creates no reusable record, and requires a new separate human-approved
@@ -690,6 +725,10 @@ snapshot is published. Stage tests must prove retention expiry before or during
 each of Preview, Start, and Retry stops further reads, clears active buffers,
 records the correct action failure/evidence, and enters the bounded disposal
 lifecycle without authorizing another job or retry.
+Lease-boundary tests must inject an authoritative clock and cover non-integer,
+negative, zero, one, exact fixed safety ceilings, ceiling-plus-one, checked
+addition/subtraction overflow or underflow, and just-before/at/just-after each
+derived deadline; only the explicitly permitted equality case may claim.
 They must also cover symlink, junction/reparse-point, hard-link, canonical root-
 escape, link-swap, and opened-handle identity substitution attempts; none may
 publish a manifest/snapshot or copy bytes outside the approved source root.
@@ -894,8 +933,9 @@ target baseline id/alias/state/evidence, and the same consumed
 `targetIdentityPreparationApprovalId` plus exact protected `targetDbBindingId`,
 state, validity ceiling, and evidence verified by Preview, plus the same
 `targetGlobalCoordinatorId` in `chain_ready` naming this chain fence as sole
-owner with empty consumer and exact generation/evidence, and the same `targetOperationFenceId` in
-`preview_ready` with exact generation/evidence. At claim time the
+owner with empty consumer and exact generation/evidence, and the same
+`targetOperationFenceId` in fence state `idle` with upload branch `preview_ready`
+and exact generation/evidence. At claim time the
 binding must be `previewed` and unexpired, and the unrenewable action lease plus
 `snapshotDispositionMarginSeconds` must end no later than
 `min(targetDbBindingValidUntilUtc, contentSnapshotRetainUntilUtc)`. The named snapshot must be the immutable
@@ -926,11 +966,11 @@ tests exist, Start Upload remains blocked even if the wording is filled.
 | Target transaction in flight | `consumed` | `upload_bound` | `active` | `commit_pending` | running | On the same authoritative transaction, revalidate exact target identity and unexpired binding with the target clock, then under serializable/key fencing revalidate the whole approved keyset as absent and use conflict-rejecting conditional inserts; disposition and duplicate mutation are blocked. |
 | Target absence drift/conflict before commit | `consumed` | `invalid` | `released_rolled_back` | `rolled_back` with absence evidence | terminal blocked/non-retryable | Zero action `all_metrics` writes and no overwrite; invalidate/dispose this chain and require a fresh Preview/manifest/snapshot approval chain. Reconciliation-to-Retry is forbidden for this Start failure class. |
 | Target commit marker proves success | `consumed` | `completed` | `released_committed` | `committed` with absence evidence | terminal succeeded/recovered succeeded | Exact inserted keyset/count equals the protected approval binding; preserve sanitized evidence, block reads, and start automatic disposition. |
-| Other retriable failure/cancellation; target marker `aborted` before lease expiry | `consumed` | `retryable` only after fresh exact reconciliation | `released_rolled_back` | `rolled_back` with evidence | terminal failed/retryable/cancelled | Excludes target-state drift. Atomically claim the source action's single creation entitlement and publish at most one protected encrypted reconciliation record; a later Retry must claim it and may name every row still absent. |
+| Other retriable failure/cancellation; target marker `aborted` before lease expiry | `consumed` | `upload_bound -> retryable` only in fresh exact reconciliation publication CAS | `released_rolled_back` | `rolled_back` with evidence | terminal failed/retryable/cancelled | Excludes target-state drift. Marker rollback alone keeps the snapshot bound. Atomically publish the one protected record plus new ready generations; only then may a later Retry claim its still-absent subset. |
 | Non-retryable failure proves rollback | `consumed` | `invalid` | `released_rolled_back` | `rolled_back` with evidence | terminal failed/blocked | Start automatic disposition; final decision is blocked/failed-preserved and Retry is forbidden. |
 | Crash/timeout/response loss after possible target commit | `consumed` | `upload_bound` | `commit_unknown_blocked` | `commit_unknown_blocked` | terminal/nonterminal blocked | Do not infer rollback, dispose early, Retry, or create another job; reconcile the target marker. |
 | Target-marker reconciliation proves commit | `consumed` | `completed` | `released_committed` | `committed` with evidence | recovered succeeded | Use the same job/mutation id and continue only to disposition. |
-| Target marker is guarded-finalized `aborted` and observed before lease expiry after an eligible non-drift failure | `consumed` | `retryable` after fresh exact DB reconciliation | `released_rolled_back` | `rolled_back` with evidence | recovered failed/retryable | The source action/failure-class-bound unique entitlement publishes one protected encrypted available record; Retry scope is its still-absent subset from the whole attempted subset. Start target-absence drift/conflict is excluded and leaves the entitlement `invalid` without a DB read or record. |
+| Target marker is guarded-finalized `aborted` and observed before lease expiry after an eligible non-drift failure | `consumed` | `upload_bound -> retryable` only in fresh exact reconciliation publication CAS | `released_rolled_back` | `rolled_back` with evidence | recovered failed/retryable | Marker finalization alone does not expose Retry. The source action/failure-class-bound entitlement atomically publishes one protected record plus new ready generations; its whole-attempt still-absent subset is the only later Retry scope. Start target-absence drift/conflict remains excluded and invalidates the entitlement without a DB read or record. |
 | Target marker is finalized/first observed `aborted` at or after lease expiry | `consumed` | `invalid` | `expired_rolled_back` | `rolled_back` with evidence | terminal failed/blocked | Start disposition; no Retry from this expired action. |
 | Outcome remains unknown at retention deadline | `consumed` | `invalid` then inaccessible | `commit_unknown_blocked` | `commit_unknown_blocked` | terminal blocked | Perform mandatory cryptographic disposition and permanently block this chain; this approval authorizes no post-retention DB read. |
 | Duplicate request after job commit/response loss | `consumed` | current recorded state | same recorded lease | same mutation id/outcome | the same committed job | Return/preserve the existing binding; never create another job. |
@@ -1011,8 +1051,9 @@ baseline id/alias/state/evidence, and the same consumed
 `targetIdentityPreparationApprovalId` plus protected `targetDbBindingId`, state,
 validity ceiling, and evidence from Preview/source action/reconciliation, plus
 the same `targetGlobalCoordinatorId` in `chain_ready` naming this chain fence as
-sole owner with empty consumer and exact generation/evidence, and the same `targetOperationFenceId`
-in `retryable` with exact generation/evidence. At
+sole owner with empty consumer and exact generation/evidence, and the same
+`targetOperationFenceId` in fence state `idle` with upload branch `retryable` and
+exact generation/evidence. At
 claim time the binding must be `retryable` and unexpired, and the unrenewable
 action lease plus `snapshotDispositionMarginSeconds` must end no later than
 `min(targetDbBindingValidUntilUtc, contentSnapshotRetainUntilUtc)`. The snapshot must
@@ -1043,13 +1084,13 @@ remains blocked even if the wording is filled.
 | Exactly one retry record commits | `consumed` | `record_consumed` / `consumed` | `upload_bound` | `active` | `not_started` | committed, nonterminal | Approval and reconciliation records stay consumed and the action uses only their exact protected subset/snapshot under this lease. |
 | Target outcome marker prepared | `consumed` | `record_consumed` / `consumed` | `upload_bound` | `active` | `prepared` | running | Exactly one target-clock-fenced marker is durable; no `all_metrics` write has occurred. |
 | Target transaction in flight | `consumed` | `record_consumed` / `consumed` | `upload_bound` | `active` | `commit_pending` | running | On the same authoritative transaction, revalidate exact target identity and unexpired binding with the target clock, then under serializable/key fencing revalidate the whole still-absent set and use conflict-rejecting conditional inserts; disposition and duplicate mutation are blocked. |
-| Target absence drift/conflict before commit | `consumed` | consumed input disposition triggered; one new source entitlement/record only after fresh whole-attempt reconciliation | `retryable` | `released_rolled_back` | `rolled_back` with absence evidence | terminal failed/retryable | Zero action `all_metrics` writes and no overwrite; another Retry requires the new whole-attempt record and separate approval. |
+| Target absence drift/conflict before commit | `consumed` | consumed input disposition triggered; one new source entitlement/record only after fresh whole-attempt reconciliation | `upload_bound -> retryable` only in the new reconciliation publication CAS | `released_rolled_back` | `rolled_back` with absence evidence | terminal failed/retryable | Zero action `all_metrics` writes and no overwrite; marker rollback alone keeps the snapshot bound. Another Retry becomes visible only when the new whole-attempt record and ready generations publish atomically, followed by separate approval. |
 | Target commit marker proves success | `consumed` | `record_consumed` / `consumed`, disposition triggered | `completed` | `released_committed` | `committed` with absence evidence | terminal succeeded/recovered succeeded | Exact inserted keyset/count equals the protected record binding; preserve sanitized evidence, block reads, and start automatic disposition. |
-| Retriable failure/cancellation proves rollback before lease expiry | `consumed` | consumed input disposed at terminal; new source entitlement/record only after fresh reconciliation | `retryable` | `released_rolled_back` | `rolled_back` with evidence | terminal failed/retryable/cancelled | Reconcile the entire attempted Retry subset under one new entitlement and create one protected record; another Retry may name only its still-absent subset. |
+| Retriable failure/cancellation proves rollback before lease expiry | `consumed` | consumed input disposed at terminal; new source entitlement/record only after fresh reconciliation | `upload_bound -> retryable` only in the new reconciliation publication CAS | `released_rolled_back` | `rolled_back` with evidence | terminal failed/retryable/cancelled | Marker rollback alone keeps the snapshot bound. Reconcile the entire attempted Retry subset under one new entitlement; only its atomic record/generation publication exposes another Retry. |
 | Non-retryable failure proves rollback | `consumed` | consumed input disposition triggered; no new record | `invalid` | `released_rolled_back` | `rolled_back` with evidence | terminal failed/blocked | Start automatic disposition; final decision is blocked/failed-preserved and further Retry is forbidden. |
 | Crash/timeout/response loss after possible target commit | `consumed` | consumed input retained under the active unknown-outcome boundary | `upload_bound` | `commit_unknown_blocked` | `commit_unknown_blocked` | terminal/nonterminal blocked | Do not infer rollback, dispose early, Retry, or create another action; reconcile the target marker. |
 | Target-marker reconciliation proves commit | `consumed` | consumed input disposition triggered | `completed` | `released_committed` | `committed` with evidence | recovered succeeded | Use the same retry/mutation id and continue only to disposition. |
-| Target marker is guarded-finalized `aborted`, observed before lease expiry, and action is retryable | `consumed` | consumed input disposed; one new source entitlement becomes `record_available` | `retryable` | `released_rolled_back` | `rolled_back` with evidence | recovered failed/retryable | Another Retry scope is exactly the new protected record's still-absent subset from the whole attempted subset. |
+| Target marker is guarded-finalized `aborted`, observed before lease expiry, and action is retryable | `consumed` | consumed input disposed; one new source entitlement becomes `record_available` only in publication CAS | `upload_bound -> retryable` only in that publication CAS | `released_rolled_back` | `rolled_back` with evidence | recovered failed/retryable | Marker finalization alone does not expose Retry. The atomic reconciliation record plus new ready generations define the next Retry scope as the whole-attempt still-absent subset. |
 | Target marker is guarded-finalized `aborted` at/after lease expiry or first observed then | `consumed` | consumed input disposition triggered; no new record | `invalid` | `expired_rolled_back` | `rolled_back` with evidence | terminal failed/blocked | Start disposition; no further Retry from this expired action. |
 | Outcome remains unknown at retention deadline | `consumed` | consumed input forcibly disposed with snapshot; no new record | `invalid` then inaccessible | `commit_unknown_blocked` | `commit_unknown_blocked` | terminal blocked | Perform mandatory cryptographic disposition and permanently block this chain; this approval authorizes no post-retention DB read. |
 | Duplicate request after action commit/response loss | `consumed` | same entitlement/record/disposition state | current recorded state | same recorded lease | same mutation id/outcome | the same committed action | Return/preserve the existing binding; never create another action. |

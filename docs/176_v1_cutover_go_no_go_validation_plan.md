@@ -302,10 +302,11 @@ metadata. It is not read-only and requires its own exact human approval. It does
 not approve Preview.
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The manifest-preparation approval id is <manifestPreparationApprovalId> and both claim and completed protected publication must occur by <manifestPreparationExecuteByUtc>.
 I approve exactly one protected local content-manifest plus full-byte immutable snapshot preparation from package sourceCommit <sourceCommit> for inventory record <inventoryEvidenceRecordId>.
 That inventory was observed at <inventoryObservedAtUtc> and is approved for at most <inventoryMaxAgeSeconds> seconds; the preparation deadline above is within that window.
-The approved operator PC class is <operatorPcClass>, source alias is <sourceAlias>, source class is <sourceClass>, expected files is <fileCount>, expected physical rows is <= <rowLimit>, and full-byte snapshot size is <= <contentSnapshotMaxBytes> bytes.
+The approved operator PC class is <operatorPcClass>, source alias is <sourceAlias>, source class is <sourceClass>, expected files is <fileCount>, expected physical rows is <= <rowLimit>, inventory-observed source bytes are <inventoryObservedBytes>, and the separately human-approved full-byte snapshot ceiling is <contentSnapshotMaxBytes> bytes with contentSnapshotMaxBytes >= inventoryObservedBytes.
 The snapshot may be read only by the later separately approved Preview/Start/Retry chain and only until <contentSnapshotRetainUntilUtc>.
 I approve automatic bounded cryptographic disposal at terminal chain completion (zero-target Preview or completed Start/Retry), invalidation, or that deadline, whichever occurs first: stop active access, clear buffers, destroy the per-snapshot encryption key first, remove the byte file, verify absence, and record <snapshotDispositionEvidenceId>. A failed removal must leave keyless bytes unreadable, alert the operator, block new snapshot preparation, and retry idempotently only for the same record.
 I acknowledge that this write stores a confidential complete copy of the approved operational CSV bytes in owner-restricted protected storage.
@@ -370,6 +371,7 @@ pre-existing verified baseline is absent, stop and require a separate security-
 reviewed installation/provisioning work package and explicit approval.
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The target-identity preparation approval id is <targetIdentityPreparationApprovalId>; claim and protected publication must complete by <targetIdentityPreparationExecuteByUtc>.
 I approve exactly one read-only target-identity preparation for package sourceCommit <sourceCommit>, operator PC class <operatorPcClass>, inventory <inventoryEvidenceRecordId>, manifest <contentManifestRecordId>, snapshot <contentSnapshotRecordId>, and configured safe target class <targetClassStatus>.
 The expected exact target is anchored by pre-existing protected baseline <trustedTargetBaselineId> in state <trustedTargetBaselineState>, human-reviewed privacy-safe alias <trustedTargetAlias>, and safe out-of-band verification evidence <trustedTargetBaselineEvidenceId>. This preparation may not create, replace, or self-attest that baseline from the first DB observation.
@@ -426,6 +428,7 @@ fresh read-only inventory precheck and the later protected manifest-preparation
 result.
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The Preview approval id is <previewApprovalId> and it binds manifest-preparation approval <manifestPreparationApprovalId>.
 It binds pre-existing trusted target baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>.
 It also binds consumed target-identity preparation approval <targetIdentityPreparationApprovalId>, completed by <targetIdentityPreparationExecuteByUtc>, and prepared target DB binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, with safe evidence <targetDbBindingEvidenceId>.
@@ -434,7 +437,7 @@ I approve exactly one Upload Preview-only run from package sourceCommit <sourceC
 The approved inventory record is <inventoryEvidenceRecordId> on operator PC class <operatorPcClass>.
 The approved protected content manifest is <contentManifestRecordId>, prepared at <contentManifestPreparedAtUtc>, and it must be consumed no later than <contentManifestExecuteByUtc>.
 The approved immutable content snapshot is <contentSnapshotRecordId> in state prepared.
-Its approved maximum size is <contentSnapshotMaxBytes> bytes, it may be read only until <contentSnapshotRetainUntilUtc>, and its disposition state is scheduled.
+The inventory-observed source bytes are <inventoryObservedBytes>; the separately human-approved maximum size is <contentSnapshotMaxBytes> bytes and must satisfy contentSnapshotMaxBytes >= inventoryObservedBytes. The snapshot may be read only until <contentSnapshotRetainUntilUtc>, and its disposition state is scheduled.
 The approved source alias is <sourceAlias>.
 The approved source class is <sourceClass>.
 The approved file count is <fileCount>.
@@ -469,6 +472,8 @@ keyset inside that snapshot's protected encrypted boundary, expose only
 | Preview approval terminal state | `<consumed \| invalid>` |
 | Preview run id | `<previewRunId>` |
 | Inventory evidence record id | `<inventoryEvidenceRecordId>` |
+| Inventory observed source bytes | `<inventoryObservedBytes>` |
+| Human-approved snapshot byte ceiling | `<contentSnapshotMaxBytes>` |
 | Manifest-preparation approval id | `<manifestPreparationApprovalId>` |
 | Manifest-preparation approval terminal state | `<consumed>` |
 | Protected content manifest record id | `<contentManifestRecordId>` |
@@ -509,7 +514,10 @@ keyset inside that snapshot's protected encrypted boundary, expose only
 | Audit evidence | `<auditEvidenceId>` |
 | Confirmation no mutation actions were bundled | `<yes/no plus note>` |
 
-Pass requires unexpired inventory and manifest deadlines, immutable/authenticated
+Pass requires unexpired inventory and manifest deadlines, exact
+`inventoryObservedBytes` equality across inventory, manifest preparation,
+Preview approval, and Preview evidence, a separately approved
+`contentSnapshotMaxBytes >= inventoryObservedBytes`, immutable/authenticated
 approval records, unchanged `manifestPreparationApprovalId` and
 trusted target baseline id/alias/state/evidence,
 `targetIdentityPreparationApprovalId`/`previewApprovalId` across all stages, all
@@ -549,6 +557,7 @@ no job commits; once one job commits the approval remains `consumed` regardless
 of response loss or later job outcome.
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The Start Upload approval id is <startUploadApprovalId> and it must be claimed by <startUploadExecuteByUtc>.
 I approve exactly one Start Upload for preview run <previewRunId> with target files <targetFiles> and target rows <targetRows>.
 The protected exact target-only set binding is <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>.
@@ -756,6 +765,7 @@ Required before requesting approval:
 Approval wording:
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 The Retry Failed approval id is <retryApprovalId> and it must be claimed by <retryExecuteByUtc>.
 I approve exactly one Retry Failed using protected reconciliation record <retryReconciliationRecordId>, observed at <retryReconciliationObservedAtUtc> and claimable by <retryReconciliationExecuteByUtc>, for upload job <jobId> with freshly reconciled still-absent files <remainingFiles> and physical rows <remainingRows> from the entire prior attempted subset, preserving root failure class <rootFailureClass>.
 That reconciliation record is the protected approved-absent set binding <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>.
@@ -1097,6 +1107,7 @@ not-applicable values and reasons:
 | Package ZIP SHA-256 | `<exact when zipCreated=true \| not_applicable: zipCreated=false>` |
 | Inventory evidence record id | `<actual if created; exact for GO/CONDITIONAL GO \| not_created/not_observed/not_applicable: reason only if unavailable>` |
 | Inventory observed at UTC | `<exact for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
+| Inventory observed source bytes | `<inventoryObservedBytes: exact value from the same inventory/manifest/Preview chain for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
 | Inventory approved maximum age seconds | `<exact human-approved value for GO/CONDITIONAL GO \| not_approved/not_applicable: reason>` |
 | Preview execution deadline UTC | `<exact for GO/CONDITIONAL GO \| not_created/not_applicable: reason>` |
 | Manifest-preparation approval id | `<actual if issued; required for GO/CONDITIONAL GO \| not_approved/not_applicable: reason only if unavailable>` |
@@ -1108,7 +1119,7 @@ not-applicable values and reasons:
 | Protected content manifest terminal state | `<actual terminal state if stage ran; consumed for GO/CONDITIONAL GO \| not_created/not_run/not_applicable: reason only if unreached>` |
 | Protected immutable content snapshot record id | `<actual if created; required for GO/CONDITIONAL GO \| not_created/not_applicable: reason only if unavailable>` |
 | Protected content snapshot terminal state | `<previewed only for zero-target no_upload GO/CONDITIONAL GO \| completed when Start/Retry occurred \| actual non-proceed state for NO-GO/BLOCKED \| not_created/not_run/not_applicable: reason>` |
-| Protected content snapshot byte ceiling | `<actual approved ceiling; required if created \| not_created/not_applicable: reason>` |
+| Protected content snapshot byte ceiling | `<contentSnapshotMaxBytes: actual separately approved ceiling; required if created and no smaller than inventoryObservedBytes \| not_created/not_applicable: reason>` |
 | Protected content snapshot retention deadline | `<actual deadline; required if created \| not_created/not_applicable: reason>` |
 | Protected content snapshot disposition state | `<actual state; required if created \| not_created/not_applicable: reason>` |
 | Snapshot disposition evidence id | `<actual after disposal \| not_triggered: reason only while valid access remains>` |
@@ -1159,6 +1170,9 @@ not-applicable values and reasons:
 Decision-conditional rules:
 
 - `GO` or `CONDITIONAL GO` requires every lifecycle identifier above, including
+  exact `inventoryObservedBytes` equality across inventory, manifest preparation,
+  Preview approval/evidence, and final sign-off, plus a separately human-approved
+  snapshot byte ceiling that is no smaller;
   exact equality of trusted target baseline id/alias/state/evidence, target-
   identity preparation approval id/state/deadline/claim owner/fence, and
   target DB binding id/state/validity/evidence across the protected result,
@@ -1223,9 +1237,10 @@ Decision-conditional rules:
 Proceed acknowledgement for `GO` or `CONDITIONAL GO` only:
 
 ```text
+TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block while this document is NO-GO; it may be used only in a new record after every hard gate passes and a human separately approves GO or CONDITIONAL GO.
 I reviewed the evidence ids above and approve the recorded decision only for the
 accepted package commit/label and ZIP checksum/applicability, inventory record
-and observation/max-age/deadline fields, manifest-preparation approval plus its
+and observation/max-age/deadline/observed-source-byte fields, the separately approved snapshot byte ceiling, manifest-preparation approval plus its
 claim/completed-publication deadline, consumed
 protected manifest record and prepared/deadline fields, immutable content
 snapshot record/state/retention/disposition fields, Preview approval/run and
