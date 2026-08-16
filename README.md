@@ -48,7 +48,12 @@ owner/fence/claim-and-completion deadlines; an owner-only exact-byte source-
 provenance snapshot with canonical-root/handle identity, ceiling, capacity,
 confidentiality, retention, and separately approved disposition controls; an
 owner-only complete typed DB before-image captured atomically with the exact
-DELETE and marker; and one pre-reserved target-side Delete mutation marker whose
+DELETE and marker only after a protected DDL/schema fence proves every DELETE
+and restore-INSERT foreign-key/cascade, trigger/rule, policy, generated/default,
+sequence, replication/CDC/notification, and affected-relation class is absent or
+inert, leaving no secondary relation or externally observable effect;
+distinct committed dual-record versus aborted source-only cleanup authority; and
+one pre-reserved target-side Delete mutation marker whose
 marker-first reconciliation proves outcome despite response loss or external
 writers. Source bytes alone never make Delete rollback-ready.
 
@@ -370,7 +375,7 @@ backend until the protected runtime lifecycle in `docs/164`, `docs/173`, and
 Already-in-DB hard delete API contract:
 
 - `POST /api/upload/delete/preflight` is a protected preflight. It accepts a Preview run id, selected Preview item ids, an expected selected item count, and optional maintainer-only `timestampStartDate` / `timestampEndDate` values for mixed-date delete scope. The current response returns `ready` or `blocked`, exact selected key count, rollback readiness, sanitized coarse DB target guard, legacy unkeyed hashes, expiry, optional date scope, and safe reason code. The legacy hashes are not approved public evidence. The sanitized coarse DB fingerprint is diagnostic public evidence only and is never exact target authorization; the future operational contract must expose opaque protected data bindings and revalidate a protected exact `targetDbBindingId` instead.
-- This current preflight/job/reconcile contract is not operational proof. The full mandatory coordinator, preflight fencing/deadline, exact-byte source-provenance snapshot, atomic complete-row DB-before-image/restore/disposition, and target mutation-marker requirements are defined in `docs/164` and `docs/171`; every one must be implemented and deterministically tested before operational use.
+- This current preflight/job/reconcile contract is not operational proof. The full mandatory coordinator, preflight fencing/deadline, exact-byte source-provenance snapshot, DELETE side-effect/recoverability binding, atomic complete-row DB-before-image/restore/disposition with distinct committed and aborted cleanup branches, and target mutation-marker requirements are defined in `docs/164` and `docs/171`; every one must be implemented and deterministically tested before operational use.
 - `POST /api/upload/delete/jobs` is protected and destructive. It requires a ready preflight, typed exact key count, no-undo acknowledgement, and rollback-limit acknowledgement. It must not be used against operational data without separate explicit approval.
 - `GET /api/upload/delete/jobs/latest` is read-only and safe for status checks.
 - `POST /api/upload/delete/jobs/{deleteRunId}/reconcile` is protected but read-only against local Supabase. It updates local delete state/audit for `commit_unknown` or explicitly retried `reconciliation_failed` runs and never issues a delete.

@@ -149,13 +149,19 @@ Minimum fields:
 | `targetOperationFenceState` | Chain exclusion state `idle`, `claimed`, `active`, `recovery_disposition_pending`, `terminal`, or `invalid`; no state may regress except the explicitly fenced release to `idle` after a non-mutating failed preflight. |
 | `targetUploadBranchState` | `preview_pending`, `preview_ready`, `start_claimed`, `upload_active`, `retryable`, `retry_claimed`, `terminal`, `not_eligible`, or `invalid`. Preview claim starts `preview_pending`; positive target rows are required for publication as `preview_ready`. |
 | `targetDeleteBranchState` | `preview_pending`, `delete_preflight_ready`, `delete_preflight_claimed`, `delete_ready`, `delete_claimed`, `delete_active`, `recovery_disposition_pending`, `terminal`, `not_eligible`, or `invalid`. Preview claim starts `preview_pending`; eligible `already_in_db` items, not target rows, control publication as `delete_preflight_ready`. |
-| `targetOperationConsumer` | Exact chain consumer: `preview` while both branches are `preview_pending`; empty after publication in chain `idle`/global `chain_ready`; `start`, `retry`, `delete_preflight`, or `delete` while claimed/active; `delete` while recovery disposition is pending; `delete_disposition` or `delete_restore` during that approved close; empty only again at `terminal`/`invalidated_terminal`. |
+| `targetOperationConsumer` | Exact chain consumer: `preview` while both branches are `preview_pending`; empty after publication in chain `idle`/global `chain_ready`; `start`, `retry`, `delete_preflight`, or `delete` while claimed/active; `delete` while recovery disposition is pending; `delete_disposition` or `delete_restore` during that approved close; empty only again when the chain fence is `terminal` or `invalid` and the target-global coordinator is correspondingly `terminal` or `invalidated_terminal`. |
 | `targetOperationFenceGeneration` | Monotonic generation advanced by every atomic claim/invalidation/terminal transition; stale claimants cannot publish or mutate. |
 | `targetOperationFenceEvidenceId` | Opaque safe evidence for the exact state/generation/consumer transition; private bindings remain owner-only. |
 | `deleteRecoverySnapshotId` | When the Delete branch is used, the legacy-named owner-only exact-byte source-provenance snapshot from `docs/171`; it proves source/key provenance but is not a DB rollback image. |
 | `deleteDbBeforeImageId` | When a Delete commits, the pre-reserved opaque exact DB before-image id whose complete typed rows commit atomically with DELETE and the target marker. |
 | `deleteDbBeforeImageState` | `not_created` before mutation, `recovery_available` only after atomic before-image + DELETE + marker commit, then restore/disposition states from `docs/171`; a committed marker without the exact before-image blocks forever. |
 | `deleteDbBeforeImageRetainUntilUtc` | Non-extendable protected retention boundary held with the target-global owner through exact restore or verified disposal. |
+| `deleteDbMutationSchemaFenceBindingId` | Opaque protected binding to the DDL-conflicting relation/catalog locks or enforced schema-generation fence held through both DELETE and exact restore INSERT commit. |
+| `deleteDbMutationSideEffectBindingId` | Opaque protected binding to every DELETE and restore-INSERT dependency/effect class and affected relation defined in `docs/171`; exact definitions remain owner-only. |
+| `deleteDbMutationSideEffectReadiness` | Must be `direct_rows_only_no_unmodeled_or_nonrestorable_effects` for both DELETE and exact restore INSERT; any secondary relation or externally observable effect makes both transactions perform zero writes. |
+| `deleteDbRestoreActiveUseExpiresAtUtc` | Unrenewable restore-transaction commit deadline, strictly before reconcile and target/before-image validity deadlines. |
+| `deleteDbRestoreReconcileByUtc` | Marker-first read-only restore reconcile/equality deadline; after active-use expiry it may prove only an already committed marker and issue no restore write. |
+| `deleteDbRestoreDispositionMarginSeconds` | Positive protected margin reserved between restore reconcile and the minimum target-binding/before-image deadline. |
 | `edgeAuthClass` | Safe Edge auth boundary class. |
 | `startUploadApprovalId` | Required only when Start Upload is separately approved. |
 | `startUploadApprovalState` | `available`, `claimed`, `consumed`, or `invalid`; upload job creation may claim it once. |
@@ -362,15 +368,19 @@ Zero target rows terminalize only the upload branch. If eligible
 upload snapshot is disposed; Delete must use its separately verified fresh
 source/key evidence and may never reopen that disposed snapshot. Explicit cutover
 Delete exclusion or committed upload may terminalize their branch. A resolved
-committed/aborted Delete marker instead moves the coordinator, chain fence, and
-Delete branch to non-advanceable `recovery_disposition_pending` while its source-
-provenance snapshot and any committed exact DB before-image are retained and both
-consumers remain `delete`. A committed marker is accepted only with the same
-`recovery_available` complete-row before-image; source CSV with the same keys is
-never rollback evidence. Only CAS-bound key-first verified disposal of every
-retained record under consumer `delete_disposition`, or a separately approved
-exact DB-before-image restore followed by verified disposal under consumer
-`delete_restore`, may advance that same owner/generation to terminal;
+Delete marker moves the coordinator, chain fence, and Delete branch to non-
+advanceable `recovery_disposition_pending` and keeps both consumers `delete`.
+For a committed marker, the source snapshot is
+`awaiting_recovery_disposition`, the exact DB before-image remains
+`recovery_available`, both share one equal retention deadline, and the marker is
+accepted only with that complete-row before-image; source CSV with the same keys
+is never rollback evidence. For an authoritative aborted marker, the before-
+image remains `not_created`, restore is forbidden, and only the source snapshot
+is retained for disposition. CAS-bound key-first verified disposal under
+consumer `delete_disposition` claims every record that actually exists, while a
+separately approved exact DB-before-image restore followed by verified disposal
+under consumer `delete_restore` is available only for committed Delete. Only
+those terminal joins may advance the same owner/generation to terminal;
 `disposal_failed_blocked` remains non-
 advanceable. Non-retryable failure, target-binding invalidation, or completed
 branch disposition advances the applicable branch and finally
@@ -382,7 +392,16 @@ generation advance that invalidates that preflight/result after its Delete
 source-provenance snapshot key is destroyed, bytes are removal-verified, and safe
 disposition evidence is committed. `disposal_failed_blocked` keeps the global
 coordinator non-advanceable; any later attempt requires a fresh preflight
-approval. A terminal target binding cannot be revived
+approval. A restore claim atomically moves the before-image `recovery_available
+-> restoring` and both consumers `delete -> delete_restore`. Marker-proven commit
+or reconciled commit consumes the approval and moves the image to `restored`; an
+authoritative abort consumes that attempted approval, returns the intact image to
+`recovery_available`, advances both generations, and returns consumers to
+`delete`, so only a fresh human approval inside remaining deadlines may retry.
+`commit_unknown_blocked` keeps the image `restoring` and consumers
+`delete_restore`; no new action or disposition is possible. Reconcile-deadline
+expiry without an authoritative marker is non-advanceable, not an abort. A
+terminal target binding cannot be revived
 for Delete; a fresh Preview, target-identity preparation/binding, and approvals
 are required. Crash/response loss
 recovers only the already committed consumer/state; invalidation/restart advances
@@ -409,8 +428,13 @@ restore against a new Preview/Start/Delete,
 source keys matching while DB values differ, atomic complete-column before-image
 capture/DELETE/marker commit, before-image overflow/schema drift/tamper/missing-
 column failure, committed-marker/before-image mismatch, exact restore equality,
-dual-record disposition, and proof that every pre-commit failure performs zero
-DELETE,
+DELETE side-effect inspection/drift for cascades/triggers/rules/policies/
+generated/default/sequence/replication/CDC/notification/affected-relation
+classes plus concurrent DDL installation before/after fence acquisition for both
+DELETE and restore INSERT, committed dual-record versus aborted source-only disposition, equal-
+deadline and split-approval expiry authority, exact restore equality, and proof
+that every pre-commit failure performs zero DELETE without fabricating a before-
+image,
 stale generation, and proof that losing paths perform zero DB
 writes and publish no sibling record.
 

@@ -131,8 +131,13 @@ Status:
   provenance only and cannot reproduce DB rows whose stored values differ. Future
   production code/tests must capture every selected row's complete typed DB
   before-image under exact schema/column bindings and commit that image atomically
-  with DELETE and the target marker; exact restore and dual-record disposition
-  need separate approvals. This is not part of V1 cutover execution.
+  with DELETE and the target marker, hold an engine-appropriate DDL/schema fence
+  through commit, and reject unless every DELETE and restore-INSERT cascade/
+  trigger/policy/sequence/replication/notification/affected-relation class is
+  absent or inert with no secondary or externally observable effect; keep
+  committed dual-record cleanup separate from aborted source-only
+  cleanup; exact restore and disposition need their own bounded authority. This is
+  not part of V1 cutover execution.
 
 ## 7. Package And Transition
 

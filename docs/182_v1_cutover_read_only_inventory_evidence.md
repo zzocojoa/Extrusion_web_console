@@ -156,6 +156,9 @@ to the exact configured folder.
 | `deleteDbBeforeImageContentBindingId` | `not_created` |
 | `deleteDbBeforeImageSchemaBindingId` | `not_created` |
 | `deleteDbBeforeImageColumnSetBindingId` | `not_created` |
+| `deleteDbMutationSchemaFenceBindingId` | `not_created` |
+| `deleteDbMutationSideEffectBindingId` | `not_created` |
+| `deleteDbMutationSideEffectReadiness` | `not_observed` |
 | `deleteDbBeforeImageRowCount` | `not_observed` |
 | `deleteDbBeforeImageObservedBytes` | `not_observed` |
 | `deleteDbBeforeImageMaxBytes` | `not_approved` |
@@ -169,6 +172,9 @@ to the exact configured folder.
 | `deleteDbRestoreApprovalId` | `not_issued` |
 | `deleteDbRestoreApprovalState` | `not_issued` |
 | `deleteDbRestoreExecuteByUtc` | `not_approved` |
+| `deleteDbRestoreActiveUseExpiresAtUtc` | `not_approved` |
+| `deleteDbRestoreReconcileByUtc` | `not_approved` |
+| `deleteDbRestoreDispositionMarginSeconds` | `not_approved` |
 | `deleteDbRestoreMutationId` | `not_created` |
 | `deleteDbRestoreOutcomeState` | `not_created` |
 | `deleteDbRestoreOutcomeEvidenceId` | `not_created` |
