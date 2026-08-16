@@ -23,14 +23,17 @@ completed evidence.
 
 Operational upload verification is not "run upload and see if it works."
 
-It is a five-step evidence chain:
+It is a six-step evidence chain:
 
 1. read-only inventory precheck;
 2. exactly one separately approved protected content-manifest preparation;
-3. exactly one approved Preview-only run naming that protected manifest;
-4. exactly one separately approved Start Upload, only if Preview proves target
+3. exactly one separately approved read-only target-identity preparation, followed
+   by human review of the exact-match opaque target binding;
+4. exactly one approved Preview-only run naming that protected manifest and
+   reviewed target binding;
+5. exactly one separately approved Start Upload, only if Preview proves target
    rows;
-5. exactly one separately approved Retry Failed, only if authoritative outcome
+6. exactly one separately approved Retry Failed, only if authoritative outcome
    evidence proves rollback, fresh exact DB reconciliation of the entire
    attempted subset identifies still-absent rows, and a new approval names that
    exact reconciled subset.
@@ -149,6 +152,10 @@ Minimum fields:
 | `targetOperationConsumer` | Exact chain consumer: `preview` while both branches are `preview_pending`; empty after publication in chain `idle`/global `chain_ready`; `start`, `retry`, `delete_preflight`, or `delete` while claimed/active; `delete` while recovery disposition is pending; `delete_disposition` or `delete_restore` during that approved close; empty only again at `terminal`/`invalidated_terminal`. |
 | `targetOperationFenceGeneration` | Monotonic generation advanced by every atomic claim/invalidation/terminal transition; stale claimants cannot publish or mutate. |
 | `targetOperationFenceEvidenceId` | Opaque safe evidence for the exact state/generation/consumer transition; private bindings remain owner-only. |
+| `deleteRecoverySnapshotId` | When the Delete branch is used, the legacy-named owner-only exact-byte source-provenance snapshot from `docs/171`; it proves source/key provenance but is not a DB rollback image. |
+| `deleteDbBeforeImageId` | When a Delete commits, the pre-reserved opaque exact DB before-image id whose complete typed rows commit atomically with DELETE and the target marker. |
+| `deleteDbBeforeImageState` | `not_created` before mutation, `recovery_available` only after atomic before-image + DELETE + marker commit, then restore/disposition states from `docs/171`; a committed marker without the exact before-image blocks forever. |
+| `deleteDbBeforeImageRetainUntilUtc` | Non-extendable protected retention boundary held with the target-global owner through exact restore or verified disposal. |
 | `edgeAuthClass` | Safe Edge auth boundary class. |
 | `startUploadApprovalId` | Required only when Start Upload is separately approved. |
 | `startUploadApprovalState` | `available`, `claimed`, `consumed`, or `invalid`; upload job creation may claim it once. |
@@ -301,8 +308,9 @@ reject while any older Preview chain is claimed, ready, active, retryable,
 delete-ready, or `commit_unknown_blocked`; only `idle` or a fully terminal prior
 generation may advance to a new `preview_claimed` generation. `invalidating` is
 not terminal: it may become `invalidated_terminal` only after every stale owner
-is fenced, no DB read/write/unknown outcome remains, and every upload/Delete
-snapshot/reconciliation/recovery record is disposed or terminally closed with
+is fenced, no DB read/write/unknown outcome remains, and every upload snapshot,
+Delete source-provenance snapshot, DB before-image, reconciliation, and recovery
+record is disposed or terminally closed with
 safe evidence. `disposal_failed_blocked` and `commit_unknown_blocked` cannot
 advance. In the same local
 transaction and before the authoritative Preview DB query, every Preview claims
@@ -355,10 +363,13 @@ upload snapshot is disposed; Delete must use its separately verified fresh
 source/key evidence and may never reopen that disposed snapshot. Explicit cutover
 Delete exclusion or committed upload may terminalize their branch. A resolved
 committed/aborted Delete marker instead moves the coordinator, chain fence, and
-Delete branch to non-advanceable `recovery_disposition_pending` while its exact
-recovery snapshot is retained and both consumers remain `delete`. Only CAS-bound
-key-first verified disposal under consumer `delete_disposition`, or a separately
-approved exact restore followed by verified disposal under consumer
+Delete branch to non-advanceable `recovery_disposition_pending` while its source-
+provenance snapshot and any committed exact DB before-image are retained and both
+consumers remain `delete`. A committed marker is accepted only with the same
+`recovery_available` complete-row before-image; source CSV with the same keys is
+never rollback evidence. Only CAS-bound key-first verified disposal of every
+retained record under consumer `delete_disposition`, or a separately approved
+exact DB-before-image restore followed by verified disposal under consumer
 `delete_restore`, may advance that same owner/generation to terminal;
 `disposal_failed_blocked` remains non-
 advanceable. Non-retryable failure, target-binding invalidation, or completed
@@ -368,7 +379,7 @@ the chain fence and target-global coordinator to `terminal` or first to
 neither generation is reusable. A
 blocked/expired non-mutating preflight may release to `idle` only by an atomic
 generation advance that invalidates that preflight/result after its Delete
-recovery snapshot key is destroyed, bytes are removal-verified, and safe
+source-provenance snapshot key is destroyed, bytes are removal-verified, and safe
 disposition evidence is committed. `disposal_failed_blocked` keeps the global
 coordinator non-advanceable; any later attempt requires a fresh preflight
 approval. A terminal target binding cannot be revived
@@ -392,9 +403,14 @@ without exactly one matching `record_available` record,
 Preview/expired target/disposition failure to fresh-generation recovery, proof
 that `invalidating`/disposal-failed/commit-unknown cannot advance, old-
 chain Start/Delete racing a new Preview at claim/query/publication boundaries,
-blocked/expired Delete preflight racing recovery-snapshot disposition and a new
+blocked/expired Delete preflight racing source-provenance-snapshot disposition and a new
 Preview, resolved Delete racing early/expiry disposition or separately approved
 restore against a new Preview/Start/Delete,
+source keys matching while DB values differ, atomic complete-column before-image
+capture/DELETE/marker commit, before-image overflow/schema drift/tamper/missing-
+column failure, committed-marker/before-image mismatch, exact restore equality,
+dual-record disposition, and proof that every pre-commit failure performs zero
+DELETE,
 stale generation, and proof that losing paths perform zero DB
 writes and publish no sibling record.
 

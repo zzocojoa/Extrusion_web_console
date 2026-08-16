@@ -67,7 +67,8 @@ Relationship to source documents:
   turns into evidence and approval work packages.
 - `docs/173_v2_operational_upload_verification_gate.md` defines the operational
   upload evidence chain: inventory, separately approved protected manifest
-  preparation, Preview-only, Start Upload, and Retry Failed.
+  preparation, separately approved read-only target-identity preparation plus
+  human exact-match review, Preview-only, Start Upload, and Retry Failed.
 - `docs/164_operator_data_mutation_safety_gate.md` defines exact approval
   wording and separates read-only checks from local-state writes and DB
   mutations.
@@ -175,7 +176,7 @@ should be created merely to turn a not-applicable gate into a test case.
 | Evidence area | Required artifact | Allowed command or observation class | Forbidden actions | Pass condition | Fail / stop condition | Evidence owner | Source reference |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Package/source commit verification | Package label, source commit, build metadata, and source tree commit record | Read-only package metadata inspection; `git rev-parse HEAD`; `git show --stat --oneline --name-status HEAD` | Rebuilding, deploying, or editing package metadata during evidence capture | Package source commit and label match the accepted package and docs | Missing, stale, or mismatched package metadata | Maintainer | `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
-| README/API smoke contract verification | Contract note proving README smoke uses `previewRunId`, `expectedTargetRows`, and `expectedTargetFiles` | Read-only README and schema inspection | Start Upload execution | README snippet matches backend required approval-count contract | Missing `expectedTargetRows`, stale camelCase fields, or ad hoc payload | Maintainer | `README.md`; `backend/app/api/upload_jobs.py`; `backend/app/schemas/upload_preview.py` |
+| README/API no-live-smoke and schema contract verification | Contract note proving live Preview/Upload Job POST examples are intentionally absent while backend schema/API retain `previewRunId`, `expectedTargetRows`, and `expectedTargetFiles` | Read-only README, schema, API, and automated-test inspection | Start Upload execution or ad hoc live POST | README keeps live POST commands omitted until the protected runtime lifecycle exists; API source rejects missing/non-positive target rows and automated tests cover missing and positive-count mismatch paths | Live POST example is reintroduced, required fields drift, claimed test coverage exceeds the actual suite, or an ad hoc payload is treated as evidence | Maintainer | `README.md`; `backend/app/api/upload_jobs.py`; `backend/app/schemas/upload_jobs.py`; `tests/backend/test_upload_jobs_api_contract.py` |
 | GET `/api/config` safe snapshot | Sanitized config evidence showing source class, target classes, mode, and override classes | `GET /api/config` against an already running local operator backend; store sanitized classes only | `PUT /api/config`, Settings save, raw path or secret capture | Snapshot confirms expected API mode/source class without raw paths or secret values | Config source class is wrong, raw sensitive value would be recorded, or endpoint unavailable | Maintainer/operator | `backend/app/api/config.py`; `backend/app/services/config_service.py`; `README.md` |
 | Local Supabase status evidence | Sanitized runtime readiness/status-class output | Read-only dashboard/runtime status observation and existing status endpoints | Start/stop/reset/cleanup/init/migration | Status proves local Supabase readiness class or a clear blocked class | DB-dependent class is blocked and unresolved | Maintainer/operator | `docs/00_product_scope.md`; `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
 | Local Supabase start/stop evidence, only if separately approved | Operation id, event ids, before/after status classes, and audit ids | Runtime start/stop only after separate approval and no active job/preview | Supabase init/reset, Docker create/rm/prune/up/down, volume deletion | Start/stop is bounded, audited, and returns expected readiness or stopped class | Required containers missing, active job/preview, broad cleanup requested, or audit unavailable | Maintainer/operator | `backend/app/services/runtime_control.py`; `backend/app/services/command_runner.py` |
@@ -882,7 +883,7 @@ or exact keys.
 | Item | Required before GO | Evidence id | Status | Approver | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Accepted package/source commit | Yes | `wp02-main-5695b93` | `pending: hard stop` | `<approver>` | Source tree is known; accepted executing package label/build metadata is not yet bound. |
-| README/API smoke contract | Yes | `wp02-wp01-automated-5695b93` | `pass` | `<approver>` | Approval-count contract is covered. |
+| README/API no-live-smoke and schema contract | Yes | `wp02-wp01-automated-5695b93` | `pass` | `<approver>` | Live Preview/Upload Job POST examples are intentionally omitted; API source enforces missing/non-positive target-row rejection and tests cover missing/mismatch paths. |
 | Sanitized config snapshot | Yes | `wp02-config-runtime-20260713` | `pass` | `<approver>` | Safe classes only. |
 | Local Supabase readiness | Yes | `wp02-config-runtime-20260713` | `pass` | `<approver>` | API/DB/Studio/Edge ready; non-core attention recorded separately. |
 | Read-only inventory precheck | Yes | `docs/182`; `inv_20260815T031829Z_0d41338f` | `partial: baseline only` | `human_operator` | Do not refresh for approval yet. Atomic binding implementation/tests and rebuilt-package verification come first; the later successor record also needs safe operator/source bindings. |
@@ -915,7 +916,7 @@ or exact keys.
 | Start Upload or Retry Failed approval is replayed/concurrent, binds different bytes, outlives retention, or loses the remote-commit/local-release acknowledgement. | Production-critical | Medium until lifecycle exists | Keep both actions blocked until approvals atomically claim the same snapshot with one job/event, one unrenewable bounded lease, and one target-fenced mutation id; writes and durable outcome marker share the authoritative target transaction; timeouts never infer rollback; `commit_unknown_blocked` prevents Retry/cutover; disposition cannot race an active/pending outcome. | Backend maintainer plus separate mutation approval | Production implementation/tests, approval/snapshot/lease/outcome terminal states, duration/margin, target marker/reconciliation evidence, atomic binding evidence, job/event id, and audit evidence |
 | Grafana/Vector non-core attention is silently ignored or confused with core readiness. | Medium | Medium | Resolve it or record owner, residual-risk acceptance, and non-destructive stop/rollback procedure. | Release owner/operator | Sanitized runtime state and signed caveat |
 | A new CSV or failure class escapes the current fixture/Audit coverage. | High | Low-medium | Add representative fixtures and keep failure-path API/UI checks in regression and approved operations. | Maintainer QA and operator sign-off | Fixture/soak and safe Audit/Job Logs evidence |
-| Accidental destructive delete or cleanup is bundled into validation, or delete preflight/delete approval text is replayed. | Production-critical | Low | Treat delete, reset, cleanup, and Docker destructive commands as hard exclusions. A future delete requires every `docs/164`/`docs/171` hardened gate: target-global coordination across Preview chains; fenced single-use preflight claim/result with completion deadline; owner-only canonical-root exact-byte recovery snapshot with capacity/confidentiality/retention and separate early-disposition approval; single-use Delete approval/run; and a pre-reserved target mutation marker with atomic commit and marker-first reconcile. No separate Delete evidence may be imported into this cutover, and any Delete here forces NO-GO. | Hardened destructive plan plus operator approvals | Exclusion record or full implemented/tested coordinator/preflight/recovery-snapshot/disposition/marker lifecycles and exact package |
+| Accidental destructive delete or cleanup is bundled into validation, or delete preflight/delete approval text is replayed. | Production-critical | Low | Treat delete, reset, cleanup, and Docker destructive commands as hard exclusions. A future delete requires every `docs/164`/`docs/171` hardened gate: target-global coordination across Preview chains; fenced single-use preflight claim/result with completion deadline; owner-only canonical-root source-provenance snapshot; complete typed DB before-image captured atomically with DELETE/marker under exact schema/column/ceiling/capacity/confidentiality/retention bindings; exact restore and dual-record disposition approvals; and a single-use Delete approval/run with marker-first reconcile. Source CSV never proves exact rollback. No separate Delete evidence may be imported into this cutover, and any Delete here forces NO-GO. | Hardened destructive plan plus operator approvals | Exclusion record or full implemented/tested coordinator/preflight/source-provenance/DB-before-image/restore/disposition/marker lifecycles and exact package |
 | Package/source mismatch leads to testing the wrong build. | High | Low | Verify package metadata and source commit before every evidence package. | Release owner | Package commit, label, and hash/metadata evidence |
 | Secrets or raw operational data leak into evidence. | High | Medium | Store externally only opaque random ids, safe classes/counts, approved package hashes, and reason codes; keep exact operational material plus any keyed integrity data owner-only and review screenshots before attachment. | Security reviewer/maintainer | Redaction checklist and sanitized artifacts |
 
@@ -1043,7 +1044,8 @@ not-applicable values and reasons:
 - a prior Delete leaves target-global/chain/Delete-branch
   `recovery_disposition_pending`, unresolved restore/disposal, or failed cleanup;
   any new Preview/Start/Retry/Delete can race that state; or a coordinator is
-  released before key-first verified recovery-snapshot disposal;
+  released before key-first verified disposal of both source provenance and the
+  exact DB before-image;
 - manifest-preparation approval id, protected content manifest/snapshot record
   id, Preview approval id, Preview run id, snapshot stage state, or atomic
   snapshot binding evidence id is missing, invalid, reused, or differs between
@@ -1056,10 +1058,12 @@ not-applicable values and reasons:
   single-use delete approval atomically claimed with that result and exactly one
   `deleteRunId`;
 - a requested operational delete lacks the singleton target-global coordinator,
-  fenced preflight owner/completion CAS, canonical-root exact-byte recovery
-  snapshot with capacity/confidentiality/retention and protected early-
-  disposition approval, or pre-reserved target mutation marker with atomic
-  Delete commit and marker-first outcome proof required by `docs/164`/`docs/171`;
+  fenced preflight owner/completion CAS, canonical-root exact-byte source-
+  provenance snapshot, protected complete-row DB before-image with schema/column/
+  ceiling/capacity/confidentiality/retention bindings and exact restore/dual-
+  record disposition approvals, or pre-reserved target mutation marker with
+  atomic before-image + Delete + marker commit and marker-first outcome proof
+  required by `docs/164`/`docs/171`;
 - full-byte snapshot preparation lacks an explicit approved byte ceiling,
   protected capacity/confidentiality controls, retention deadline, or human
   acknowledgement of automatic cryptographic disposal; or disposal cannot
@@ -1313,7 +1317,9 @@ enforcement. First implement/test a protected expiring single-use preflight
 approval atomically bound to exactly one preflight and a separate protected
 single-consumer ready preflight result, then a separate protected expiring
 single-use delete approval atomically claimed with that result and exactly one
-delete run under a separate plan; do not bundle it with upload cutover.
+delete run, plus the source-provenance snapshot and atomic complete-row DB-before-
+image/marker, exact restore, and dual-record disposition contract under a
+separate plan; do not bundle it with upload cutover.
 
 ### WP-G: legacy CSV fixture expansion
 

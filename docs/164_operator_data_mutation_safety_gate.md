@@ -75,7 +75,7 @@ Not allowed without a new mutation approval:
 | Fixture mutation against disposable DB | fixture mutation | hold | exact fixture approval |
 | Start Upload against real local Supabase | limited real mutation | blocked until single-use approval and immutable-snapshot lifecycle exists | lifecycle implementation/tests, fresh Preview, then exact Start Upload approval bound to the Preview snapshot |
 | Retry Failed against real local Supabase | limited real mutation | blocked until single-use approval and immutable-snapshot lifecycle exists | lifecycle implementation/tests, failed-job evidence, then exact Retry Failed approval bound to the source-job snapshot |
-| Already-in-DB hard delete | destructive real mutation | blocked until separate single-use preflight and delete approval lifecycles exist | lifecycle implementation/tests, exact preflight-only approval/run, then complete exact hard-delete approval |
+| Already-in-DB hard delete | destructive real mutation | blocked until separate single-use preflight/delete lifecycles and atomic exact DB-before-image rollback exist | lifecycle implementation/tests, source-provenance preflight, protected target-side complete-row before-image + DELETE + marker transaction, exact restore/disposition tests, then complete exact hard-delete approval |
 | Supabase reset/migration/cleanup, Docker cleanup, LAN, delete UI expansion, deployment | forbidden for this gate | blocked | new plan and separate approval |
 
 ## Preview-Only Approval Gate
@@ -702,27 +702,27 @@ operator PC/source alias/class, latest Preview run, DB target class, opaque
 protected exact `targetDbBindingId`, expected schema class, exact selected item
 count, opaque protected selection-request binding id, and
 `deletePreflightExecuteByUtc`, human-supplied
-`deletePreflightCompleteByUtc`, exact read-only observed bytes, human-supplied
+`deletePreflightCompleteByUtc`, exact read-only observed source bytes, human-supplied
 `deleteRecoverySnapshotMaxBytes` and `deleteRecoverySnapshotRetainUntilUtc`,
 protected capacity evidence, and an approved owner-only confidentiality class.
-It authorizes exactly one protected exact-byte Delete recovery snapshot before
+It authorizes exactly one protected exact-byte Delete source-provenance snapshot before
 the preflight DB read and exactly one preflight run, and no DB
 mutation, hard delete, reconcile, Preview, upload, retry, Settings save, runtime
 lifecycle, cleanup, LAN, or deployment.
 
 ```text
-The delete-preflight approval id is <deletePreflightApprovalId>; it must be claimed by <deletePreflightExecuteByUtc>, and protected recovery-snapshot plus preflight-result publication must complete by <deletePreflightCompleteByUtc>.
+The delete-preflight approval id is <deletePreflightApprovalId>; it must be claimed by <deletePreflightExecuteByUtc>, and protected source-provenance-snapshot plus preflight-result publication must complete by <deletePreflightCompleteByUtc>.
 I approve exactly one read-only operational delete preflight for package <packageSourceCommit>/<packageLabel>/<zipSha256>, Preview <previewRunId>, operator PC <operatorPcClass>, source <sourceAlias>/<sourceClass>, DB target <dbTargetClass> anchored to pre-existing trusted baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>, from consumed target-identity preparation approval <targetIdentityPreparationApprovalId> completed by <targetIdentityPreparationExecuteByUtc>, with protected exact binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, safe evidence <targetDbBindingEvidenceId>, and target operation fence <targetOperationFenceId> in chain state idle with Delete branch delete_preflight_ready, exact generation <targetOperationFenceGeneration>, safe evidence <targetOperationFenceEvidenceId>, expected schema <schemaClass>, selected items <selectedItemCount>, and protected selection-request binding <selectionRequestBindingId>.
 It also binds exact-target singleton coordinator <targetGlobalCoordinatorId>, sole owner fence <targetOperationFenceId>, state chain_ready, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, and safe evidence <targetGlobalCoordinatorEvidenceId>. Preflight creation must atomically claim both generations for consumer delete_preflight; any different Preview-chain owner or concurrent target consumer must fail.
-Before any source copy or preflight DB read, this approval permits creation of exactly one owner-only encrypted immutable Delete recovery snapshot <deleteRecoverySnapshotId> and protected exact-byte content binding <deleteRecoveryContentBindingId>. The reviewed source scope is the selected files/items above, observed bytes are <deleteRecoveryObservedBytes>, the non-inferred approved ceiling is <deleteRecoverySnapshotMaxBytes>, protected capacity evidence is <deleteRecoveryCapacityEvidenceId>, the approved confidentiality/access class is <deleteRecoveryConfidentialityClass>, and bytes may be read only until <deleteRecoverySnapshotRetainUntilUtc>. Every selected entry must remain inside the canonical approved source root, with no symlink/junction/reparse-point/hard-link ambiguity at any path component; copy, private digest, and parse must use the same stable opened-handle identity. Any root escape, link swap, or handle-identity change disposes partial bytes and stops before DB read. Creation must atomically bind the snapshot to this approval/Preview/selection/source/coordinator/fence, privately verify exact bytes, file boundaries, metric values and parsed keys, and never reuse the disposed upload snapshot. Preflight and Delete/reconcile must read this snapshot only and never reopen the operational source. Invalidation, blocked/expired preflight, or retention expiry pre-authorizes automatic per-record key destruction plus verified byte removal. After a resolved Delete, it remains encrypted in awaiting_recovery_disposition until a separate immutable single-use early-disposition approval atomically authorizes accept_delete_and_dispose, a separately scoped restore approval authorizes restore_then_dispose, or the approved retention deadline triggers automatic cleanup; all unrelated/new mutations are blocked while unresolved, and only that exact separately approved recovery action may run before disposal. Disposal failure blocks and alerts.
+Before any source copy or preflight DB read, this approval permits creation of exactly one owner-only encrypted immutable Delete source-provenance snapshot <deleteRecoverySnapshotId> and protected exact-byte content binding <deleteRecoveryContentBindingId>. The reviewed source scope is the selected files/items above, observed bytes are <deleteRecoveryObservedBytes>, the non-inferred approved ceiling is <deleteRecoverySnapshotMaxBytes>, protected capacity evidence is <deleteRecoveryCapacityEvidenceId>, the approved confidentiality/access class is <deleteRecoveryConfidentialityClass>, and bytes may be read only until <deleteRecoverySnapshotRetainUntilUtc>. Every selected entry must remain inside the canonical approved source root, with no symlink/junction/reparse-point/hard-link ambiguity at any path component; copy, private digest, and parse must use the same stable opened-handle identity. Any root escape, link swap, or handle-identity change disposes partial bytes and stops before DB read. Creation must atomically bind the snapshot to this approval/Preview/selection/source/coordinator/fence, privately verify exact bytes, file boundaries, metric values and parsed keys, and never reuse the disposed upload snapshot. Preflight and Delete/reconcile must read this snapshot only and never reopen the operational source. This source snapshot proves provenance and selected keys only: it is not an exact DB rollback image and cannot make rollbackReadiness true. Preflight must separately report whether the future protected target-side DB-before-image schema/complete-column-set/capacity/confidentiality contract is ready, but it must not create a before-image or mutate the DB. Invalidation, blocked/expired preflight, or retention expiry pre-authorizes automatic per-record key destruction plus verified byte removal. After a resolved Delete, it remains encrypted in awaiting_recovery_disposition together with any committed DB before-image until a separate immutable single-use early-disposition approval atomically authorizes accept_delete_and_dispose for both, a separately scoped restore approval authorizes DB-before-image restore_then_dispose, or the approved retention deadlines trigger automatic cleanup; all unrelated/new mutations are blocked while unresolved, and only that exact separately approved recovery action may run before disposal. Disposal failure blocks and alerts.
 This approval permits only that preflight DB read and its protected local evidence/audit write. It does not approve hard delete, reconcile, Preview, Start Upload, Retry Failed, Settings save, runtime lifecycle, source mutation, cleanup, LAN, or deployment.
 ```
 
 | Preflight stage | Approval state | Preflight/result state | Required result |
 | --- | --- | --- | --- |
 | Before preflight | `available` | absent | Every exact binding and deadline is checked; the target-identity preparation approval is consumed and the exact target binding is unexpired and revalidated. |
-| Atomic preflight/snapshot creation | `claimed` | being inserted in the same transaction | Both target-global and chain generations are atomically claimed for consumer `delete_preflight`; one durable `deletePreflightClaimId`/monotonic `deletePreflightFence` and one protected recovery snapshot owner/record are reserved before source copy/DB read. Concurrent Preview/Start/Retry/Delete or duplicate claims cannot create another preflight/snapshot. |
-| Recovery snapshot preparation, before DB read | `claimed` | snapshot `preparing` | Copy once under the byte ceiling, privately verify exact-byte digests/file boundaries/metric values/parsed keys, and CAS-publish one immutable `prepared` snapshot/content binding using the exact claim/fence, both deadlines, target binding, coordinator/fence generations, and snapshot state. Expiry, replacement, concurrent change, restart, failure, or late publication advances the fence, invalidates/disposes it, and permits zero DB mutation. |
+| Atomic preflight/snapshot creation | `claimed` | being inserted in the same transaction | Both target-global and chain generations are atomically claimed for consumer `delete_preflight`; one durable `deletePreflightClaimId`/monotonic `deletePreflightFence` and one protected source-provenance snapshot owner/record are reserved before source copy/DB read. Concurrent Preview/Start/Retry/Delete or duplicate claims cannot create another preflight/snapshot. |
+| Source-provenance snapshot preparation, before DB read | `claimed` | snapshot `preparing` | Copy once under the byte ceiling, privately verify exact-byte digests/file boundaries/metric values/parsed keys, and CAS-publish one immutable `prepared` snapshot/content binding using the exact claim/fence, both deadlines, target binding, coordinator/fence generations, and snapshot state. Expiry, replacement, concurrent change, restart, failure, or late publication advances the fence, invalidates/disposes it, and permits zero DB mutation. |
 | Preflight DB read and result publication | `claimed` | snapshot `preflight_bound`; result in progress | Read only the snapshot-derived keys. CAS-publish exactly one `ready_available` or `blocked` result after rechecking the same owner/fence/deadlines/target/coordinator/snapshot state. Response loss returns only the same record without another source copy or DB read. |
 | Failure before preflight record commits | `invalid` | absent | Zero operational DB writes; a new approval is required. |
 | Exactly one preflight record commits | `consumed` | committed, later `ready_available` or `blocked` | Approval remains consumed despite response loss or later read/evidence failure. A ready result is available to exactly one later delete claim. |
@@ -737,9 +737,10 @@ preparation approval id/state/deadline, opaque protected exact
 state/upload branch/Delete branch/consumer/generation/evidence, public versioned schema class, opaque protected schema
 binding id, selected item/exact key counts,
 opaque protected selection/keyset/source-evidence/source-file-signature-set
-binding ids, protected Delete recovery snapshot/content-binding ids/state/
+binding ids, protected Delete source-provenance snapshot/content-binding ids/state/
 observed and maximum bytes/capacity/confidentiality/retention/final-disposition/
-disposition/evidence, rollback readiness/limitations, expiry,
+disposition/evidence, `deleteDbBeforeImagePreparationReadiness`,
+`rollbackReadiness=false_pending_atomic_before_image`, rollback limitations, expiry,
 safe reason class, and `deletePreflightState`. Only a `ready_available`, unexpired
 result may be used to construct the separate complete `docs/171` hard-delete
 approval. That result has a protected single-consumer lifecycle
@@ -767,7 +768,8 @@ DB read, and result publication; delayed publishers racing restart/expiry/target
 binding/coordinator/snapshot invalidation; and recovery without a second copy or
 DB read. They must also cover equal-size/equal-mtime and same-key/different-
 metric-value replacement before/after snapshot publication and before/during
-Delete, concurrent source writes, byte ceiling/capacity/confidentiality failures,
+Delete, proof that source values never substitute for different current DB values,
+concurrent source writes, byte ceiling/capacity/confidentiality failures,
 canonical-root escape and Windows symlink/junction/reparse-point/hard-link plus
 opened-handle identity races, blocked/expired preflight, Delete success/failure/
 commit-unknown, missing/substituted/expired/replayed/concurrent early-disposition
@@ -789,6 +791,12 @@ immutable/authenticated, expiring, single-use delete approval record that is
 atomically claimed with exactly one `deleteRunId`. The current `docs/171` record
 and wording alone do not satisfy this runtime enforcement requirement. An exact
 delete preflight and separate destructive approval are also required.
+The current API's source-derived `rollbackReadiness=true` is legacy evidence and
+must not satisfy this gate; only the atomic DB-before-image transition defined in
+`docs/171` can establish exact rollback readiness.
+The target-side recovery store and any supporting schema migration are future
+production implementation under a separate approved work package. This document
+does not authorize that migration, DB access, or a Delete/restore execution.
 
 Required preconditions:
 
@@ -797,26 +805,34 @@ Required preconditions:
   one bound delete preflight result is `ready_available` and unexpired;
 - exact selected item count;
 - exact key count;
-- rollback readiness is true and rollback limitation is explicitly
-  acknowledged; acknowledgement does not replace rollback readiness;
+- protected DB-before-image preparation readiness is true, rollback readiness is
+  `false_pending_atomic_before_image` before mutation, and rollback limitations
+  are explicitly acknowledged; only the authoritative transaction may set
+  rollback readiness true after complete typed capture and revalidation;
 - local DB target guard is ready;
 - trusted target baseline id/alias/state/evidence, consumed target-identity
   preparation approval id/state/deadline, and protected
   exact target DB binding id/state/validity/evidence match across preflight
   approval/result and the later delete approval; the binding remains unexpired
-  through `deleteExecuteByUtc` and `deleteReconcileByUtc` and is revalidated with
-  the authoritative DB clock inside the delete/reconcile transaction;
+  through `deleteExecuteByUtc`, `deleteReconcileByUtc`, and
+  `deleteDbBeforeImageRetainUntilUtc` and is revalidated with the authoritative
+  DB clock inside every delete/reconcile/restore transaction;
 - the same target operation fence is owned only by the consumed preflight result
   in `delete_ready`; its exact generation/evidence is atomically claimed for
   consumer `delete` with the delete approval/result/run, and no Start/Retry owner
   or terminal/stale generation exists;
-- the same immutable protected Delete recovery snapshot/content binding from
+- the same immutable protected Delete source-provenance snapshot/content binding from
   preflight is `preflight_bound`, unexpired, within its approved ceiling, and
   atomically becomes `delete_bound`; no upload snapshot or current source reparse
   can replace it, and Delete/reconcile never reopen the operational source;
 - one random unique `deleteMutationId` is pre-reserved in the immutable Delete
   approval and can be claimed only with the exact approval/preflight/run/keyset/
-  recovery-snapshot/target-global/chain bindings;
+  source-provenance/target-global/chain bindings;
+- one random unique `deleteDbBeforeImageId` plus exact content/schema/complete-
+  column-set bindings, row count, human-approved byte ceiling, protected capacity/
+  confidentiality evidence, and retention deadline are pre-reserved in the same
+  immutable approval; the target-side record is created only inside the
+  authoritative Delete transaction;
 - DELETE privilege preflight is ready;
 - no mixed-date whole-item workaround is used;
 - package source commit, and zip checksum when `zipCreated=true`, still match
@@ -832,8 +848,8 @@ package label/checksum, safe coarse DB fingerprint, trusted target baseline id/
 alias/state/evidence, target-identity preparation
 approval id/state/deadline, protected exact target DB binding id/state/validity/
 evidence, delete reconcile deadline, public schema class, protected schema binding id, preflight id,
-selection/keyset/source/source-file-signature/Delete-recovery-snapshot
-protected binding ids, policy/gate states,
+selection/keyset/source/source-file-signature/Delete-source-provenance-snapshot
+and DB-before-image protected binding ids, policy/gate states,
 approver/executor, stop condition, and evidence location, plus
 `deleteExecuteByUtc` and the single-run lifecycle fields below.
 
@@ -841,7 +857,7 @@ approver/executor, stop condition, and evidence location, plus
 In addition to every exact field and sentence required by docs/171, including trusted target baseline id/alias/state/evidence, target-identity preparation approval id/state/deadline, target DB binding id/state/validity/evidence, target operation fence id/chain and branch states/consumer/generation/evidence, and <deleteReconcileByUtc>, the protected delete approval id/approvalId is <deleteApprovalId> and it must be claimed by <deleteExecuteByUtc>.
 The ready delete-preflight result <deletePreflightId> is initially ready_available and may be claimed and consumed only by this <deleteApprovalId> and the one deleteRunId generated in the joint claim transaction.
 I approve one atomic transaction that claims both this delete approval and that ready preflight result and durably binds both to exactly one generated deleteRunId; no response loss, commit_unknown result, audit/evidence failure, cancellation, reconciliation, or second approval may create or authorize a second run from either record.
-The random unique <deleteMutationId> is pre-reserved in this immutable approval. Before any DELETE it may create exactly one target-side prepared marker bound to this approval/preflight/run, exact keyset/content/recovery snapshot, target DB binding, and both target-global and chain fence generations. The exact-key DELETE and prepared-to-committed marker transition must commit in the same authoritative target transaction. Aborted may be finalized only after non-commit is authoritative; timeout/response loss is commit_unknown_blocked until marker-first reconciliation proves committed or aborted, and current row presence/delta may never infer the outcome.
+The random unique <deleteMutationId> and exact DB before-image <deleteDbBeforeImageId> are pre-reserved in this immutable approval. Before any DELETE, exactly one target-side prepared marker binds this approval/preflight/run, exact keyset/source provenance, before-image content/schema/complete-column-set bindings, target DB binding, and both target-global and chain fence generations. One authoritative target transaction must lock and revalidate every selected row, capture every column's complete typed pre-delete value, record <deleteDbBeforeImageObservedBytes> within <deleteDbBeforeImageMaxBytes>, verify row count <deleteDbBeforeImageRowCount=exactKeyCount>, set rollbackReadiness true, then commit the before-image, exact-key DELETE, and prepared-to-committed marker transition atomically. Missing rows/columns, DB values that differ from source, schema/value drift, unsupported restore semantics, overflow/capacity/confidentiality failure, or concurrent change rolls back to zero DELETE. Aborted may be finalized only after non-commit is authoritative; timeout/response loss is commit_unknown_blocked until marker-first reconciliation proves committed or aborted and a committed marker has the exact recovery_available before-image. Current row presence/delta may never infer the outcome.
 ```
 
 | Delete stage | Approval state | Preflight result state | Delete run state | Required result |
@@ -850,12 +866,12 @@ The random unique <deleteMutationId> is pre-reserved in this immutable approval.
 | Atomic creation transaction | `claimed` | `claimed` | being inserted in the same transaction | The exact `delete_ready` target operation fence generation is claimed for consumer `delete` in this same transaction; concurrent/duplicate/different-approval/Start/Retry claims cannot commit another run. |
 | Creation fails before any run commit | `invalid` | `invalid` | absent | Zero DB writes; new preflight and approval are required. Neither record may regress. |
 | Exactly one run commits | `consumed` | `consumed`, bound to this approval/run | committed, mutation `not_started` | Both records and the pre-reserved mutation id remain consumed/bound despite response loss, failure, cancellation, audit/evidence failure, or `commit_unknown`. |
-| Target marker prepared | `consumed` | same consumed binding | running, mutation `prepared` | Marker binds the exact approval/preflight/run/keyset/content/recovery snapshot/target/coordinator generations before any DELETE. |
-| Authoritative Delete transaction commits | `consumed` | same consumed binding | terminal succeeded, mutation `committed` | Exact DELETE and marker transition commit atomically; recovery snapshot and both coordinator/fence states become non-advanceable `recovery_disposition_pending`. |
+| Target marker prepared | `consumed` | same consumed binding | running, mutation `prepared`, before-image `not_created` | Marker binds the exact approval/preflight/run/keyset/source-provenance/before-image/target/coordinator generations before any DELETE. |
+| Authoritative Delete transaction commits | `consumed` | same consumed binding | terminal succeeded, mutation `committed`, before-image `recovery_available` | Complete typed before-image, exact DELETE, and marker transition commit atomically; both retained records and both coordinator/fence states become non-advanceable `recovery_disposition_pending`. |
 | Non-commit is authoritative | `consumed` | same consumed binding | terminal failed, mutation `aborted` | No approved DELETE committed; retain marker/evidence and keep both coordinator/fence states `recovery_disposition_pending` until final restore/disposal. |
 | Duplicate request after commit/response loss | `consumed` | same consumed binding | same committed run | Return or reconcile only the existing run; never create another run. |
 | A different approval requests the same preflight result | any | `consumed`/`claimed` by original approval | absent for different approval | Reject before mutation; the preflight result has one consumer. |
-| Outcome is `commit_unknown` | `consumed` | same consumed binding | same committed run; mutation `commit_unknown_blocked` | Only marker-first read-only reconcile for that run is allowed. Keep global/chain ownership and recovery snapshot; row presence/delta cannot prove outcome. |
+| Outcome is `commit_unknown` | `consumed` | same consumed binding | same committed run; mutation `commit_unknown_blocked` | Only marker-first read-only reconcile for that run is allowed. Keep global/chain ownership and every retained record; a committed marker requires the exact `recovery_available` before-image, and row presence/delta cannot prove outcome. |
 
 Deterministic tests must cover every `docs/171` field substitution, expiry,
 missing/unresolvable approval, concurrent claims, failure before run commit,
@@ -874,6 +890,14 @@ and before/after atomic Delete commit, response loss followed by external reinse
 or re-deletion of the same keys, external non-fenced writers, marker-first
 reconciliation, duplicate requests, and proof that row presence/delta cannot
 misclassify committed versus aborted.
+They must also cover DB rows whose keys match the source snapshot while one or
+more values differ, updates before/while locks are acquired, every nullable/
+default/generated/system column policy, schema/column-set drift, before-image
+byte-ceiling/capacity failure, crash before/after before-image insertion, Delete,
+marker transition, and commit, committed-marker/before-image mismatch or tamper,
+exact restore equality, and disposition racing restore/new operations. Every
+pre-commit failure must leave both the selected DB rows and marker outcome
+unchanged with no usable partial before-image.
 At most one `deleteRunId` may commit. Any mismatch or failure before run commit
 must produce zero operational DB writes and invalidate both records; later
 uncertainty may use only read-only reconciliation of the same run.
@@ -892,8 +916,11 @@ Evidence to record after delete:
 - target operation fence id/chain state/upload branch/Delete branch/consumer/
   generation/evidence;
 - delete mutation id/outcome/evidence id from the target marker;
-- Delete recovery snapshot/content binding/state/retention/final disposition/
-  disposition evidence;
+- Delete source-provenance snapshot/content binding/state/retention/final
+  disposition/evidence;
+- exact DB before-image id/content/schema/column-set bindings, state, row count,
+  byte ceiling, capacity/confidentiality/retention, rollback-readiness transition,
+  restore state, and disposition evidence;
 - selected item count;
 - exact key count;
 - deleted row count;
@@ -906,6 +933,9 @@ Rollback:
 
 - do not perform broad manual DB deletes, truncates, resets, or Docker cleanup;
 - if commit is unknown, run only the approved reconcile path;
+- if the marker proves committed, any restore requires a separate immutable
+  approval and must use only the retained exact DB before-image; never rebuild
+  deleted rows from source CSV or transformed matching-key data;
 - if gate-on evidence has been written, preserve `db_delta_evidence` and
   `row_attribution_ledger` rows;
 - use feature-gate disablement or fix-forward rather than deleting evidence.
@@ -1019,6 +1049,11 @@ Stop before any mutation when any of these are true:
   prepared marker, atomic DELETE-plus-marker commit, marker-first reconciliation,
   or authoritative terminal outcome evidence; row presence/delta is used to infer
   outcome, or an unknown/tampered marker does not keep the chain blocked;
+- Delete lacks a pre-reserved `deleteDbBeforeImageId`, protected exact content/
+  schema/complete-column-set bindings, exact row-count/byte-ceiling/capacity/
+  confidentiality/retention contract, or an authoritative transaction that
+  locks/revalidates current rows and atomically commits their complete typed
+  before-image with DELETE and the marker transition;
 - Delete preflight is requested without an implemented/tested protected
   `deletePreflightApprovalId` in state `available`, exact package/Preview/DB/
   source/selection/deadline bindings, and an atomic claim with exactly one
@@ -1033,16 +1068,24 @@ Stop before any mutation when any of these are true:
 - the exact-target singleton coordinator is missing/stale/substituted, does not
   serialize every Preview chain and Delete/Start/Retry claim, or can advance from
   invalidating/disposal-failed/commit-unknown state;
-- the owner-only immutable Delete recovery snapshot/content binding is missing,
+- the owner-only immutable Delete source-provenance snapshot/content binding is missing,
   not exact-byte/metric verified before DB read, over ceiling, under-capacity,
   unprotected, expired, source-reopened, reused from upload, not retained through
   marker outcome/final recovery disposition, or lacks key-first verified disposal
   and failure blocking;
 - an early Delete recovery-snapshot disposal lacks a protected expiring single-
-  use approval atomically bound to the exact snapshot/content/marker/outcome/
-  coordinator/deadline, or a restore lacks its own separately scoped approval;
+  use approval atomically bound to both the exact source-provenance snapshot and
+  DB before-image/content/schema/column bindings plus marker/outcome/coordinator/
+  deadlines, or a restore lacks its own separately scoped approval and exact
+  before-image-only restore/equality contract;
+- source CSV, metadata, matching keys, or transformed values are used to claim
+  rollback readiness; `rollbackReadiness` becomes true before exact DB before-
+  image capture; a committed marker lacks a matching `recovery_available` before-
+  image; or missing rows/columns, schema/value drift, unsupported restore
+  semantics, overflow, capacity failure, or concurrent change can still DELETE;
 - a resolved Delete can terminalize/release the target-global coordinator or
-  chain fence before exact recovery restore/disposal is terminal, or early/
+  chain fence before exact source-provenance and DB-before-image restore/disposal
+  are both terminal, or early/
   expiry disposal/restore fails to CAS the same `recovery_disposition_pending`
   owner/generations and block a concurrent new Preview/Start/Delete;
 - a Delete approval/evidence path publishes deterministic selection/keyset/

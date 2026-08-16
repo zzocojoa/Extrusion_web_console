@@ -23,10 +23,12 @@ Current operational decisions are governed by all of these documents together:
 - `docs/164_operator_data_mutation_safety_gate.md` defines the exact human
   approval boundaries and blocked implementation gates.
 - `docs/171_v2_operational_delete_verification_gate.md` defines evidence for a
-  separately approved delete path; it does not authorize preflight or mutation.
+  separately approved delete path, including the rule that source CSV is
+  provenance only and exact rollback requires an atomic complete-row DB before-
+  image; it does not authorize preflight, schema migration, or mutation.
 - `docs/173_v2_operational_upload_verification_gate.md` defines the protected
-  manifest/snapshot, Preview, Start, Retry, lease, target-outcome, and disposal
-  state machines.
+  manifest/snapshot, target-identity, Preview, Start, Retry, lease, target-
+  outcome, and disposal state machines.
 - `docs/176_v1_cutover_go_no_go_validation_plan.md` defines final stop and
   cutover decision rules.
 - `docs/182_v1_cutover_read_only_inventory_evidence.md` is historical baseline

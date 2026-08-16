@@ -150,6 +150,28 @@ to the exact configured folder.
 | `targetOperationConsumer` | `not_created` |
 | `targetOperationFenceGeneration` | `not_created` |
 | `targetOperationFenceEvidenceId` | `not_created` |
+| `deleteRecoverySnapshotId` | `not_created` |
+| `deleteRecoverySnapshotState` | `not_created` |
+| `deleteDbBeforeImageId` | `not_created` |
+| `deleteDbBeforeImageContentBindingId` | `not_created` |
+| `deleteDbBeforeImageSchemaBindingId` | `not_created` |
+| `deleteDbBeforeImageColumnSetBindingId` | `not_created` |
+| `deleteDbBeforeImageRowCount` | `not_observed` |
+| `deleteDbBeforeImageObservedBytes` | `not_observed` |
+| `deleteDbBeforeImageMaxBytes` | `not_approved` |
+| `deleteDbBeforeImageCapacityEvidenceId` | `not_created` |
+| `deleteDbBeforeImageConfidentialityClass` | `not_approved` |
+| `deleteDbBeforeImageRetainUntilUtc` | `not_approved` |
+| `deleteDbBeforeImageState` | `not_created` |
+| `deleteDbBeforeImageDispositionEvidenceId` | `not_created` |
+| `deleteDbBeforeImagePreparationReadiness` | `not_observed` |
+| `rollbackReadiness` | `not_observed` |
+| `deleteDbRestoreApprovalId` | `not_issued` |
+| `deleteDbRestoreApprovalState` | `not_issued` |
+| `deleteDbRestoreExecuteByUtc` | `not_approved` |
+| `deleteDbRestoreMutationId` | `not_created` |
+| `deleteDbRestoreOutcomeState` | `not_created` |
+| `deleteDbRestoreOutcomeEvidenceId` | `not_created` |
 | `edgeAuthClass` | `not_observed` |
 | `startUploadApprovalId` | `not_approved` |
 | `actionMaxDurationSeconds` | `not_approved` |
@@ -357,16 +379,20 @@ No later Preview may claim the singleton coordinator while any older generation
 is nonterminal, including `preview_claimed`, ready/active/retryable/delete-ready,
 `commit_unknown_blocked`, `invalidating`, `recovery_disposition_pending`, or
 `disposal_failed_blocked`. A resolved Delete holds its exact owner/generation
-until separately approved restore plus disposal or verified key-first disposal
-is terminal. This record authorizes none of those actions.
+until separately approved exact DB-before-image restore plus disposal or verified
+key-first disposal of every retained record is terminal. A source CSV snapshot is
+provenance only and cannot establish exact rollback readiness. This record
+authorizes none of those actions.
 
 Public/committed content-snapshot evidence is limited to random opaque record ids,
 safe states/classes/counts/timestamps, and approved package hashes. Separately
 reviewed target evidence may additionally contain random non-derived baseline,
 binding, claim, target-global-coordinator, operation-fence, and evidence ids plus a human-supplied privacy-
-safe target alias and safe lifecycle states/timestamps. Exact DB identity, DB
-URLs, credentials, raw keys, deterministic identity derivatives, and all keyed
-integrity values remain owner-only.
+safe target alias and safe lifecycle states/timestamps. A later Delete record may
+also publish random non-derived before-image ids plus safe counts/states/
+timestamps, but never row values or private integrity material. Exact DB identity,
+DB URLs, credentials, raw keys/rows, deterministic identity derivatives, and all
+keyed integrity values remain owner-only.
 
 Immediately before any approved API call, repeat the read-only scan and compare
 the exact local file set, scope, size/mtime metadata, file count, physical-row
