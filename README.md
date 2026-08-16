@@ -297,7 +297,7 @@ $env:EWC_SUPABASE_EDGE_URL="<local Supabase Edge URL>"
 $env:EWC_STATE_DB_PATH="<local state DB path>"
 ```
 
-For developer API-mode runs started through `launcher/start_web_console.ps1`, the launcher enforces the approved mapped-drive process-data source class before the backend starts. If process env, repo `.env`, or config JSON provides a non-canonical `plcDataDir`, the launcher refuses to start by default so Preview cannot drift to a fixture, stale UNC, or other wrong source. `-AllowNonCanonicalSource` is available only as an explicit diagnostics opt-in. Backend `Settings` does not silently replace explicit env/config source bindings. This is a developer launcher guard, not an operator package pin. Verify the active source with read-only `GET /api/config` and a backend-side path existence preflight before running Upload Preview.
+For developer API-mode runs started through `launcher/start_web_console.ps1`, the launcher enforces the approved mapped-drive process-data source class before the backend starts. If process env, repo `.env`, or config JSON provides a non-canonical `plcDataDir`, the launcher refuses to start by default so Preview cannot drift to a fixture, stale UNC, or other wrong source. `-AllowNonCanonicalSource` is available only as an explicit diagnostics opt-in. Backend `Settings` does not silently replace explicit env/config source bindings. This is a developer launcher guard, not an operator package pin. Until the protected runtime lifecycle is implemented, tested, and separately approved, API-mode checks against an operator backend are limited to the read-only status, config, and audit observations documented below; Preview and Upload Job testing must use disposable synthetic fixtures through automated tests.
 
 The API-mode frontend does not use Settings mock fallback values for active source binding. Settings, Upload Preview, and Start Upload readiness must be judged from the backend `/api/config` response and its sanitized `items` / `targetClasses` fields. The default frontend mock build may show development sample values only; it is for screenshot QA and UI development, not operational source evidence.
 
@@ -323,37 +323,37 @@ Docker Desktop's `Expose daemon on tcp://localhost:2375 without TLS` setting mus
 
 The legacy local stack can still be selected explicitly through env/config overrides for rollback during rollout, but it is no longer the built-in default.
 
-Config API smoke check:
+Config API read-only smoke check:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/api/config
-
-$body = @{
-  values = @{
-    grafanaUrl = "http://localhost:3001"
-    localSupabaseApiPort = 55321
-  }
-} | ConvertTo-Json -Depth 4
-
-Invoke-RestMethod -Method Put `
-  -Uri http://127.0.0.1:8000/api/config `
-  -ContentType "application/json" `
-  -Body $body
-
 Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=settings.save&limit=20"
 ```
+
+The copy-ready `PUT /api/config` smoke recipe is intentionally omitted. Settings
+save mutates local configuration and requires an immutable, authenticated,
+expiring, single-use approval binding the exact package and operator, the expected
+current config version and state, the exact reviewed non-secret before/after value
+for every allowed field, the claim deadline, exclusions, stop conditions, and
+audit evidence. The claim and save must atomically reject stale state, substituted
+values, extra fields, replay, or concurrent claims. The read-only commands above
+do not authorize a save.
 
 `PUT /api/config` accepts only known config keys. It rejects environment-overridden keys, including repo `.env` key-presence overrides, writes blocked audit rows for those attempts, and writes failure audit rows for validation failures including malformed JSON bodies. Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason`; they do not store raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies. Config writes use a per-config-file lock, a unique temp filename, and atomic replace. Settings precedence is built-in defaults, then config JSON, then repo `.env` or launcher env, then process environment.
 
 The Settings page uses the config API in `VITE_API_MODE="api"`. Non-secret editable fields are sent only when changed. Secret fields display only an empty replacement input and hidden-value status; existing secret raw values are never rendered. Empty or unchanged secret inputs are excluded from the save payload, and a secret key is included only when the operator types a replacement value.
 
-Runtime API smoke check. Run the start/stop calls only when no upload job or preview run is active:
+Runtime API read-only smoke check:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/api/runtime/local-supabase
-$runtime = Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/runtime/local-supabase/start
-Invoke-RestMethod http://127.0.0.1:8000/api/runtime/operations/$($runtime.operationId)
 ```
+
+Copy-ready Local Supabase start/stop recipes are intentionally omitted. Either
+action changes runtime state and requires its own explicit bounded approval, no
+active Preview/upload/delete action, exact before/after status and audit evidence,
+and the stop conditions in `docs/164` and `docs/176`. This read-only status check
+does not authorize start or stop.
 
 Audit Logs API smoke check:
 
@@ -424,7 +424,7 @@ The Vite dev server proxies `/api` to `http://127.0.0.1:8000`.
 
 Important mode split: `?state=ready|attention|blocked|running` is a frontend mock-mode feature only. When `VITE_API_MODE="api"` is used, Dashboard calls `/api/dashboard` and `/api/dashboard/summary`; those endpoints aggregate the active state DB latest upload job, runtime readiness, and safe audit summary. API mode should show neutral empty/unknown state when data is missing, not the old fake running job.
 
-The Upload Preview and Upload Job pages also use mock data by default so preview/job states can be inspected without local Supabase. These mock paths are development and screenshot QA aids only. To use the real backend preview and job APIs, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
+The Upload Preview and Upload Job pages also use mock data by default so preview/job states can be inspected without local Supabase. These mock paths are development and screenshot QA aids only. API mode against an operator backend remains limited to the approved read-only status, config, and audit observations until the protected lifecycle is implemented, tested, and separately approved. Preview and Upload Job API behavior must be exercised only by automated tests using disposable synthetic source and database fixtures.
 
 For release-maintainer API-mode package builds and operator validation, prefer:
 
