@@ -95,10 +95,29 @@ package gate described below. The future alias must be random or otherwise
 resistant to path guessing, and the human must confirm out of band that it maps
 to the exact configured folder.
 
-## Required Evidence Fields
+## Historical Baseline Evidence Fields (Non-Canonical Subset)
+
+This table records truthful sentinels for this historical inventory baseline. It
+is not the canonical complete field schema and omitted fields are never evidence.
+The complete current field/state contract is `docs/173`; a successor record must
+use that contract and may not infer values from this table.
 
 | Field | Current value |
 | --- | --- |
+| `approvalContractRevision` | `not_observed` |
+| `artifactReleaseTrustRootId` | `not_observed` |
+| `artifactSignerKeyId` | `not_observed` |
+| `artifactSignatureAlgorithmVersion` | `not_observed` |
+| `artifactSignerRevocationState` | `not_observed` |
+| `artifactIndependentVerifierEvidenceId` | `not_observed` |
+| `artifactFullFileManifestId` | `not_created` |
+| `installedTreeVerificationEvidenceId` | `not_created` |
+| `executingTreeVerificationEvidenceId` | `not_created` |
+| `artifactVerificationObservedAtUtc` | `not_observed` |
+| `artifactVerificationValidUntilUtc` | `not_approved` |
+| `artifactIntegrityLockEvidenceId` | `not_created` |
+| `inventoryMaxAgeSeconds` | `not_approved` |
+| `previewExecuteByUtc` | `not_approved` |
 | `previewApprovalId` | `not_approved` |
 | `previewApprovalState` | `not_approved` |
 | `manifestPreparationApprovalId` | `not_approved` |
@@ -116,6 +135,8 @@ to the exact configured folder.
 | `contentSnapshotDispositionState` | `not_created` |
 | `snapshotDispositionEvidenceId` | `not_created` |
 | `atomicSnapshotBindingEvidenceId` | `not_created` |
+| `preCallSnapshotCheckObservedAtUtc` | `not_observed` |
+| `preCallSnapshotUnchanged` | `not_observed` |
 | `previewRunId` | `not_run` |
 | `previewStatus` | `not_run` |
 | `previewTargetRows` | `not_observed` |
@@ -180,9 +201,12 @@ to the exact configured folder.
 | `deleteDbRestoreOutcomeEvidenceId` | `not_created` |
 | `edgeAuthClass` | `not_observed` |
 | `startUploadApprovalId` | `not_approved` |
+| `startUploadApprovalState` | `not_approved` |
+| `startUploadExecuteByUtc` | `not_approved` |
 | `actionMaxDurationSeconds` | `not_approved` |
 | `snapshotDispositionMarginSeconds` | `not_approved` |
 | `snapshotActionLeaseId` | `not_created` |
+| `snapshotActionLeaseExpiresAtUtc` | `not_created` |
 | `snapshotActionLeaseState` | `not_created` |
 | `actionMutationId` | `not_created` |
 | `actionApprovedAbsentSetBindingId` | `not_created` |
@@ -194,6 +218,9 @@ to the exact configured folder.
 | `uploadJobId` | `not_created` |
 | `acceptedRowsClass` | `not_applicable` |
 | `retryApprovalId` | `not_approved` |
+| `retryApprovalState` | `not_approved` |
+| `retryExecuteByUtc` | `not_approved` |
+| `successorRetryReconciliationExecuteByUtc` | `not_approved` |
 | `retryReconciliationCreationState` | `not_created` |
 | `retryReconciliationSourceActionClass` | `not_created` |
 | `retryReconciliationSourceFailureClass` | `not_observed` |
@@ -202,6 +229,8 @@ to the exact configured folder.
 | `retryReconciliationCreationExpiresAtUtc` | `not_approved` |
 | `retryReconciliationCreationEvidenceId` | `not_created` |
 | `retryReconciliationRecordId` | `not_created` |
+| `retryReconciliationPredecessorRecordId` | `not_created` |
+| `retryReconciliationPredecessorDispositionEvidenceId` | `not_created` |
 | `retryReconciliationState` | `not_created` |
 | `retryReconciliationObservedAtUtc` | `not_observed` |
 | `retryReconciliationExecuteByUtc` | `not_approved` |
@@ -278,6 +307,11 @@ Stop if:
 - any file is unstable, unreadable, or changes during inventory;
 - the source scope changes;
 - the package label, source commit, or ZIP hash differs; or
+- the current canonical `approvalContractRevision`, pre-provisioned release
+  trust-root/signer/algorithm/non-revocation/independent-verifier evidence, full-
+  file manifest, installed/executing-tree evidence, verification validity, or
+  integrity-lock evidence is missing, inferred, self-attested, revoked, expired,
+  or mismatched; or
 - protected manifest preparation is unapproved or its record is missing,
   expired, reused, tampered, unauthenticated, or mismatched; or
 - trusted target baseline id/alias/state/evidence is missing, unresolved,
@@ -304,7 +338,9 @@ Retry, bounded unrenewable Start/Retry leases with target-side transaction
 fences/durable outcome markers, commit-unknown recovery, whole-attempt Retry
 reconciliation, and disposition exclusion, deterministic replacement/
 concurrency/source-reopen/lease-disposition/commit-window tests, and rebuilt-package verification. Only
-after those pass and a separately controlled pre-provisioned verified target
+after those pass, the artifact signature/full manifest verifies against a pre-
+provisioned non-revoked release trust root outside the candidate under the exact
+canonical contract revision, and a separately controlled pre-provisioned verified target
 baseline already exists may the operator and maintainer repeat the read-only
 inventory, create a new record id, timestamp,
 and reviewer confirmation bound to the exact package, a human-supplied safe

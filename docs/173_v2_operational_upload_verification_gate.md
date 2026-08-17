@@ -65,9 +65,15 @@ Minimum fields:
 
 | Field | Meaning |
 | --- | --- |
+| `approvalContractRevision` | Exact `docs164-2026-08-17-r1` for every protected stage approval; missing or other revisions are invalid. |
 | `packageSourceCommit` | Source commit from accepted package metadata. |
 | `packageLabel` | Safe package label. |
 | `zipSha256` | Exact trusted content-addressed ZIP/installer SHA-256; `zipCreated=true` is mandatory before any operational source/DB access. |
+| `artifactReleaseTrustRootId` | Random non-derived id for a pre-provisioned owner-controlled release trust root outside the candidate artifact. |
+| `artifactSignerKeyId` | Opaque id for the exact authorized signing key under that trust root. |
+| `artifactSignatureAlgorithmVersion` | Exact allowlisted signature/manifest verification algorithm revision. |
+| `artifactSignerRevocationState` | Current non-revoked state rechecked at every stage admission. |
+| `artifactIndependentVerifierEvidenceId` | Opaque evidence that a verifier independent of candidate code/keys authenticated the artifact manifest/signature. |
 | `artifactFullFileManifestId` | Opaque id plus authenticated hash for the trusted artifact's governed executable code, frontend assets, dependencies, and build metadata. |
 | `installedTreeVerificationEvidenceId` | Opaque time-bound evidence that every governed installed file equals the trusted artifact manifest and no unexpected governed file is present. |
 | `executingTreeVerificationEvidenceId` | Opaque time-bound evidence that the running backend/frontend/dependency roots resolve to that verified installed tree, not another unpacked directory. |
@@ -189,6 +195,34 @@ Minimum fields:
 | `dbDeltaEvidence` | Required when the gate is explicitly approved and on. |
 | `rowAttributionEvidence` | Required when the gate is explicitly approved and on. |
 | `finalDecision` | `no_upload`, `upload_succeeded`, `failed_preserved`, or `blocked`. |
+
+### Canonical Artifact Admission Tests
+
+Every inventory successor, manifest preparation, target-identity preparation,
+Preview, Start, Retry, reconciliation, and final sign-off implementation must run
+the same deterministic artifact-admission test matrix. No stage-specific test
+list may narrow it.
+
+- reject missing/unresolvable/substituted/revoked
+  `artifactReleaseTrustRootId`/`artifactSignerKeyId`, candidate self-signing or a
+  trust root shipped inside the candidate, unapproved algorithm versions,
+  verifier substitution, and trust-root/key rotation or generation drift;
+- reject unauthenticated/revoked manifests, missing or inferred verification
+  observation/validity, and admission immediately before, exactly at, and after
+  `artifactVerificationValidUntilUtc` using the authoritative clock;
+- reject changed, missing, or extra governed files; alternate installed or
+  executing roots; symlink/reparse/root substitution; and dependency/build-info/
+  frontend-asset changes between verification and stage use;
+- reject read-only ACL bypass, machine-global integrity-lock contention,
+  lock-owner substitution, lock loss, and tamper at claim, before source/DB open,
+  during a transaction, and before terminal publication;
+- prove every failure invalidates the exact stage generation, permits zero source
+  byte access or DB connection/read/write when detected before those boundaries,
+  permits zero further DB writes after an in-stage tamper signal, and publishes
+  only sanitized evidence; and
+- reject missing or mismatched `approvalContractRevision`, and prove response-
+  loss recovery returns only the same verified evidence without trusting a new
+  candidate-supplied manifest or key.
 
 ## Phase 1: Read-Only Inventory
 
@@ -1086,6 +1120,13 @@ also cover operational-source replacement after Preview and before Start,
 equal-size/equal-mtime replacement, concurrent source writes, missing/tampered
 snapshots, and attempts by a worker to reopen the operational source. A mismatch
 or missing protected snapshot before mutation must produce zero DB writes.
+API contract tests must also submit `expectedTargetRows: 0` and prove HTTP 422
+with reason `expected_target_rows_required`, one sanitized blocked audit, and
+zero upload job creation. When optional `expectedTargetFiles` is supplied as
+`0`, tests must prove HTTP 422 with reason `expected_target_files_invalid`, one
+sanitized blocked audit, and zero job creation. These boundary cases are
+mandatory implementation blockers and are not evidence that an operational
+request was executed.
 
 The approved row count must be target-only rows. Partial-overlap rows are not
 included unless a later approved flow explicitly changes that policy.
@@ -1255,6 +1296,10 @@ unresolved failure remains.
 
 Stop before any operational upload mutation when any of these are true:
 
+- `approvalContractRevision` differs from `docs164-2026-08-17-r1`, or release
+  trust-root/signer/algorithm/non-revocation/independent-verifier evidence is
+  missing, candidate-controlled, self-attested, revoked, substituted, stale, or
+  fails the canonical artifact-admission matrix above;
 - `zipCreated` is not true, trusted artifact checksum/full-file manifest/
   installed-tree/executing-tree evidence is missing or stale, observation/
   human-bound expiry/integrity-lock evidence is missing/inferred/expired, the

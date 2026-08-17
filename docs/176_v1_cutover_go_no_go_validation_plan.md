@@ -179,10 +179,11 @@ should be created merely to turn a not-applicable gate into a test case.
 | Evidence area | Required artifact | Allowed command or observation class | Forbidden actions | Pass condition | Fail / stop condition | Evidence owner | Source reference |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Package/source commit verification | Package label, source commit, build metadata, and source tree commit record | Read-only package metadata inspection; `git rev-parse HEAD`; `git show --stat --oneline --name-status HEAD` | Rebuilding, deploying, or editing package metadata during evidence capture | Package source commit and label match the accepted package and docs | Missing, stale, or mismatched package metadata | Maintainer | `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
-| README/API no-live-smoke and schema contract verification | Contract note proving live Preview/Upload Job POST examples are intentionally absent while backend schema/API retain `previewRunId`, `expectedTargetRows`, and `expectedTargetFiles` | Read-only README, schema, API, and automated-test inspection | Start Upload execution or ad hoc live POST | README keeps live POST commands omitted until the protected runtime lifecycle exists; API source rejects missing/non-positive target rows and automated tests cover missing and positive-count mismatch paths | Live POST example is reintroduced, required fields drift, claimed test coverage exceeds the actual suite, or an ad hoc payload is treated as evidence | Maintainer | `README.md`; `backend/app/api/upload_jobs.py`; `backend/app/schemas/upload_jobs.py`; `tests/backend/test_upload_jobs_api_contract.py` |
+| README/API no-live-smoke and schema contract verification | Contract note proving live Preview/Upload Job POST examples are intentionally absent while backend schema/API retain `previewRunId`, `expectedTargetRows`, and `expectedTargetFiles` | Read-only README, schema, API, and automated-test inspection | Start Upload execution or ad hoc live POST | README keeps live POST commands omitted until the protected runtime lifecycle exists; tests cover missing and positive-count mismatch plus the mandatory zero boundaries: `expectedTargetRows: 0` -> 422 `expected_target_rows_required`, and optional `expectedTargetFiles: 0` -> 422 `expected_target_files_invalid`, each with one sanitized blocked audit and zero job creation | Live POST example is reintroduced, required fields drift, either zero-boundary test is absent/fails, claimed coverage exceeds the actual suite, or an ad hoc payload is treated as evidence | Maintainer | `README.md`; `backend/app/api/upload_jobs.py`; `backend/app/schemas/upload_jobs.py`; `tests/backend/test_upload_jobs_api_contract.py` |
 | GET `/api/config` safe snapshot | Sanitized config evidence showing source class, target classes, mode, and override classes | `GET /api/config` against an already running local operator backend; store sanitized classes only | `PUT /api/config`, Settings save, raw path or secret capture | Snapshot confirms expected API mode/source class without raw paths or secret values | Config source class is wrong, raw sensitive value would be recorded, or endpoint unavailable | Maintainer/operator | `backend/app/api/config.py`; `backend/app/services/config_service.py`; `README.md` |
+| Settings save evidence, only if separately approved | Protected `operatorControlApprovalId` lifecycle, exact current config generation, reviewed allowed-key before/after binding, operation id, terminal state, and sanitized audit/evidence ids | Exactly one Settings save only after the `docs/164` lifecycle and deterministic tests exist and a new human approval is atomically claimed | Arbitrary/Markdown approval authority, extra/env-overridden key, stale generation, replay/concurrent save, raw secret evidence, or bundling runtime/data actions | Exact approval is consumed once; authoritative config generation and reviewed change set match; response loss returns the same operation; success/failure/blocked audit is sanitized | Approval/action/deadline/actor/package/trust/state/value mismatch, expired/replayed/concurrent claim, extra field, audit failure, or any unreviewed change | Maintainer/operator approver | `docs/164_operator_data_mutation_safety_gate.md`; `backend/app/api/config.py`; `backend/app/services/config_service.py` |
 | Local Supabase status evidence | Sanitized runtime readiness/status-class output | Read-only dashboard/runtime status observation and existing status endpoints | Start/stop/reset/cleanup/init/migration | Status proves local Supabase readiness class or a clear blocked class | DB-dependent class is blocked and unresolved | Maintainer/operator | `docs/00_product_scope.md`; `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
-| Local Supabase start/stop evidence, only if separately approved | Operation id, event ids, before/after status classes, and audit ids | Runtime start/stop only after separate approval and no active job/preview | Supabase init/reset, Docker create/rm/prune/up/down, volume deletion | Start/stop is bounded, audited, and returns expected readiness or stopped class | Required containers missing, active job/preview, broad cleanup requested, or audit unavailable | Maintainer/operator | `backend/app/services/runtime_control.py`; `backend/app/services/command_runner.py` |
+| Local Supabase start/stop evidence, only if separately approved | Protected `operatorControlApprovalId` lifecycle, exact action, current and intended terminal status bindings, no-active-operation evidence, operation id, terminal state, and sanitized audit/evidence ids | Exactly one `local_supabase_start` or `local_supabase_stop` only after the `docs/164` lifecycle/tests exist and a new human approval is atomically claimed | Arbitrary/Markdown approval authority, opposite/replayed/concurrent action, active Preview/upload/retry/delete/recovery, init/reset/migration/cleanup, Docker create/rm/prune/up/down, volume deletion | Exact action approval is consumed once, before state matches, only the allowlisted transition occurs, response loss returns the same operation, and audit is sanitized | Required containers missing, state/action/deadline/actor/package/trust mismatch, active operation, replay/concurrency, excluded command, or audit unavailable | Maintainer/operator approver | `docs/164_operator_data_mutation_safety_gate.md`; `backend/app/services/runtime_control.py`; `backend/app/services/command_runner.py` |
 | Read-only inventory precheck | Filled inventory template with random record id, operator PC class, privacy-safe exact-source alias, counts, row ceiling, excluded data, and reviewer | Read-only file inventory/count procedure that stores no raw names, paths, content, or keys | Preview, upload, delete, settings save, cleanup, LAN, deployment | Exact bindings, file count, and approved physical row ceiling are current and reviewer-signed | Missing/mismatched binding, guessed count, stale inventory, source class mismatch, or raw sensitive evidence | Maintainer with operator review | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
 | Protected content-manifest preparation | Approval id, human claim/completion deadline, opaque manifest/snapshot ids, observed/approved bytes, retention/disposition fields, inventory observation/max-age and package/source bindings, safe counts/timestamps, and lifecycle classes | One separately approved protected local full-byte evidence write with pre-authorized bounded disposal after implementation/package/inventory gates pass | Preview, operational DB access, upload, retry, delete, Settings save, runtime lifecycle, source mutation, unbounded/manual snapshot cleanup | Human explicitly acknowledges full-byte copying and automatic cryptographic disposal; claim and completed publication occur before the human deadline within inventory validity; protected capacity/confidentiality controls pass; records are tamper-evident, inventory-bound, unexpired, and single-use; only opaque safe evidence is published | Missing/inferred observation/max-age/deadline or informed scope/byte ceiling/capacity/confidentiality/retention/disposal, late claim/completion, mismatch, tamper, prior claim/use, mutable snapshot, raw private publication, failed disposal without blocking/alert evidence | Backend maintainer with operator approval | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
 | Preview-only evidence | Preview approval id, preview run id, inventory/manifest/snapshot record ids, observation/deadline/lifecycle fields, consumed target-identity preparation approval id/deadline, target DB binding id/state/validity/evidence, operator PC class, privacy-safe source alias, final unchanged-snapshot check, opaque atomic snapshot binding evidence id, summary counts, DB status class, audit evidence | Exactly one separately approved Preview-only run after atomic content and exact target-identity binding are implemented/tested, manifest preparation is separately approved, and the target-identity preparation result is human-reviewed | Start Upload, Retry Failed, Delete, Settings save, reset, cleanup, LAN, deployment | Preview atomically claims the protected records before deadline, verifies private digests, parses the same immutable snapshot, revalidates the protected exact target identity and unexpired validity on its DB session, and terminally consumes the manifest while retaining the snapshot/target binding for later approved actions; it then succeeds with DB reachable | Manifest/snapshot, atomic binding, target-identity preparation approval, or target DB binding unavailable, expired/reused/tampered/mismatched, same-host/port target replacement, failed unchanged-snapshot check, risky count > 0, DB unreachable, stale preview, or conflict unresolved | Maintainer/operator | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_preview.py`; `backend/app/services/upload_preview.py` |
@@ -199,6 +200,18 @@ should be created merely to turn a not-applicable gate into a test case.
 | Supabase reset/cleanup exclusion | Explicit exclusion record | Documentation review and command-policy review | `supabase init`, `supabase db reset`, Docker rm/prune/compose up/down, volume delete | No reset/cleanup/create command is part of cutover evidence | Missing containers trigger cleanup request instead of blocked evidence | Release owner/maintainer | `README.md`; `backend/app/services/command_runner.py` |
 | Security/secrets redaction | Sanitized evidence review checklist | Redaction review before attaching evidence | Raw paths, filenames, CSV content, DB URLs, tokens, JWTs, Authorization values, exact keys, internal URLs, secrets | Evidence contains only path-independent ids, safe classes/counts, approved package hashes, and reason codes | Sensitive value or a deterministic raw-path-derived digest would be written, or screenshot cannot be safely redacted | Maintainer/security reviewer | `README.md`; `backend/app/db/audit_repository.py`; `docs/171_v2_operational_delete_verification_gate.md` |
 | Final sign-off record | Completed decision-conditional sign-off table with all package/inventory/manifest/Preview/operator/source fields, blockers, residual risks, and next action | Documentation-only sign-off | Treating old evidence, reused manifest state, future folder growth, or successful intermediate evidence as cutover approval | `GO`/`CONDITIONAL GO` requires exact complete bindings; stop/defer decisions preserve actual ids/states for stages reached and use explicit unavailable markers only for stages not reached, while decision metadata and reasons remain mandatory | A proceed decision has any missing/invalid/mismatched field, or a stop/defer record erases/fabricates observed evidence or omits mandatory decision data | Release owner/operator approver | `docs/173_v2_operational_upload_verification_gate.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
+
+Settings save and runtime start/stop may contribute evidence only after the
+canonical `docs/164` protected lifecycle is implemented and its deterministic
+suite passes. The suite must cover arbitrary/committed-Markdown approval ids,
+missing and substituted fields, wrong actor/action, just-before/at/after expiry,
+stale authoritative state, replay/concurrent claims, crash and response loss
+before/after side-effect commit, and audit-publication failure. Settings cases
+also cover extra/environment-overridden keys and stale config generation;
+runtime cases race every active Preview/upload/retry/delete/reconcile/recovery
+state and every forbidden init/reset/migration/cleanup/Docker command. Every
+rejected case proves zero config/runtime mutation. A safe read-only observation
+cannot substitute for this passing evidence.
 
 ## Non-Destructive Validation Package
 
@@ -316,7 +329,7 @@ source byte is opened.
 The exact, copy-ready approval wording is owned only by **Protected Content-
 Manifest Preparation Gate** in `docs/164_operator_data_mutation_safety_gate.md`.
 Do not copy or reconstruct it from this validation plan. The approval record
-must name that canonical section's version/hash and every required field; any
+must name `approvalContractRevision=docs164-2026-08-17-r1` and every required field; any
 missing, stale, or non-identical template is invalid.
 
 The approval id must resolve to an immutable/authenticated protected approval
@@ -337,7 +350,9 @@ capacity verified before copying. Publish only:
 | Manifest-preparation approval id | `<manifestPreparationApprovalId>` |
 | Manifest-preparation claim/completion deadline UTC | `<manifestPreparationExecuteByUtc>` |
 | Manifest-preparation approval terminal state | `<consumed \| invalid>` |
+| Approval contract revision | `<docs164-2026-08-17-r1>` |
 | Trusted artifact ZIP/installer SHA-256 | `<zipSha256; zipCreated=true>` |
+| Release trust root/signer/algorithm/revocation/verifier evidence | `<artifactReleaseTrustRootId> / <artifactSignerKeyId> / <artifactSignatureAlgorithmVersion> / <artifactSignerRevocationState=not_revoked> / <artifactIndependentVerifierEvidenceId>` |
 | Authenticated artifact full-file manifest id/hash | `<artifactFullFileManifestId>` |
 | Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
 | Artifact verification observation/expiry UTC | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc>` |
@@ -387,7 +402,7 @@ The exact, copy-ready approval wording is owned only by **Protected Target-
 Identity Preparation Approval** in
 `docs/164_operator_data_mutation_safety_gate.md`. Do not copy or reconstruct it
 from this validation plan. The approval record must name that canonical
-section's version/hash and every required field; any missing, stale, or non-
+section's exact `approvalContractRevision=docs164-2026-08-17-r1` and every required field; any missing, stale, or non-
 identical template is invalid.
 
 Before any DB connection/read, production code must atomically claim the
@@ -424,7 +439,9 @@ only ACL plus machine-global integrity lock are mandatory through publication.
 | Claim/publication deadline UTC | `<targetIdentityPreparationExecuteByUtc>` |
 | Approval terminal state | `<consumed \| invalid>` |
 | Claim owner id/fence | `<targetIdentityPreparationClaimId> / <targetIdentityPreparationFence>` |
+| Approval contract revision | `<docs164-2026-08-17-r1>` |
 | Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Release trust root/signer/algorithm/revocation/verifier evidence | `<artifactReleaseTrustRootId> / <artifactSignerKeyId> / <artifactSignatureAlgorithmVersion> / <artifactSignerRevocationState=not_revoked> / <artifactIndependentVerifierEvidenceId>` |
 | Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
 | Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Exact-target singleton coordinator id/state/generation/evidence | `<targetGlobalCoordinatorId> / <idle \| terminal \| invalidated_terminal> / <targetGlobalCoordinatorGeneration> / <targetGlobalCoordinatorEvidenceId>` |
@@ -458,6 +475,10 @@ fresh read-only inventory precheck and later protected manifest-preparation
 result, after every documented implementation/test gate and protected approval
 lifecycle exists and a new human approval explicitly releases Preview. Any
 locally copied or shortened variant is non-authoritative and must be rejected.
+The protected approval must carry
+`approvalContractRevision=docs164-2026-08-17-r1` plus the exact release trust-
+root/signer/algorithm/non-revocation/independent-verifier fields; candidate self-
+attestation or missing trust evidence hard-stops before source or DB access.
 
 Immediately before the API call, repeat the read-only scan and record only the
 safe check timestamp plus `preCallSnapshotUnchanged=true`. Stop if the deadline
@@ -482,7 +503,9 @@ keyset inside that snapshot's protected encrypted boundary, expose only
 | Preview approval id | `<previewApprovalId>` |
 | Preview approval terminal state | `<consumed \| invalid>` |
 | Preview run id | `<previewRunId>` |
+| Approval contract revision | `<docs164-2026-08-17-r1>` |
 | Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Release trust root/signer/algorithm/revocation/verifier evidence | `<artifactReleaseTrustRootId> / <artifactSignerKeyId> / <artifactSignatureAlgorithmVersion> / <artifactSignerRevocationState=not_revoked> / <artifactIndependentVerifierEvidenceId>` |
 | Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
 | Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Inventory evidence record id | `<inventoryEvidenceRecordId>` |
@@ -576,7 +599,7 @@ of response loss or later job outcome.
 The exact, copy-ready approval wording is owned only by **Start Upload Gate** in
 `docs/164_operator_data_mutation_safety_gate.md`. Do not copy or reconstruct it
 from this validation plan. The approval record must name that canonical
-section's version/hash and every required field; any missing, stale, or non-
+section's exact `approvalContractRevision=docs164-2026-08-17-r1` and every required field; any missing, stale, or non-
 identical template is invalid.
 
 Required before approval:
@@ -586,6 +609,8 @@ Required before approval:
   observation/validity, and integrity-lock evidence; admission immediately
   reverifies under the read-only ACL and machine-global integrity lock held
   through Start;
+- exact release trust-root/signer/algorithm/non-revocation/independent-verifier
+  evidence required by `docs/164`, with no candidate self-attestation;
 - fresh succeeded Preview-only evidence;
 - preview run id;
 - exact target-only rows;
@@ -648,7 +673,9 @@ Required before approval:
 | Start approval deadline UTC | `<startUploadExecuteByUtc>` |
 | Start approval terminal state | `<consumed \| invalid>` |
 | Preview run id | `<previewRunId>` |
+| Approval contract revision | `<docs164-2026-08-17-r1>` |
 | Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Release trust root/signer/algorithm/revocation/verifier evidence | `<artifactReleaseTrustRootId> / <artifactSignerKeyId> / <artifactSignatureAlgorithmVersion> / <artifactSignerRevocationState=not_revoked> / <artifactIndependentVerifierEvidenceId>` |
 | Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
 | Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Protected immutable content snapshot record id | `<contentSnapshotRecordId>` |
@@ -723,6 +750,9 @@ Required before requesting approval:
   observation/validity, and integrity-lock evidence; admission immediately
   reverifies under the read-only ACL and machine-global integrity lock held
   through Retry;
+- exact `approvalContractRevision=docs164-2026-08-17-r1` and release trust-root/
+  signer/algorithm/non-revocation/independent-verifier evidence, with no
+  candidate self-attestation;
 - failed or retryable upload job evidence;
 - job id;
 - exact remaining physical rows;
@@ -789,7 +819,7 @@ Required before requesting approval:
 Approval wording is owned only by **Retry Failed Gate** in
 `docs/164_operator_data_mutation_safety_gate.md`. Do not copy or reconstruct it
 from this validation plan. The approval record must name that canonical
-section's version/hash and every required field; any missing, stale, or non-
+section's exact `approvalContractRevision=docs164-2026-08-17-r1` and every required field; any missing, stale, or non-
 identical template is invalid.
 
 Evidence after retry:
@@ -800,7 +830,9 @@ Evidence after retry:
 | Retry approval deadline UTC | `<retryExecuteByUtc>` |
 | Retry approval terminal state | `<consumed \| invalid>` |
 | Source upload job id | `<jobId>` |
+| Approval contract revision | `<docs164-2026-08-17-r1>` |
 | Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Release trust root/signer/algorithm/revocation/verifier evidence | `<artifactReleaseTrustRootId> / <artifactSignerKeyId> / <artifactSignatureAlgorithmVersion> / <artifactSignerRevocationState=not_revoked> / <artifactIndependentVerifierEvidenceId>` |
 | Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
 | Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Protected immutable content snapshot record id | `<contentSnapshotRecordId>` |
@@ -939,7 +971,7 @@ or exact keys.
 | Grafana/Vector non-core attention is silently ignored or confused with core readiness. | Medium | Medium | Resolve it or record owner, residual-risk acceptance, and non-destructive stop/rollback procedure. | Release owner/operator | Sanitized runtime state and signed caveat |
 | A new CSV or failure class escapes the current fixture/Audit coverage. | High | Low-medium | Add representative fixtures and keep failure-path API/UI checks in regression and approved operations. | Maintainer QA and operator sign-off | Fixture/soak and safe Audit/Job Logs evidence |
 | Accidental destructive delete or cleanup is bundled into validation, or delete preflight/delete approval text is replayed. | Production-critical | Low | Treat delete, reset, cleanup, and Docker destructive commands as hard exclusions. A future delete requires every `docs/164`/`docs/171` hardened gate: target-global coordination across Preview chains; fenced single-use preflight claim/result with completion deadline; owner-only canonical-root source-provenance snapshot; complete typed DB before-image captured atomically with DELETE/marker under exact schema/column/side-effect/ceiling/capacity/confidentiality/retention bindings; an engine-appropriate DDL/schema fence proving every DELETE and restore-INSERT secondary relation or externally observable effect absent/inert; committed dual-record versus aborted source-only cleanup with split authority; exact restore/disposition approvals; and a single-use Delete approval/run with marker-first reconcile. Source CSV never proves exact rollback. No separate Delete evidence may be imported into this cutover, and any Delete here forces NO-GO. | Hardened destructive plan plus operator approvals | Exclusion record or full implemented/tested coordinator/preflight/source-provenance/schema-fence/side-effect/DB-before-image/restore/disposition/marker lifecycles and exact package |
-| Package/source mismatch or post-verification tree replacement leads to testing the wrong build. | Production-critical | Low-medium | Require a content-addressed artifact, authenticated full-file manifest, current installed/executing-tree verification, immediate rehash under a read-only ACL, and one exclusive machine-global integrity lock held through each bounded stage. | Release owner | Package commit/label/hash, artifact observation/validity, installed/executing evidence, and integrity-lock evidence |
+| Package/source mismatch, candidate self-signing, revoked signer, or post-verification tree replacement leads to trusting/testing the wrong build. | Production-critical | Low-medium | Require a content-addressed artifact authenticated by a pre-provisioned owner-controlled release trust root outside the candidate, exact signer/algorithm/non-revocation/independent-verifier evidence, current installed/executing-tree verification, immediate rehash under a read-only ACL, and one exclusive machine-global integrity lock held through each bounded stage. | Release owner | Contract revision, package commit/label/hash, trust-root/signer/revocation/verifier evidence, artifact observation/validity, installed/executing evidence, and integrity-lock evidence |
 | Secrets or raw operational data leak into evidence. | High | Medium | Store externally only opaque random ids, safe classes/counts, approved package hashes, and reason codes; keep exact operational material plus any keyed integrity data owner-only and review screenshots before attachment. | Security reviewer/maintainer | Redaction checklist and sanitized artifacts |
 
 ## Stop Conditions
@@ -949,6 +981,10 @@ delete, or other proceed action when any of these are true. A `NO-GO`, `BLOCKED`
 or `DEFERRED` record may and should still be completed with explicit missing or
 not-applicable values and reasons:
 
+- `approvalContractRevision` is missing or differs from
+  `docs164-2026-08-17-r1`, or release trust-root/signer/algorithm/non-revocation/
+  independent-verifier evidence is missing, candidate-controlled, self-attested,
+  revoked, substituted, or stale;
 - package metadata, source commit, or package label is missing, unbound, stale,
   or mismatched;
 - the compliant pre-Preview inventory record cannot be identified and must not
@@ -976,6 +1012,10 @@ not-applicable values and reasons:
 - Start Upload or Retry Failed approval is missing, unresolvable, expired,
   substituted, mismatched, double-claimed, replayed, or not atomically claimed
   with creation of exactly one corresponding job/event;
+- a Settings save or runtime start/stop occurred without the exact protected
+  `docs/164` control approval/action/deadline/before-after/operation/audit
+  lifecycle and passing deterministic replay/concurrency/response-loss suite, or
+  a read-only status observation is presented as mutation authority;
 - Start Upload or Retry Failed lacks a human-approved action maximum duration,
   exact pre-retention disposition margin, one unrenewable target-fenced active-
   use lease and the exact random mutation id pre-reserved in its immutable
@@ -1100,9 +1140,15 @@ not-applicable values and reasons:
   required by `docs/164`/`docs/171`;
 - an unresolved Delete marker can reach the standard retention deadline without
   the pre-authorized bounded incident-escrow deadline/state/evidence, can destroy
-  a possibly committed before-image or retain source bytes, or final escrow
+  a possibly committed before-image or retain source bytes, can route a post-
+  retention committed proof into ordinary restore/disposition instead of
+  approval-bound permanent-block cleanup, or final escrow
   expiry can release the coordinator instead of key-first permanent recovery-
   loss/security-incident NO-GO;
+- a restore outcome that remains unknown at its reconcile/retention boundary can
+  retain readable bytes indefinitely, issue another DB read/write, retry/release
+  the coordinator, or lacks approval-bound key-first disposal with terminal
+  `unknown_disposed_permanent_block`/`disposal_failed_blocked` evidence;
 - full-byte snapshot preparation lacks an explicit approved byte ceiling,
   protected capacity/confidentiality controls, retention deadline, or human
   acknowledgement of automatic cryptographic disposal; or disposal cannot
@@ -1150,15 +1196,17 @@ deployment, or other operation.
 
 | Field | Value |
 | --- | --- |
-| Final sign-off approval id/state/deadline | `<finalSignoffApprovalId> / <consumed for GO/CONDITIONAL GO \| actual non-proceed state> / <finalSignoffExecuteByUtc>` |
+| Final sign-off approval id/state/deadline | `<finalSignoffApprovalId> / <available \| claimed \| consumed \| invalid> / <finalSignoffExecuteByUtc>`; every successfully finalized decision, including `NO-GO`, `BLOCKED`, or `DEFERRED`, records `consumed`. |
 | Final sign-off record id/evidence generation/authenticated approver evidence | `<random immutable finalSignoffRecordId> / <monotonic finalSignoffEvidenceGeneration> / <opaque finalSignoffApproverEvidenceId>` |
-| Final sign-off revocation state/evidence | `<not_revoked for GO/CONDITIONAL GO \| revoked: evidence id>` |
+| Final sign-off revocation state/evidence | `<not_revoked \| revoked> / <finalSignoffRevocationEvidenceId \| not_triggered>` independently of decision; a successfully finalized `NO-GO` may still be `not_revoked`. |
 | Decision | `<GO \| CONDITIONAL GO \| NO-GO \| BLOCKED \| DEFERRED / NOT V1 SCOPE>` |
 | Evidence ids | `<all actual available ids; complete for GO/CONDITIONAL GO \| none: reason only if none exist>` |
 | Accepted package commit | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
 | Accepted package label | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
 | Package ZIP/installer created | `<true required for GO/CONDITIONAL GO \| false: force NO-GO/BLOCKED>` |
+| Approval contract revision | `<docs164-2026-08-17-r1 required for GO/CONDITIONAL GO \| actual/not_observed: reason>` |
 | Trusted artifact ZIP/installer SHA-256 | `<exact required for GO/CONDITIONAL GO \| not_observed: force NO-GO/BLOCKED>` |
+| Release trust root/signer/algorithm/revocation/verifier evidence | `<artifactReleaseTrustRootId> / <artifactSignerKeyId> / <artifactSignatureAlgorithmVersion> / <artifactSignerRevocationState=not_revoked> / <artifactIndependentVerifierEvidenceId>; exact and current for GO/CONDITIONAL GO>` |
 | Authenticated artifact full-file manifest id/hash | `<exact id/hash covering executable code, frontend assets, dependencies, and build metadata; required for GO/CONDITIONAL GO>` |
 | Installed tree verification evidence id/time | `<exact evidence/time proving every governed installed file equals the trusted manifest; required for GO/CONDITIONAL GO>` |
 | Executing tree/process verification evidence id/time | `<exact evidence/time proving the running backend/frontend/dependency roots are that verified tree; required for GO/CONDITIONAL GO>` |
@@ -1217,6 +1265,8 @@ deployment, or other operation.
 | Retry terminal status, repeat per action | `<final action succeeded; earlier failure/cancellation allowed only with authoritative rollback and fresh reconciliation \| actual/not_applicable: reason>` |
 | Remaining retryable physical rows | `<0 for GO/CONDITIONAL GO \| actual/not_observed/not_applicable: reason>` |
 | Final operational decision | `<no_upload \| upload_succeeded \| failed_preserved \| blocked>` |
+| Settings-save control approval/operation/state/evidence | `<every actual protected approval and same response-loss-idempotent operation/evidence if Settings save occurred \| not_approved/not_run/not_applicable: reason>` |
+| Runtime-control approval/action/operation/before-after/evidence | `<every actual protected approval and exact start-or-stop operation/status/evidence if runtime control occurred \| not_approved/not_run/not_applicable: reason>` |
 | Delete execution in this cutover | `<excluded required for GO/CONDITIONAL GO \| actual violation: force NO-GO/BLOCKED>` |
 | Operator PC class | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
 | Privacy-safe exact-source alias | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
@@ -1237,7 +1287,9 @@ Decision-conditional rules:
   generation, replayed approval, missing approver authentication, or revocation
   forces `NO-GO`/`BLOCKED`.
 - `GO` or `CONDITIONAL GO` requires `zipCreated=true`, the exact trusted artifact
-  checksum, authenticated full-file manifest, and time-bound installed-tree and
+  checksum, `approvalContractRevision=docs164-2026-08-17-r1`, exact pre-
+  provisioned release trust-root/signer/algorithm/current non-revocation/
+  independent-verifier evidence, authenticated full-file manifest, and time-bound installed-tree and
   executing-process/tree verification evidence. It also requires exact current
   `artifactVerificationObservedAtUtc`/`artifactVerificationValidUntilUtc`, an
   immediate full-tree reverify, and `artifactIntegrityLockEvidenceId` proving the
@@ -1324,7 +1376,9 @@ I reviewed the evidence ids above and approve the recorded decision only through
 the consumed immutable <finalSignoffApprovalId>, exact <finalSignoffRecordId>,
 current <finalSignoffEvidenceGeneration>, authenticated approver evidence, and
 not-revoked state. It is bound to the accepted package commit/label, trusted ZIP/
-installer checksum, authenticated full-file manifest, installed-tree verification,
+installer checksum, `approvalContractRevision=docs164-2026-08-17-r1`, pre-
+provisioned release trust-root/signer/algorithm/current non-revocation/
+independent-verifier evidence, authenticated full-file manifest, installed-tree verification,
 executing-process/tree verification, exact artifact observation/validity, and
 integrity-lock evidence, inventory record
 and observation/max-age/deadline/observed-source-byte fields, the separately approved snapshot byte ceiling, manifest-preparation approval plus its
@@ -1351,6 +1405,10 @@ occurred, the exact Preview partial-overlap row count and its
 with approver/evidence id, operator PC class, privacy-safe exact-source alias,
 source class, and time window named in this record. Every lifecycle identifier exactly
 matches the consumed manifest and succeeded Preview evidence. This sign-off does
+not treat a read-only status observation as Settings/runtime authorization; every
+Settings save or runtime start/stop that occurred is bound to its exact protected
+single-use control approval, operation id, before/after state, and audit evidence.
+This sign-off does
 not approve any future upload,
 retry, delete, reset, cleanup, migration, LAN exposure, deployment, or feature
 gate change outside the evidence and approvals listed here.
@@ -1362,6 +1420,20 @@ Stop/defer acknowledgement for `NO-GO`, `BLOCKED`, or
 ```text
 I reviewed the recorded blockers or scope decision. Every stage that occurred preserves its actual identifiers and terminal states, including consumed manifest or succeeded Preview evidence. Only genuinely unavailable or unreached fields are marked unknown, not_observed, not_created, not_approved, not_run, or not_applicable with a reason. The decision, reviewer, approver, time, blocking/missing-evidence reasons, and next action are recorded. Successful intermediate evidence does not authorize GO, upload, retry, delete, or cutover.
 ```
+
+### Final Sign-Off Deterministic Gate
+
+Final sign-off cannot be credited until automated tests reject unresolvable,
+arbitrary, expired, replayed, or already-claimed approvals; copied Markdown/chat
+tables; approver-authentication substitution; exact binding mismatch; stale
+evidence generations; and revocation immediately before, during, or after claim
+but before publication/use. Tests must race concurrent claims and prove exactly
+one immutable `finalSignoffRecordId`, exercise crash/response loss before and
+after record commit, and recover only that same record. They must prove every
+successfully finalized decision consumes its approval independently of whether
+the decision is GO or NO-GO, while revocation state remains a separate dimension.
+No GO/CONDITIONAL GO is valid without passing evidence for this matrix and the
+canonical artifact-admission matrix in `docs/173`.
 
 ## Recommended Next Work Packages
 

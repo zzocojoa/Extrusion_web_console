@@ -60,12 +60,17 @@ one pre-reserved target-side Delete mutation marker whose
   marker-first reconciliation proves outcome despite response loss or external
   writers; and a separately pre-authorized bounded encrypted incident escrow for
   a marker still unknown at the standard retention deadline, ending in marker-
-  proven resolution or permanent recovery-loss/security-incident NO-GO. Source
+  proven resolution followed by approval-bound permanent-block disposal, or
+  final-ceiling disposal with permanent recovery-loss/security-incident NO-GO.
+  Once standard recovery retention has expired, incident evidence cannot reopen
+  ordinary restore/disposition. Source
   bytes alone never make Delete rollback-ready.
 
-Final cutover GO also requires a content-addressed ZIP/installer, authenticated
-full-file manifest, verification that the installed and executing trees match
-that artifact, and an immutable authenticated, non-revoked final sign-off record.
+Final cutover GO also requires a content-addressed ZIP/installer whose signature
+and full-file manifest verify against a pre-provisioned, non-revoked owner-
+controlled release trust root outside the candidate, with exact signer/
+algorithm/independent-verifier evidence; verification that the installed and
+executing trees match that artifact; and an immutable authenticated, non-revoked final sign-off record.
 A mutable unpacked folder, self-reported build-info file, or copied Markdown sign-
 off cannot prove release readiness.
 
@@ -349,7 +354,10 @@ current config version and state, the exact reviewed non-secret before/after val
 for every allowed field, the claim deadline, exclusions, stop conditions, and
 audit evidence. The claim and save must atomically reject stale state, substituted
 values, extra fields, replay, or concurrent claims. The read-only commands above
-do not authorize a save.
+do not authorize a save. The canonical protected approval id/state/deadline,
+config-generation/change-set binding, operation id, response-loss behavior,
+failure audit, and deterministic negative-test contract is in `docs/164`; until
+it is implemented and tested, operational Settings save evidence is blocked.
 
 `PUT /api/config` accepts only known config keys. It rejects environment-overridden keys, including repo `.env` key-presence overrides, writes blocked audit rows for those attempts, and writes failure audit rows for validation failures including malformed JSON bodies. Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason`; they do not store raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies. Config writes use a per-config-file lock, a unique temp filename, and atomic replace. Settings precedence is built-in defaults, then config JSON, then repo `.env` or launcher env, then process environment.
 
@@ -364,8 +372,9 @@ Invoke-RestMethod http://127.0.0.1:8000/api/runtime/local-supabase
 Copy-ready Local Supabase start/stop recipes are intentionally omitted. Either
 action changes runtime state and requires its own explicit bounded approval, no
 active Preview/upload/delete action, exact before/after status and audit evidence,
-and the stop conditions in `docs/164` and `docs/176`. This read-only status check
-does not authorize start or stop.
+and the protected single-use action/state/operation lifecycle plus deterministic
+replay/concurrency/response-loss tests in `docs/164` and `docs/176`. This read-
+only status check does not authorize start or stop.
 
 Audit Logs API smoke check:
 
