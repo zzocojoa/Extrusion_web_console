@@ -4,22 +4,41 @@ Date: 2026-06-18
 
 Branch: `codex/already-in-db-delete-implementation`
 
-Status: `approved_implementation_followup`
+Status: `superseded_historical_implementation_plan_non_authorizing`
 
 ## Hard Gate
 
-This document started as a planning artifact. The implementation follow-up was
-separately approved on 2026-06-18 and is allowed only on a clean `origin/main`
-implementation branch that reflects this safety contract in code and tests.
+This document is retained only as historical planning and implementation/API
+context. The 2026-06-18 follow-up approval is closed and is not reusable. This
+document does not authorize code changes, automated or destructive fixture
+tests, DB reads or writes, Delete Preflight, hard delete, reconciliation,
+recovery, Upload Preview, Start Upload, Retry Failed, Supabase/Docker lifecycle
+work, release, packaging, or any operational action.
 
-This approval does not allow operational DB deletion, Upload Preview execution,
-Start Upload, Retry Failed, duplicate rerun, DB reset/truncate/drop/manual
-cleanup, Docker cleanup, Supabase lifecycle work, release, tag, or package
-creation during implementation verification.
+Every imperative, state, request/response example, checklist, and verdict below
+is historical unless a current source document explicitly restates it. In
+particular, source-derived rollback readiness, a coarse DB fingerprint,
+current-row-presence outcome inference, and a process/user-local operation lock
+are obsolete and must not be implemented or used as evidence.
 
-Destructive smoke is allowed only against a disposable local fixture database.
-Production execution still requires a separate explicit operator approval with
-the exact Preview run, selected item count, and exact key count.
+The current non-executable safety contracts are:
+
+- `docs/164_operator_data_mutation_safety_gate.md`;
+- `docs/171_v2_operational_delete_verification_gate.md`;
+- `docs/173_v2_operational_upload_verification_gate.md`;
+- `docs/176_v1_cutover_go_no_go_validation_plan.md`.
+
+Those documents require, among other gates, a pre-existing verified exact-target
+baseline; a protected target identity binding; one authenticated machine-global
+target coordinator; a single-consumer chain fence; immutable approval,
+preflight, execution, marker, and disposition lifecycles; an exact typed DB
+before-image captured atomically with Delete and its target marker; marker-first
+outcome reconciliation; and separately approved restore or disposition. Their
+requirements are cumulative. None is granted by this historical file.
+
+Any future implementation, fixture test, or operational execution needs a new,
+explicitly scoped human authorization after the current contracts and required
+deterministic tests are satisfied. Operational DB deletion remains unapproved.
 
 ## Problem
 
@@ -68,6 +87,13 @@ This plan blocks implementation until those risks are explicitly designed.
 
 ## Required DB Target Guard
 
+Historical limitation: the sanitized fingerprint described in this section is
+diagnostic metadata only and cannot bind an exact database instance. A current
+implementation must instead use the pre-provisioned trust anchor, protected
+exact-target binding, machine-global coordinator, target-side mutation epoch,
+and deadlines defined by `docs/164`, `docs/171`, and `docs/173`. The rules below
+must not be treated as a sufficient target guard.
+
 Start Delete must hard block unless every guard passes.
 
 | Guard | Required behavior |
@@ -111,6 +137,13 @@ fingerprint hash before counting exact keys, but it must not block solely
 because DELETE privilege is absent.
 
 ## Start-Time Revalidation
+
+Historical limitation: reopening operational source files and rechecking their
+metadata or keys is not valid Delete authorization or rollback proof. Current
+Delete must use the separately protected immutable source-provenance snapshot,
+must never reopen the operational source after snapshot publication, and must
+bind every revalidation to the current target-global coordinator and target-side
+marker contract in `docs/164` and `docs/171`.
 
 Delete Preflight is advisory. Start Delete is authoritative.
 
@@ -193,23 +226,38 @@ or frontend state.
 
 This feature does not provide app-level undo.
 
-Rollback is limited to a future fresh Preview plus Start Upload from the source
-CSV files. That rollback path is valid only when the selected source files are
-still present, parseable, and byte/signature stable enough to reproduce the same
-exact keyset.
+A fresh Preview plus Start Upload from source CSV is a new upload. It is not an
+exact rollback and must never be represented as recovery of the deleted DB row
+state. Matching paths, bytes, signatures, keys, or transformed values cannot
+recreate arbitrary pre-delete values for every DB column.
+
+Exact rollback readiness requires a protected, encrypted, complete typed DB
+before-image for every selected row. Its id, schema/column/content bindings,
+byte ceiling, capacity, confidentiality class, and retention deadline must be
+pre-reserved by an immutable hard-delete approval. The authoritative target
+transaction must capture and verify that before-image, execute the exact-key
+Delete, and commit the target marker transition atomically. Any incomplete
+capture, value/schema/side-effect drift, overflow, or binding mismatch must roll
+back the whole transaction with zero Delete.
+
+The separately protected immutable source snapshot defined by the current
+contract proves source and key provenance only. It is not a DB before-image and
+does not make rollback ready.
 
 Delete Preflight must compute and expose:
 
 | Field | Meaning |
 | --- | --- |
-| `rollbackReady` | True only when every selected file is present and signature-stable. |
-| `rollbackBlockers` | Safe reason codes such as `file_missing`, `signature_changed`, `schema_mismatch`, `keyset_mismatch`. |
+| `rollbackReady` | Historical camel-case API name only. The current canonical state must begin `false_pending_atomic_before_image` and may become `true` only inside the authoritative target transaction after the complete typed DB before-image is captured and revalidated, immediately before Delete. |
+| `rollbackBlockers` | Safe reason classes for any missing/mismatched before-image, target, schema, column, side-effect, capacity, confidentiality, retention, marker, coordinator, or approval binding. Source presence/signature stability cannot clear this gate. |
 | `selectedFileCount` | Count only, no raw filenames in audit. |
 | `selectedKeyCount` | Exact unique key count to delete. |
 | `selectionHash` | Hash of selected Preview item IDs and keyset metadata. |
 | `keysetHash` | Hash of exact `(timestamp, device_id)` keys, not the keys themselves. |
 
-Default policy: Start Delete blocks when `rollbackReady` is false.
+Start Delete must block unless the current contract can perform the atomic
+before-image transition described above. A preflight response cannot truthfully
+claim final rollback readiness before the authoritative target transaction.
 
 There is no break-glass path in this plan. If operations later require deletion
 without rollback readiness, that must be a separate approval and a separate
@@ -219,9 +267,11 @@ Operator-facing copy must state:
 
 - this is a permanent DB hard delete;
 - there is no in-app undo;
-- recovery requires a fresh Preview and separately approved Start Upload;
-- recovery can fail if CSV files changed, moved, disappeared, or no longer parse
-  to the same keys.
+- exact recovery requires a separately approved restore using only the retained
+  DB before-image before its active-use, reconcile, retention, and disposition
+  deadlines;
+- source CSV, a new Preview, and Start Upload do not replace that before-image or
+  authorize recovery.
 
 Audit params must record `rollbackReady`, safe blocker codes, counts, and hashes.
 They must not record raw paths, raw filenames, DB URLs, tokens, JWTs, or secrets.
@@ -241,8 +291,9 @@ Policy:
   the full transaction;
 - if the process crashes before commit, PostgreSQL rolls back;
 - if the process crashes after commit but before local state is updated, the
-  delete run enters `commit_unknown` recovery and must be reconciled by exact-key
-  DB count before the UI reports a final result.
+  delete run enters the current `commit_unknown_blocked`/incident-escrow flow;
+  reconciliation must read and validate the exact target-side mutation marker
+  first. Current row presence, absence, or delta must never infer the outcome.
 
 The conservative max should be chosen during implementation review after timing
 tests against a disposable local fixture DB. Until then, do not claim large-scale
@@ -259,11 +310,11 @@ Delete run states must be explicit.
 | `finalizing` | DB transaction committed or rolled back and the backend is writing local state/audit finalization. | Wait. If finalization is interrupted, reconciliation is required before retry. |
 | `blocked` | A pre-delete guard failed before DB mutation. | Fix blocker, run fresh Preview, retry preflight if still needed. |
 | `failed` | Delete transaction rolled back. | No rows should be deleted. Review error and retry only after fresh preflight. |
-| `succeeded` | Transaction committed and deleted count equals expected key count. | Run a fresh Preview to verify selected keys become upload targets if rollback is needed. |
-| `commit_unknown` | Process may have crashed after commit but before local state/audit finalization. | Run recovery reconciliation before any retry. |
-| `reconciling` | Read-only recovery reconciliation is checking exact selected key presence in DB. | Wait. Do not start another destructive operation. |
-| `reconciled_succeeded` | Recovery proved selected keys are absent after a commit-unknown state. | Treat as succeeded with recovery note. |
-| `reconciled_rolled_back` | Recovery proved selected keys are still present after a commit-unknown state. | Treat as failed/rolled back. |
+| `succeeded` | Historical state. Current success requires the committed bound marker and matching `recovery_available` exact DB before-image, then remains recovery-disposition pending. | Do not infer recoverability from a fresh Preview. Follow the separately approved restore/disposition lifecycle. |
+| `commit_unknown` | Historical name for a response-loss/crash ambiguity. | Treat as the current non-advanceable `commit_unknown_blocked` flow and reconcile the exact target marker first. |
+| `reconciling` | Historical state. Read-only recovery reconciliation validates the exact bound target marker, coordinator generation, approval/run, and before-image binding. | Wait. Do not start another operation or inspect current row presence as outcome proof. |
+| `reconciled_succeeded` | Historical state. The exact committed marker plus matching recovery-available before-image proved commit. | Continue only to the current recovery-disposition gate. |
+| `reconciled_rolled_back` | Historical state. The exact aborted marker authoritatively proved non-commit. | Close the source-provenance disposition path; do not fabricate a DB before-image. |
 | `reconciliation_failed` | Recovery could not prove DB state. | Stop. Manual maintainer investigation only; retry reconciliation only after the blocker is resolved. |
 
 Retries must be idempotency-aware:
@@ -303,8 +354,10 @@ or `finalizing` rows must be moved to `commit_unknown` with
 `recoveryRequired=true` and a safe audit note.
 
 Startup recovery must not issue a DB DELETE and must not automatically classify
-the final outcome by querying `public.all_metrics`; outcome reconciliation is
-API-driven.
+the final outcome from current `public.all_metrics` rows. The current contract
+requires marker-first reconciliation and keeps the machine-global coordinator
+non-advanceable until outcome and every applicable recovery disposition are
+terminal.
 
 ### Commit-Unknown Reconciliation Entry Point
 
@@ -314,27 +367,36 @@ The v1 recovery execution path is an explicit API call:
 POST /api/upload/delete/jobs/{deleteRunId}/reconcile
 ```
 
-The endpoint is protected by the local token because it mutates local state and
-audit rows. It is read-only against local Supabase: it may connect, verify the
-same sanitized DB target/schema/fingerprint without requiring DELETE privilege,
-rebuild exact keys from the original selected Preview evidence, and count
-whether those keys are present or absent using SELECT-only DB statements. It
-must not run `CREATE TEMP`, `INSERT`, `DELETE`, `UPDATE`, `UPSERT`, or any
-Supabase lifecycle operation against local Supabase.
+This historical endpoint shape is not executable authorization. Current
+reconciliation is read-only against local Supabase but must authenticate the
+exact target and read the bound target-side marker first. It must not rebuild
+authorization from current source files or infer the result by counting whether
+selected rows are present. It must not run `CREATE TEMP`, `INSERT`, `DELETE`,
+`UPDATE`, `UPSERT`, or any Supabase lifecycle operation against local Supabase.
 
 Reconciliation outcomes:
 
-- all expected selected keys absent: mark `reconciled_succeeded`;
-- all expected selected keys still present: mark `reconciled_rolled_back`;
-- mixed presence, DB target mismatch, source/keyset reconstruction failure, DB
-  unreachable, or permission/identity uncertainty: mark
-  `reconciliation_failed`.
+- exact committed marker plus matching approval/run/mutation/coordinator and
+  `recovery_available` DB before-image: publish the current committed outcome and
+  keep recovery disposition pending;
+- exact aborted marker: publish authoritative non-commit and close only the
+  applicable source-provenance disposition path;
+- missing, nonterminal, substituted, or mismatched marker/before-image/target/
+  coordinator binding, DB unreachable, or identity uncertainty: remain blocked.
 
 The endpoint must write `upload.delete_reconciled` audit rows with counts,
 hashes, safe reason codes, and `recoveryRequired=false` only when the outcome is
 proven. It must not return raw keys or raw source identifiers.
 
 ## State Model
+
+The schemas below are historical sketches and omit mandatory current fields and
+state machines. They must not be used for implementation or migration design.
+The current model must include the immutable approval/preflight claims and
+deadlines, source-provenance snapshot lifecycle, complete DB-before-image
+lifecycle, target mutation id/marker, exact-target binding, machine-global
+coordinator, chain fence, restore/disposition approvals, and incident escrow
+defined in `docs/164`, `docs/171`, and `docs/173`.
 
 No PostgreSQL migration is required for v1. Local SQLite state needs dedicated
 delete records so audit and recovery are not inferred from upload job state.
@@ -389,6 +451,11 @@ Raw paths and filenames may already exist in Preview state. New delete audit
 records must not copy them into audit params.
 
 ## API Contract Plan
+
+All request/response bodies in this section are historical examples. They omit
+mandatory current approval, exact-target, coordinator/fence, marker,
+before-image, retention, restore, and disposition bindings and therefore are not
+safe or complete API contracts.
 
 ### `POST /api/upload/delete/preflight`
 
@@ -466,7 +533,7 @@ Request:
   "expectedDeleteKeys": 100,
   "typedDeleteKeys": "100",
   "acknowledgeNoUndo": true,
-  "acknowledgeRollbackRequiresFreshPreviewAndStartUpload": true
+  "acknowledgeRollbackRequiresRetainedDbBeforeImage": true
 }
 ```
 
@@ -484,8 +551,10 @@ Response:
 }
 ```
 
-The API must not accept raw key arrays from the frontend. The backend derives
-keys from selected Preview items and current source files.
+The API must not accept raw key arrays from the frontend. The historical source
+derivation rule is superseded: a current Delete consumes only the immutable,
+preflight-bound source-provenance evidence and must not reopen current source
+files after snapshot publication.
 
 The API must not return raw deleted keys. It returns counts, hashes, and safe
 status fields only.
@@ -507,8 +576,8 @@ Response:
   "deleteRunId": "string",
   "status": "reconciled_succeeded",
   "expectedDeleteKeys": 100,
-  "keysPresent": 0,
-  "keysAbsent": 100,
+  "mutationMarkerOutcome": "committed",
+  "dbBeforeImageState": "recovery_available",
   "recoveryRequired": false,
   "rawKeysReturned": false
 }
@@ -532,8 +601,9 @@ UI requirements:
   count, rollback readiness, and blocker reason codes;
 - Start Delete modal requires typing the exact key count;
 - Start Delete modal requires acknowledging no in-app undo and rollback limits;
-- after success, UI must prompt fresh Preview for verification before any
-  recovery Start Upload approval.
+- after a marker-proven committed result, UI must show the separately approved
+  DB-before-image restore or disposition gate; a fresh Preview/Start Upload is
+  not rollback.
 - no Delete Cancel/Pause/Resume controls are shown in v1. While a Start Delete
   or reconciliation request is active, UI is read-only and shows the current
   status plus the next safe operator action.
@@ -608,7 +678,8 @@ Disposable destructive smoke must prove:
 1. wrong DB target is blocked;
 2. stale/non-latest Preview is blocked;
 3. selected `target`, `partial_overlap`, `risky`, and `excluded` rows are blocked;
-4. file signature mismatch is blocked;
+4. source-provenance snapshot content/binding mismatch is blocked and the
+   operational source is never reopened after snapshot publication;
 5. DB fingerprint mismatch between Preflight and Start Delete is blocked;
 6. DELETE privilege absence is blocked as `db_delete_permission_denied`;
 7. `delete_run` state write failure blocks before DB mutation;
@@ -616,8 +687,9 @@ Disposable destructive smoke must prove:
 9. `preparing` to `running` state transition failure blocks as `delete_run_state_write_failed` before `BEGIN`;
 10. exact key count mismatch rolls back;
 11. successful delete removes exactly selected keys;
-12. fresh Preview after delete classifies those keys as upload targets;
-13. rollback via separate Start Upload restores keys only when CSV signatures remain stable;
+12. current row presence/absence cannot classify a response-loss Delete outcome;
+13. complete typed DB before-image capture, exact Delete, and target-marker
+    commit are atomic; separately approved restore uses only that before-image;
 14. audit rows contain no forbidden markers;
 15. stale `preparing` rows from prior process start are marked failed before DB mutation;
 16. stale `running` or `finalizing` rows from prior process start are normalized to `commit_unknown`;
@@ -638,7 +710,9 @@ Implementation cannot start until review confirms:
 - Start Delete durably transitions `delete_run` from `preparing` to `running`
   before opening `BEGIN`, and blocks if that write fails;
 - DB DELETE permission is proven non-destructively and rechecked at Start Delete;
-- rollback readiness is explicit and blocks by default when false;
+- rollback readiness starts `false_pending_atomic_before_image`, becomes true
+  only inside the authoritative transaction after complete typed DB before-image
+  capture/revalidation, and blocks on every missing binding;
 - batch policy is all-or-nothing for v1;
 - partial failure and crash recovery states are operator-visible;
 - intermediate delete states and active Delete Job blockers are explicitly
@@ -651,7 +725,7 @@ Implementation cannot start until review confirms:
 
 ## Plan Review Recheck
 
-Review verdict: `plan_ready_for_followup_review`
+Historical review verdict: `superseded_not_current_evidence`
 
 The prior blocking concerns are addressed in this plan:
 
@@ -659,7 +733,7 @@ The prior blocking concerns are addressed in this plan:
 | --- | --- |
 | Wrong DB target risk | Required DB target guard blocks unless the effective DB is the configured local loopback DB port with matching sanitized identity fingerprint. |
 | Delete Preflight to Start Delete race | Start Delete repeats source, preview, keyset, DB identity, DB match, and typed-count checks immediately before deletion inside the delete transaction. |
-| Rollback relying on CSV only | Rollback limitation is explicit. Delete is blocked by default unless rollback readiness proves source files are present, signature-stable, and parse to the same keyset. |
+| Rollback relying on CSV only | Superseded. Source bytes prove provenance only. Current exact recovery requires a complete typed DB before-image captured atomically with Delete and the target marker, plus a separate restore approval. |
 | Batch transaction ambiguity | V1 policy is bounded all-or-nothing: chunked staging inside one transaction, no per-batch commits, and large selections blocked. |
 | Partial failure ambiguity | Delete states include `blocked`, `failed`, `succeeded`, `commit_unknown`, and recovery reconciliation outcomes. |
 | Audit/state missing before mutation | Start Delete must create `delete_run` state and write `upload.delete_start` audit before opening the destructive DB transaction; `audit_write_failed` blocks deletion. |
@@ -670,16 +744,16 @@ The prior blocking concerns are addressed in this plan:
 | Commit-unknown recovery entry point | Recovery is API-driven through `POST /api/upload/delete/jobs/{deleteRunId}/reconcile`; startup marks stale `preparing` rows failed and normalizes stale `running`/`finalizing` rows to `commit_unknown`. |
 | Cancel scope ambiguity | Delete Cancel/Pause/Resume is explicitly out of v1 scope after Start Delete begins. |
 
-Remaining hard gate: implementation still requires a separate approved PR,
-targeted tests, review, and destructive smoke only against a disposable local
-fixture DB.
+Remaining hard gate: this historical document cannot approve implementation or
+tests. Any successor needs a new explicit work package and human authorization,
+must implement the complete current contract, and must pass its deterministic
+failure/race/tamper/replay test matrix before any separately authorized fixture
+or operational action.
 
 ## Final Verdict
 
-`plan_ready_for_review_no_implementation_approval`
+`superseded_historical_plan_no_implementation_test_or_execution_authorization`
 
-The feature is feasible only as a tightly bounded local-console operation. The
-implementation PR must be treated as production-critical because it deletes rows
-from `public.all_metrics`.
-
-Do not implement until this plan passes engineering review.
+The feature remains production-critical because it deletes rows from
+`public.all_metrics`. Do not implement, test destructively, or execute it from
+this file. Use the current contracts and obtain a new explicit authorization.

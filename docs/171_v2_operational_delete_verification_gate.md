@@ -139,7 +139,13 @@ Every operational delete approval record must include:
 | `deleteExecuteByUtc` | Hard deadline for the one-run delete claim. |
 | `packageSourceCommit` | Exact package source commit approved for the run. |
 | `packageLabel` | Package label or safe package id, without raw local path. |
-| `zipSha256` | Required when `zipCreated=true`; otherwise `not_applicable`. |
+| `zipSha256` | Exact trusted content-addressed ZIP/installer SHA-256; `zipCreated=true` is mandatory before operational preflight/Delete/reconcile/restore. |
+| `artifactFullFileManifestId` | Opaque id plus authenticated hash for governed executable code, frontend assets, dependencies, and build metadata in the trusted artifact. |
+| `installedTreeVerificationEvidenceId` | Opaque time-bound proof that the installed governed tree equals the trusted artifact manifest. |
+| `executingTreeVerificationEvidenceId` | Opaque time-bound proof that the running backend/frontend/dependency roots are that verified tree, not another unpacked directory. |
+| `artifactVerificationObservedAtUtc` | Exact UTC time of the full installed/executing-tree verification immediately preceding admission. |
+| `artifactVerificationValidUntilUtc` | Human-bound expiry within a fixed/versioned/tested maximum age and no later than the approved stage deadline. |
+| `artifactIntegrityLockEvidenceId` | Opaque evidence for an OS-enforced read-only package ACL and exclusive machine-global integrity lock held through preflight/Delete/reconcile/restore; any tamper signal fences work and permits zero further DB writes. |
 | `dbTargetClass` | Safe target class such as `local_supabase_operator_db`, not a raw DB URL. |
 | `dbFingerprintHash` | Safe coarse diagnostic hash from preflight evidence; never sufficient as the target authorization boundary. |
 | `trustedTargetBaselineId` | Random non-derived opaque pre-existing owner-only expected-target baseline id established from separately verified installation/runtime provenance; first observation cannot create it. |
@@ -154,12 +160,12 @@ Every operational delete approval record must include:
 | `targetDbBindingValidUntilUtc` | Non-extendable validity ceiling covering preflight, delete, approved reconcile, and any bounded before-image restore window; it must be no earlier than `deleteDbBeforeImageRetainUntilUtc`. |
 | `targetDbBindingEvidenceId` | Opaque safe evidence for the protected target-identity lifecycle. |
 | `deleteReconcileByUtc` | Hard deadline for any same-run read-only reconcile; no later than target binding validity. |
-| `targetGlobalCoordinatorId` | Random non-derived opaque id resolving to the singleton protected coordinator for this exact trusted target across every Preview chain. |
+| `targetGlobalCoordinatorId` | Random non-derived opaque id resolving through the fixed authenticated machine-global authority, never a user-profile/app-state DB, to the singleton coordinator for this exact trusted target across every Windows user, package, installation, and `EWC_STATE_DB_PATH` on the approved operator PC. |
 | `targetGlobalCoordinatorState` | Must name this chain as the sole ready/active owner; after a resolved Delete it remains `recovery_disposition_pending` until restore/disposal closes. No older/newer Preview chain may overlap. |
 | `targetGlobalCoordinatorOwnerFenceId` | Must equal this exact `targetOperationFenceId`. |
 | `targetGlobalCoordinatorConsumer` | Exact target-global consumer, atomically changed with the chain consumer; empty at preflight eligibility, `delete_preflight`/`delete` during those stages, and `delete_disposition`/`delete_restore` only during the separately approved close. |
 | `targetGlobalCoordinatorGeneration` | Monotonic target-global generation CAS-checked by Preview, preflight, Delete, Start, Retry, marker, and reconcile. |
-| `targetGlobalCoordinatorEvidenceId` | Opaque safe evidence for the exact target-global owner/state/generation transition. |
+| `targetGlobalCoordinatorEvidenceId` | Opaque safe evidence for the exact target-global owner/state/generation transition, fixed authority/ACL-restricted cross-session mutex, single-PC/local-target boundary, and target-side mutation epoch. |
 | `targetOperationFenceId` | Random opaque protected fence shared with Start/Retry for this Preview/target binding. |
 | `targetOperationFenceState` | Chain exclusion state; preflight claims `idle -> claimed -> active`, and Delete begins only while the preflight result owns fence state `active`, consumer `delete_preflight`, and separate `targetDeleteBranchState=delete_ready`. Resolved Delete remains `recovery_disposition_pending` until restore/disposal closes. |
 | `targetUploadBranchState` | Must not be active/retryable-owned by Start/Retry when Delete preflight or Delete claims. |
@@ -184,7 +190,7 @@ Every operational delete approval record must include:
 | `consumedByDeleteApprovalId` | Empty before claim; after run commit must equal this exact `approvalId` permanently. |
 | `deleteRunId` | Empty before claim; generated and atomically bound to both the approval and preflight result when exactly one run commits. |
 | `deleteMutationId` | Random unique target mutation id pre-reserved in the immutable hard-delete approval and claimed only with its approval/preflight/run/source-provenance/before-image/coordinator bindings. |
-| `deleteMutationOutcomeState` | `not_started`, `prepared`, `commit_pending`, `committed`, `aborted`, or `commit_unknown_blocked`; row presence/delta never determines it. |
+| `deleteMutationOutcomeState` | `not_started`, `prepared`, `commit_pending`, `committed`, `aborted`, `commit_unknown_blocked`, or `commit_unknown_retention_incident_blocked`; row presence/delta never determines it. The incident state is permanent until marker-first outcome resolution or final escrow disposal, never an inferred abort. |
 | `deleteMutationOutcomeEvidenceId` | Opaque safe evidence from the immutable target marker or marker-first reconciliation. |
 | `selectedAlreadyInDbItems` | Exact selected `already_in_db` item count. |
 | `exactKeyCount` | Exact selected key count approved for delete. |
@@ -197,7 +203,7 @@ Every operational delete approval record must include:
 | `deleteRecoverySnapshotState` | `preparing`, `prepared`, `preflight_bound`, `delete_bound`, `awaiting_recovery_disposition`, `disposed`, `disposal_failed_blocked`, or `invalid`; no source reopen or state regression is allowed. |
 | `deleteRecoveryObservedBytes` | Exact read-only observed byte count reviewed before approval; never inferred. |
 | `deleteRecoverySnapshotMaxBytes` | Human-approved non-inferred byte ceiling bound in the preflight approval. |
-| `deleteRecoverySnapshotRetainUntilUtc` | Human-approved non-extendable retention/access deadline covering Delete, same-run reconcile, and the final recovery decision. A hard-delete approval may proceed only when `deleteDbBeforeImageRetainUntilUtc` is exactly this same deadline. |
+| `deleteRecoverySnapshotRetainUntilUtc` | Human-approved standard non-extendable retention/access deadline covering Delete, same-run reconcile, and the normal final recovery decision. The source-provenance snapshot is always key-first disposed by this deadline. A hard-delete approval may proceed only when `deleteDbBeforeImageRetainUntilUtc` is exactly this same standard deadline and a separate, later `deleteCommitUnknownEscrowRetainUntilUtc` is pre-authorized for the sole unresolved-outcome exception. |
 | `deleteRecoveryCapacityEvidenceId` | Opaque safe evidence that protected storage can hold the approved bytes. |
 | `deleteRecoveryConfidentialityClass` | Approved owner-only encryption/access-control class; no raw path or key material. |
 | `deleteRecoveryDispositionState` | `scheduled`, `awaiting_recovery_disposition`, `in_progress`, `disposed`, or `disposal_failed_blocked`; key destruction and verified byte removal are mandatory on invalidation/preflight block/expiry or after the final recovery decision. |
@@ -215,9 +221,13 @@ Every operational delete approval record must include:
 | `deleteDbBeforeImageMaxBytes` | Human-approved, non-inferred encrypted before-image byte ceiling named by the hard-delete approval. Overflow causes transaction rollback and zero DELETE. |
 | `deleteDbBeforeImageCapacityEvidenceId` | Opaque safe evidence that the protected target-side recovery store has capacity for the approved ceiling before mutation. |
 | `deleteDbBeforeImageConfidentialityClass` | Approved owner-only encryption/access-control class for exact DB row values. |
-| `deleteDbBeforeImageRetainUntilUtc` | Human-approved non-extendable deadline exactly equal to `deleteRecoverySnapshotRetainUntilUtc`, no earlier than Delete reconcile and the final recovery-disposition window. Unequal deadlines invalidate the hard-delete approval before mutation. |
+| `deleteDbBeforeImageRetainUntilUtc` | Human-approved standard deadline exactly equal to `deleteRecoverySnapshotRetainUntilUtc`, no earlier than Delete reconcile and the normal recovery-disposition window. Unequal standard deadlines invalidate the hard-delete approval before mutation. Only a pre-authorized unresolved-outcome escrow may retain an encrypted before-image past this standard deadline. |
 | `deleteDbBeforeImageState` | `not_created` before the authoritative transaction, `recovery_available` only when before-image + exact DELETE + committed marker have committed atomically, then `restoring`, `restored`, `disposed`, `disposal_failed_blocked`, or `invalid`; a committed Delete with missing/mismatched before-image is permanently blocked. |
 | `deleteDbBeforeImageDispositionEvidenceId` | Opaque safe evidence for key-first disposal and verified byte removal of the before-image after accepted Delete or separately approved exact restore. |
+| `deleteCommitUnknownEscrowRetainUntilUtc` | Human-approved absolute incident-escrow ceiling, strictly later than the standard retention deadline, no later than `targetDbBindingValidUntilUtc`, and within a fixed/versioned implementation maximum. It is pre-reserved in the hard-delete approval, cannot be extended, and is used only when the marker remains nonterminal/missing/tampered at the standard deadline. |
+| `deleteCommitUnknownEscrowReconcileByUtc` | Human-approved last marker-first read-only incident-reconcile deadline, later than the standard `deleteReconcileByUtc` only for the activated escrow path and no later than `deleteCommitUnknownEscrowRetainUntilUtc` or `targetDbBindingValidUntilUtc`. It authorizes no row-presence inference, restore, Delete, or other DB read/write. |
+| `deleteCommitUnknownEscrowState` | `not_active`, `active_locked`, `resolved`, `disposed_permanent_block`, or `disposal_failed_blocked`. While active, any target-side before-image remains encrypted and inaccessible except to marker-first reconcile or a later separately approved restore after committed outcome proof; no new mutation or ordinary disposition is allowed. |
+| `deleteCommitUnknownEscrowEvidenceId` | Opaque safe evidence for incident activation, marker-first resolution, or final key-first disposal/permanent block. It contains no row values, raw keys, or target identity. |
 | `deleteDbRestoreApprovalId` | `not_issued` in the hard-delete approval; a later random immutable/authenticated expiring single-use approval id is required for exact restore. |
 | `deleteDbRestoreApprovalState` | `not_issued` before human review; then `available`, `claimed`, `consumed`, or `invalid`. |
 | `deleteDbRestoreExecuteByUtc` | `not_approved` before issuance; otherwise a human-supplied claim deadline no later than the non-renewable restore active-use lease. |
@@ -260,16 +270,17 @@ read-only evidence and delete preflight output:
 ```text
 TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
 I approve exactly one operational hard delete for approval <approvalId>, initially in state available and claimable only until <deleteExecuteByUtc>.
-The approved package sourceCommit is <packageSourceCommit>, package label is <packageLabel>, and zip SHA-256 is <zipSha256>.
-The approved DB target class is <dbTargetClass> and diagnostic DB fingerprint hash is <dbFingerprintHash>. The expected exact target is anchored by pre-existing baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>. The exact target comes from consumed preparation approval <targetIdentityPreparationApprovalId>, completed by <targetIdentityPreparationExecuteByUtc>, and is protected binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, with safe evidence <targetDbBindingEvidenceId>. The singleton exact-target coordinator is <targetGlobalCoordinatorId>, state/sole owner/consumer/generation/evidence <targetGlobalCoordinatorState>/<targetGlobalCoordinatorOwnerFenceId>/<targetGlobalCoordinatorConsumer>/<targetGlobalCoordinatorGeneration>/<targetGlobalCoordinatorEvidenceId>; it must reject every different Preview-chain owner. The shared target operation fence is <targetOperationFenceId>, with exact chain/upload/Delete states <targetOperationFenceState>/<targetUploadBranchState>/<targetDeleteBranchState>, consumer <targetOperationConsumer>, generation <targetOperationFenceGeneration>, and safe evidence <targetOperationFenceEvidenceId>; it must be the same fence already claimed by the named preflight result and both coordinator/fence generations must be atomically claimed for this delete run. Any same-run reconcile must complete by <deleteReconcileByUtc>, no later than that validity. The schema class is <schemaClass> and protected schema binding is <schemaBindingId>.
+The approved package sourceCommit is <packageSourceCommit>, package label is <packageLabel>, zipCreated is true, trusted ZIP/installer SHA-256 is <zipSha256>, authenticated full-file manifest is <artifactFullFileManifestId>, installed-tree evidence is <installedTreeVerificationEvidenceId>, executing-tree evidence is <executingTreeVerificationEvidenceId>, verification observation/expiry are <artifactVerificationObservedAtUtc>/<artifactVerificationValidUntilUtc>, and integrity-lock evidence is <artifactIntegrityLockEvidenceId>. Admission must immediately reverify and hold the OS-enforced read-only package ACL plus machine-global integrity lock through the stage; a mutable unpacked/self-reported/different or post-admission changed execution tree is invalid and permits zero further DB writes.
+The approved DB target class is <dbTargetClass> and diagnostic DB fingerprint hash is <dbFingerprintHash>. The expected exact target is anchored by pre-existing baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>. The exact target comes from consumed preparation approval <targetIdentityPreparationApprovalId>, completed by <targetIdentityPreparationExecuteByUtc>, and is protected binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, with safe evidence <targetDbBindingEvidenceId>. The singleton exact-target coordinator is <targetGlobalCoordinatorId>, state/sole owner/consumer/generation/evidence <targetGlobalCoordinatorState>/<targetGlobalCoordinatorOwnerFenceId>/<targetGlobalCoordinatorConsumer>/<targetGlobalCoordinatorGeneration>/<targetGlobalCoordinatorEvidenceId>; its evidence attests the fixed authenticated machine-global authority, ACL-restricted cross-session mutex, single-operator-PC/local-target boundary, and target-side mutation epoch, and it must reject every different Preview-chain owner or user-profile/app-state authority. The shared target operation fence is <targetOperationFenceId>, with exact chain/upload/Delete states <targetOperationFenceState>/<targetUploadBranchState>/<targetDeleteBranchState>, consumer <targetOperationConsumer>, generation <targetOperationFenceGeneration>, and safe evidence <targetOperationFenceEvidenceId>; it must be the same fence already claimed by the named preflight result and both coordinator/fence generations must be atomically claimed for this delete run. Any same-run reconcile must complete by <deleteReconcileByUtc>, no later than that validity. The schema class is <schemaClass> and protected schema binding is <schemaBindingId>.
 The approved scope is preview run <previewRunId>, delete-preflight approval <deletePreflightApprovalId> consumed by <deletePreflightExecuteByUtc> and completed by <deletePreflightCompleteByUtc> under owner <deletePreflightClaimId>/fence <deletePreflightFence>, unexpired ready_available delete preflight result <deletePreflightId>, selected already_in_db items <selectedAlreadyInDbItems>, and exact keys <exactKeyCount>.
 That preflight result may be atomically claimed and consumed only by this approval <approvalId> and the exactly one deleteRunId generated in the joint claim transaction; it may not be reused by another approval or run.
-The random unique target delete mutation id <deleteMutationId> and DB before-image id <deleteDbBeforeImageId> are pre-reserved in this immutable approval and may be claimed only with this approval, preflight result, run, exact keyset/source-provenance binding, exact target, schema/column bindings, mutation-schema fence <deleteDbMutationSchemaFenceBindingId>, mutation-side-effect binding <deleteDbMutationSideEffectBindingId> in readiness <deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects> for both DELETE and exact restore INSERT, and both coordinator/fence generations. Before any delete, create exactly one target-side prepared marker with those bindings. In one authoritative target transaction, first acquire and hold the bound engine-appropriate DDL-conflicting relation/catalog locks or enforced schema-generation fence through commit; only then revalidate the schema/side-effect bindings and exact selected-row locks. Prove every DELETE/INSERT foreign-key/cascade, trigger/rule, RLS/policy, generated/default, sequence, replication/publication/CDC, notification, and affected-relation class is absent or inert so only the selected direct rows can change, capture every column's complete typed pre-delete value into the protected before-image under content/schema/column bindings <deleteDbBeforeImageContentBindingId>/<deleteDbBeforeImageSchemaBindingId>/<deleteDbBeforeImageColumnSetBindingId>, enforce exact row count <deleteDbBeforeImageRowCount=exactKeyCount> and byte ceiling <deleteDbBeforeImageMaxBytes>, transition rollbackReadiness from false_pending_atomic_before_image to true, execute the exact-key DELETE, and transition the marker to committed. Any unfenced DDL/configuration window, secondary relation or externally observable effect, missing row/column, schema or side-effect drift, unsupported restore semantics, overflow, capacity/confidentiality failure, binding mismatch, or concurrent value change rolls back the entire transaction and performs zero DELETE. Mark aborted only after non-commit is authoritative. Response loss/timeout becomes commit_unknown_blocked unless marker-first reconciliation proves the same committed marker and recovery_available before-image; current row presence/delta must never infer the outcome.
+The random unique target delete mutation id <deleteMutationId> and DB before-image id <deleteDbBeforeImageId> are pre-reserved in this immutable approval and may be claimed only with this approval, preflight result, run, exact keyset/source-provenance binding, exact target, schema/column bindings, mutation-schema fence <deleteDbMutationSchemaFenceBindingId>, mutation-side-effect binding <deleteDbMutationSideEffectBindingId> in readiness <deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects> for both DELETE and exact restore INSERT, and both coordinator/fence generations. Before any delete, create exactly one target-side prepared marker with those bindings. In one authoritative target transaction, first enforce the same target-global coordinator id/generation/owner through its target-side mutation epoch, then acquire and hold the bound engine-appropriate DDL-conflicting relation/catalog locks or enforced schema-generation fence through commit; only then revalidate the schema/side-effect bindings and exact selected-row locks. Prove every DELETE/INSERT foreign-key/cascade, trigger/rule, RLS/policy, generated/default, sequence, replication/publication/CDC, notification, and affected-relation class is absent or inert so only the selected direct rows can change, capture every column's complete typed pre-delete value into the protected before-image under content/schema/column bindings <deleteDbBeforeImageContentBindingId>/<deleteDbBeforeImageSchemaBindingId>/<deleteDbBeforeImageColumnSetBindingId>, enforce exact row count <deleteDbBeforeImageRowCount=exactKeyCount> and byte ceiling <deleteDbBeforeImageMaxBytes>, transition rollbackReadiness from false_pending_atomic_before_image to true, execute the exact-key DELETE, and transition the marker to committed. Any stale coordinator epoch, unfenced DDL/configuration window, secondary relation or externally observable effect, missing row/column, schema or side-effect drift, unsupported restore semantics, overflow, capacity/confidentiality failure, binding mismatch, or concurrent value change rolls back the entire transaction and performs zero DELETE. Mark aborted only after non-commit is authoritative. Response loss/timeout becomes commit_unknown_blocked unless marker-first reconciliation proves the same committed marker and recovery_available before-image; current row presence/delta must never infer the outcome.
 The approved delete policy is <deletePolicy>.
 The approved protected selection binding is <selectionBindingId>, keyset binding is <keysetBindingId>, source evidence binding is <sourceEvidenceBindingId>, and source file signature-set binding is <sourceFileSignatureSetBindingId>.
 The legacy-named source-provenance snapshot is <deleteRecoverySnapshotId>, protected source content binding <deleteRecoveryContentBindingId>, state <deleteRecoverySnapshotState>, observed bytes <deleteRecoveryObservedBytes>, approved byte ceiling <deleteRecoverySnapshotMaxBytes>, capacity evidence <deleteRecoveryCapacityEvidenceId>, owner-only confidentiality class <deleteRecoveryConfidentialityClass>, retention deadline <deleteRecoverySnapshotRetainUntilUtc>, disposition state <deleteRecoveryDispositionState>, final recovery disposition <deleteRecoveryFinalDispositionDecision or not_decided>, early-disposition approval <deleteRecoveryDispositionApprovalId=not_issued>/<deleteRecoveryDispositionApprovalState=not_issued>/<deleteRecoveryDispositionExecuteByUtc=not_approved>, and safe disposition evidence <deleteRecoveryDispositionEvidenceId or not_triggered>. It was created and privately content-verified before the preflight DB read under the named preflight approval, is distinct from every upload snapshot, and Delete/reconcile may not reopen the operational source. It proves source/key provenance only and is not an exact DB rollback image.
-The exact DB before-image is pre-reserved as <deleteDbBeforeImageId>, initially <deleteDbBeforeImageState=not_created>, with protected content/schema/column bindings <deleteDbBeforeImageContentBindingId>/<deleteDbBeforeImageSchemaBindingId>/<deleteDbBeforeImageColumnSetBindingId>, mutation-schema fence <deleteDbMutationSchemaFenceBindingId>, mutation-side-effect binding/readiness <deleteDbMutationSideEffectBindingId>/<deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects>, expected row count <deleteDbBeforeImageRowCount=exactKeyCount>, observed bytes initially <deleteDbBeforeImageObservedBytes=not_observed>, approved byte ceiling <deleteDbBeforeImageMaxBytes>, capacity evidence <deleteDbBeforeImageCapacityEvidenceId>, owner-only confidentiality class <deleteDbBeforeImageConfidentialityClass>, retention deadline <deleteDbBeforeImageRetainUntilUtc=deleteRecoverySnapshotRetainUntilUtc>, disposition evidence <deleteDbBeforeImageDispositionEvidenceId or not_triggered>, and restore lifecycle <deleteDbRestoreApprovalId=not_issued>/<deleteDbRestoreApprovalState=not_issued>/<deleteDbRestoreExecuteByUtc=not_approved>/<deleteDbRestoreActiveUseExpiresAtUtc=not_approved>/<deleteDbRestoreReconcileByUtc=not_approved>/<deleteDbRestoreDispositionMarginSeconds=not_approved>/<deleteDbRestoreMutationId=not_created>/<deleteDbRestoreOutcomeState=not_created>/<deleteDbRestoreOutcomeEvidenceId=not_created>. The target transaction must capture complete typed values for every column before DELETE, prove both DELETE and exact restore INSERT are limited to the selected direct rows with no secondary or externally observable effect while the bound DDL/schema fence is held, record exact observed bytes within the approved ceiling, and commit that before-image atomically with the DELETE and marker. Before mutation, <deleteDbBeforeImagePreparationReadiness=true> and <rollbackReadiness=false_pending_atomic_before_image>; rollbackReadiness may become true only inside that transaction after exact capture/revalidation succeeds. A committed marker without the exact recovery_available before-image is a permanent blocker, never success evidence.
-I understand this delete has no app-level undo and exact recovery requires a separately approved restore transaction from that exact retained DB before-image while it remains valid; a source CSV snapshot, current source file, metadata signature, matching-key reparse, or re-transform cannot replace it. After a committed Delete, the source-provenance snapshot is awaiting_recovery_disposition, the DB before-image remains recovery_available, and both share the exact same retention deadline while coordinator/fence remain recovery_disposition_pending. A separate immutable single-use disposition approval may atomically authorize early accept_delete_and_dispose for both, a separately scoped restore approval may authorize exact before-image restore_then_dispose, or expiry cleanup may run only under both the source preflight approval and hard-delete approval that independently authorize their respective record. After an authoritative aborted Delete, the DB before-image remains not_created, restore is forbidden, and only the source-provenance snapshot enters awaiting_recovery_disposition; source-only early or expiry disposition may close the chain. All unrelated or new mutations are blocked while the applicable decision or cleanup is unresolved; only the separately approved exact recovery action bound to the marker/coordinator and the records that actually exist may run before disposition.
+The exact DB before-image is pre-reserved as <deleteDbBeforeImageId>, initially <deleteDbBeforeImageState=not_created>, with protected content/schema/column bindings <deleteDbBeforeImageContentBindingId>/<deleteDbBeforeImageSchemaBindingId>/<deleteDbBeforeImageColumnSetBindingId>, mutation-schema fence <deleteDbMutationSchemaFenceBindingId>, mutation-side-effect binding/readiness <deleteDbMutationSideEffectBindingId>/<deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects>, expected row count <deleteDbBeforeImageRowCount=exactKeyCount>, observed bytes initially <deleteDbBeforeImageObservedBytes=not_observed>, approved byte ceiling <deleteDbBeforeImageMaxBytes>, capacity evidence <deleteDbBeforeImageCapacityEvidenceId>, owner-only confidentiality class <deleteDbBeforeImageConfidentialityClass>, standard retention deadline <deleteDbBeforeImageRetainUntilUtc=deleteRecoverySnapshotRetainUntilUtc>, pre-authorized unresolved-outcome incident ceiling <deleteCommitUnknownEscrowRetainUntilUtc>, escrow state/evidence <deleteCommitUnknownEscrowState=not_active>/<deleteCommitUnknownEscrowEvidenceId=not_triggered>, disposition evidence <deleteDbBeforeImageDispositionEvidenceId or not_triggered>, and restore lifecycle <deleteDbRestoreApprovalId=not_issued>/<deleteDbRestoreApprovalState=not_issued>/<deleteDbRestoreExecuteByUtc=not_approved>/<deleteDbRestoreActiveUseExpiresAtUtc=not_approved>/<deleteDbRestoreReconcileByUtc=not_approved>/<deleteDbRestoreDispositionMarginSeconds=not_approved>/<deleteDbRestoreMutationId=not_created>/<deleteDbRestoreOutcomeState=not_created>/<deleteDbRestoreOutcomeEvidenceId=not_created>. The target transaction must capture complete typed values for every column before DELETE, prove both DELETE and exact restore INSERT are limited to the selected direct rows with no secondary or externally observable effect while the bound DDL/schema fence is held, record exact observed bytes within the approved ceiling, and commit that before-image atomically with the DELETE and marker. Before mutation, <deleteDbBeforeImagePreparationReadiness=true> and <rollbackReadiness=false_pending_atomic_before_image>; rollbackReadiness may become true only inside that transaction after exact capture/revalidation succeeds. A committed marker without the exact recovery_available before-image is a permanent blocker, never success evidence.
+I understand this delete has no app-level undo and exact recovery requires a separately approved restore transaction from that exact retained DB before-image while it remains valid; a source CSV snapshot, current source file, metadata signature, matching-key reparse, or re-transform cannot replace it. After a committed Delete, the source-provenance snapshot is awaiting_recovery_disposition, the DB before-image remains recovery_available, and both share the exact same standard retention deadline while coordinator/fence remain recovery_disposition_pending. A separate immutable single-use disposition approval may atomically authorize early accept_delete_and_dispose for both, a separately scoped restore approval may authorize exact before-image restore_then_dispose, or normal expiry cleanup may run only under both the source preflight approval and hard-delete approval that independently authorize their respective record. If the marker is still nonterminal/missing/tampered at the standard deadline, the source snapshot is disposed, any target-side before-image is isolated as inaccessible encrypted incident escrow until the separately approved absolute <deleteCommitUnknownEscrowRetainUntilUtc>, and the outcome/coordinator remain permanently blocked; this is not an inferred abort or a deadline extension. Marker-first resolution may close that escrow before its ceiling. If unresolved at the final escrow ceiling, key-first disposal is mandatory and permanently records a recovery-loss/security incident and NO-GO. After an authoritative aborted Delete, the DB before-image remains not_created, restore is forbidden, and only the source-provenance snapshot enters awaiting_recovery_disposition; source-only early or expiry disposition may close the chain. All unrelated or new mutations are blocked while the applicable decision, incident escrow, or cleanup is unresolved; only marker-first reconcile or the separately approved exact recovery action bound to the marker/coordinator and the records that actually exist may run before disposition.
+The incident-escrow marker-first reconcile deadline <deleteCommitUnknownEscrowReconcileByUtc> may apply only after escrow activation, is later than the normal <deleteReconcileByUtc>, and is no later than the final escrow ceiling <deleteCommitUnknownEscrowRetainUntilUtc> or <targetDbBindingValidUntilUtc>. The final escrow ceiling must be strictly later than the standard recovery deadline; none of these deadlines may be inferred or extended.
 The approved V2 gate states are v2RowAttributionEnabled=<v2RowAttributionEnabled>, v2DbDeltaEvidenceRequired=<v2DbDeltaEvidenceRequired>, rowAttributionHmacAvailabilityClass=<rowAttributionHmacAvailabilityClass>, and featureGateChangeApproved=<featureGateChangeApproved>.
 The named approver is <approver>, the named executor is <executor>, and the stop condition is <stopCondition>.
 The post-run evidence report will be recorded at <evidenceReportLocation>.
@@ -310,10 +321,14 @@ Before mutation, the executor must prove all of these:
 - `deleteDbMutationSchemaFenceBindingId` resolves to the complete relation/catalog
   lock set or enforced monotonic schema generation, and the engine can acquire it
   before inspection and hold it through both DELETE and restore INSERT commit;
-- source-provenance and DB-before-image retention deadlines are exactly equal,
-  and the target binding remains valid through that shared deadline;
+- source-provenance and DB-before-image standard retention deadlines are exactly
+  equal, the target binding remains valid through that shared deadline, and the
+  hard-delete approval pre-reserves a strictly later bounded unresolved-outcome
+  escrow ceiling/state/evidence contract that remains within the same exact-target
+  binding validity;
 - approval record exists in an approved storage location;
-- package metadata and checksum match the approval record;
+- `zipCreated=true`, trusted artifact checksum/full-file manifest, and time-bound
+  installed/executing-tree evidence match the approval record;
 - current local branch and operator package source commit match the approved
   source commit expectation for the run;
 - Preview is fresh, latest, succeeded, and DB-reachable;
@@ -349,8 +364,13 @@ Before mutation, the executor must prove all of these:
 - DB target guard's safe class/diagnostic hash still match; the same verified,
   non-revoked trusted target baseline id/alias/state/evidence, consumed target-
   identity preparation approval, and exact binding id/state/validity/evidence all
-  match; `deleteExecuteByUtc` and `deleteReconcileByUtc` do not exceed that
-  validity; the opaque DB binding resolves unexpired to the same authenticated
+  match; `deleteExecuteByUtc`, normal `deleteReconcileByUtc`, incident-only
+  `deleteCommitUnknownEscrowReconcileByUtc`, and final
+  `deleteCommitUnknownEscrowRetainUntilUtc` do not exceed that validity; the
+  normal reconcile deadline is no later than the equal standard retention
+  boundary, while the incident reconcile deadline is later than normal only on
+  escrow activation and no later than the final escrow ceiling; the opaque DB
+  binding resolves unexpired to the same authenticated
   exact instance/database identity and is revalidated with the authoritative DB
   clock immediately before mutation; and the public schema class plus
   opaque schema binding resolve to the same authenticated owner-only
@@ -375,7 +395,8 @@ document.
 After the run, the evidence report must record safe evidence only:
 
 - approval id and approval record location;
-- package source commit, package label, and checksum status;
+- package source commit/label, trusted artifact checksum/full-file manifest, and
+  installed/executing-tree evidence/time;
 - preview run id;
 - delete preflight id;
 - delete preflight result terminal state and its permanent
@@ -388,7 +409,8 @@ After the run, the evidence report must record safe evidence only:
 - DB target class and diagnostic fingerprint hash;
 - trusted target baseline id/alias/state/evidence, target-identity preparation
   approval id/state/deadline, and protected exact DB binding id/state/validity/
-  evidence plus delete reconcile deadline;
+  evidence plus normal delete reconcile, incident-escrow reconcile, and final
+  escrow retention deadlines;
 - target operation fence id/chain state/upload branch/Delete branch/consumer/
   generation/evidence;
 - public schema class;
@@ -406,6 +428,9 @@ After the run, the evidence report must record safe evidence only:
   lifecycle state, rollback-readiness transition, restore approval/mutation/
   outcome evidence, active-use/reconcile deadlines, disposition margin when
   applicable, and safe disposition evidence;
+- unresolved-outcome escrow reconcile deadline, final retention ceiling, state/
+  evidence, and permanent incident/NO-GO result when the standard retention
+  boundary was reached without an authoritative marker;
 - protected mutation-schema fence plus DELETE/restore-INSERT side-effect binding/
   readiness and both authoritative-transaction lock/revalidation evidence classes;
 - V2 gate states and HMAC availability class;
@@ -448,6 +473,13 @@ Allowed follow-up without a new destructive approval:
   same exact target identity/state/evidence on its authoritative DB session; it
   must lock/read the immutable target marker first and may never infer commit or
   rollback from current row presence, counts, or delta;
+- after and only after `commit_unknown_retention_incident_blocked` activation,
+  the same marker-first endpoint under the pre-reserved incident entitlement,
+  only before `deleteCommitUnknownEscrowReconcileByUtc`,
+  `deleteCommitUnknownEscrowRetainUntilUtc`, and
+  `targetDbBindingValidUntilUtc`; it may read only the bound marker and recovery-
+  record identity/state needed to prove committed+matching-before-image or
+  authoritative aborted, and may not perform any row query or mutation;
 - preserving audit, DB delta, and row attribution evidence;
 - documenting the failure and next stop condition.
 
@@ -469,6 +501,23 @@ marker-proven outcome. A missing, tampered, substituted, or still-`prepared`
 marker at the reconcile deadline leaves the chain blocked; it does not authorize
 another Delete, a restore, or disposal before the approved retention boundary.
 
+If that unresolved marker reaches the standard retention deadline, atomically
+enter `commit_unknown_retention_incident_blocked`: fence every worker, dispose
+the source-provenance snapshot under the preflight approval, retain any
+target-side DB before-image only as encrypted/access-locked incident escrow under
+the hard-delete approval's pre-reserved
+`deleteCommitUnknownEscrowRetainUntilUtc`, and preserve the same coordinator/
+fence owner. The escrow permits marker-first outcome reconciliation only; it is
+not rollback readiness, outcome proof, or mutation approval. That read requires
+the separate pre-reserved `deleteCommitUnknownEscrowReconcileByUtc` and exact-
+target revalidation; after that deadline no further DB read is allowed. A committed marker
+plus matching before-image moves to `recovery_disposition_pending`; an aborted
+marker proves no before-image exists and closes source-only cleanup. If outcome
+remains unknowable at the final escrow ceiling, destroy the escrow key first,
+verify byte removal, record `disposed_permanent_block`, and keep the target in a
+permanent recovery-loss/security-incident NO-GO. Cleanup failure becomes
+`disposal_failed_blocked`. Neither deadline may be extended after approval.
+
 Early `accept_delete_and_dispose` requires an immutable/authenticated
 `deleteRecoveryDispositionApprovalId` in `available`, bound to the authoritative
 marker outcome, coordinator/fence generation, human decision, deadline, and the
@@ -484,7 +533,7 @@ same record. It must CAS the same target-global/chain owner and
 that exists is verified terminal. Missing/substituted/expired/replayed/concurrent
 approval or outcome drift must not destroy any key/bytes.
 
-Automatic retention-expiry authority is split by record and may never be
+Normal automatic retention-expiry authority is split by record and may never be
 inherited across approvals. The original consumed preflight approval authorizes
 expiry disposal only of its source-provenance snapshot. The consumed hard-delete
 approval separately authorizes expiry disposal only of the DB before-image it
@@ -493,7 +542,11 @@ target/coordinator bindings. A committed Delete uses one CAS-bound dual-record
 expiry close under both approvals at their required equal deadline; an aborted
 Delete uses source-only expiry under the preflight approval. Each path fences an
 early-disposition or restore claimant, and coordinator release waits for the
-terminal join of all records that actually exist.
+terminal join of all records that actually exist. The only exception is the
+pre-authorized unresolved-outcome incident transition above: it disposes the
+source snapshot at the standard deadline but quarantines a possible target-side
+before-image until the separately named final escrow ceiling, without releasing
+the coordinator or enabling any mutation.
 A restore requires its own separately scoped mutation approval, uses only the
 exact DB before-image, restores and verifies every typed column under the bound
 schema/column policy in one transaction, and is not authorized by this document.
@@ -502,6 +555,15 @@ key destruction, byte removal, absence verification, coordinator/fence terminal
 CAS, and evidence publication. Recovery returns/publishes only the same terminal
 result; it never restores a destroyed key, repeats a different cleanup, releases
 the coordinator before verified removal, or loses the safe evidence record.
+They must also cover a marker that remains missing, tampered, or `prepared`
+immediately before/at/after the standard deadline; atomic source disposal plus
+  incident-escrow activation; incident marker-first read immediately before/at/
+  after its distinct reconcile deadline; zero DB reads after that deadline;
+  committed/aborted resolution during escrow; final escrow expiry with key-first
+  permanent blocking; cleanup failure; and races with
+new Preview/Start/Retry/Delete/restore/disposition. No path may infer abort,
+release the coordinator, extend either deadline, or destroy a possibly committed
+before-image before the pre-authorized incident ceiling.
 Restore tests must reject missing/substituted/expired/replayed/concurrently
 claimed restore approvals and mutations; target/before-image/schema/column/side-
 effect/generation substitution; any already-present key; and current source
@@ -619,8 +681,12 @@ An operational delete can count as V2 operational delete verification only when:
   snapshot reuse, Start-vs-Delete and Retry-vs-Delete contention, terminal replay
   rejection, and crash/response-loss recovery of only one consumer;
 - the singleton target-global coordinator serializes all Preview chains for the
-  exact target and every action/marker/reconcile CAS-checks its owner, consumer,
-  generation, and evidence without overlap or stale publication;
+  exact target through the fixed authenticated machine-global authority and
+  ACL-restricted cross-session mutex, independent of Windows user, installation,
+  package, and `EWC_STATE_DB_PATH`; every mutating target transaction also checks
+  the same target-side mutation epoch, and every action/marker/reconcile CAS-
+  checks owner, consumer, generation, and evidence without overlap or stale
+  publication;
 - one protected exact-byte Delete source-provenance snapshot is privately
   verified and retained from before preflight DB read through marker-
   resolved Delete and the bounded human recovery decision, never reuses the
@@ -642,10 +708,13 @@ An operational delete can count as V2 operational delete verification only when:
   generated/default expressions, sequences, replication/publication/CDC hooks,
   and notifications and prove zero writes unless every class is absent or inert;
 - committed and aborted outcomes have distinct recovery closes, source and DB
-  before-image retention deadlines are equal when both records exist, preflight
+  before-image standard retention deadlines are equal when both records exist, preflight
   and hard-delete approvals independently authorize only their own expiry
   disposal, and coordinator release occurs only after the terminal join of all
-  records that actually exist;
+  records that actually exist; unresolved outcome at the standard deadline
+  activates the pre-authorized bounded incident escrow, disposes source bytes,
+  never infers abort, and ends only in marker-proven resolution or key-first
+  permanent incident/NO-GO at the final ceiling;
 - restore claim/commit/authoritative-abort/commit-unknown/reconcile transitions
   follow the exact approval, before-image, outcome, consumer, and generation table;
   an aborted attempt consumes its approval and requires a new approval, while an
@@ -701,7 +770,12 @@ Stop before operational mutation when any of these are true:
   is not `available` before claim, the claim and one-run binding are non-atomic,
   a duplicate/concurrent request could create another run, or a committed run's
   approval could return to `available`/`invalid`;
-- package metadata or checksum differs from the approval record;
+- `zipCreated` is not true, trusted artifact checksum/full-file manifest/
+  installed-tree/executing-tree evidence is missing or stale, verification
+  observation/expiry/integrity-lock evidence is missing/inferred/expired, the
+  OS-enforced read-only ACL or exclusive machine-global lock cannot be held
+  through the stage, or any governed file/dependency/build-info/execution root
+  differs or changes after admission;
 - DB target class or diagnostic fingerprint differs, the protected exact DB
   binding is missing/unresolvable/substituted, or authoritative instance/
   database identity differs from the preflight approval/result or delete
@@ -709,6 +783,11 @@ Stop before operational mutation when any of these are true:
 - the singleton target-global coordinator id/state/owner/consumer/generation/
   evidence is missing, substituted, stale, overlaps another Preview/action, or
   is not atomically claimed with preflight/Delete/marker/reconcile;
+- the coordinator is scoped to a user-profile/app-state DB, changes with Windows
+  user/package/install/`EWC_STATE_DB_PATH`, lacks the fixed authenticated machine-
+  global authority or ACL-restricted cross-session mutex, the single-PC/local-
+  target invariant is not proved, or the Delete/restore transaction does not
+  enforce the same target-side mutation epoch;
 - public schema class differs, the schema binding is missing/unresolvable/
   substituted, or owner-only schema verification fails;
 - selected item count or exact key count differs, any protected binding is
@@ -747,6 +826,12 @@ Stop before operational mutation when any of these are true:
   delete approval can dispose a source snapshot, an aborted outcome requires or
   fabricates a DB before-image, or coordinator release does not wait for every
   recovery record that actually exists to become terminal;
+- the hard-delete approval lacks the non-extendable unresolved-outcome incident-
+  escrow ceiling/state/evidence, a standard-deadline unknown outcome disposes a
+  possibly committed before-image or retains the source snapshot, escrow permits
+  any action other than marker-first reconcile/separately approved post-proof
+  recovery, or final escrow expiry fails to key-first dispose and permanently
+  record recovery-loss/security-incident NO-GO;
 - restore claim/marker/transaction/reconciliation/equality/disposition does not
   recheck both target-binding and DB-before-image validity with the authoritative
   target clock, lacks the ordered unrenewable active-use/reconcile/deadline margin,

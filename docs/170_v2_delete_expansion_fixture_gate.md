@@ -9,11 +9,11 @@ Status: `deferred_fixture_gate_no_mutation`
 This document defines the gate for V2 delete expansion before any code path is
 allowed beyond the current guarded delete behavior.
 
-The current baseline remains
-`docs/156_operator_already_in_db_delete_contract.md`: selected Upload Preview
-items with status `already_in_db`, exact-key preflight, typed exact count,
-no-undo acknowledgement, rollback-limitation acknowledgement, audit evidence,
-DB target guard, and all-or-nothing delete semantics.
+The current operational baseline is the protected lifecycle in `docs/164` and
+`docs/171`, with shared exact-target and cross-action coordination rules from
+`docs/173`. `docs/156` records a superseded historical implementation contract;
+its selected-`already_in_db` endpoint behavior is compatibility context only and
+does not authorize operational Delete or prove rollback readiness.
 
 This document does not approve implementation, fixture DB mutation, operational
 DB access, operational DB delete, feature-gate enablement, LAN exposure,
@@ -29,8 +29,11 @@ before it is discussed for operational data.
 
 ## Policy Boundary
 
-The only existing baseline delete path is selected `already_in_db` exact-key
-delete under the current contract.
+The existing selected-`already_in_db` exact-key endpoints are an implementation
+compatibility surface. Operational use remains blocked until every current
+`docs/164`/`docs/171` coordinator, exact-target, single-use approval/preflight,
+source-provenance, exact DB-before-image, marker, reconciliation, and recovery-
+disposition requirement is implemented and deterministically tested.
 
 Any future expansion must be represented as an explicit policy with these
 fields before code starts:

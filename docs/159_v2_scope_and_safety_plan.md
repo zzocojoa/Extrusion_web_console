@@ -2,7 +2,7 @@
 
 Date: 2026-06-19 Asia/Seoul
 
-Status: `v2_scope_draft_for_approval`
+Status: `historical_v2_scope_draft_superseded_for_operational_mutation`
 
 ## Purpose
 
@@ -18,6 +18,11 @@ This document does not approve code changes, database migrations, production DB
 access, destructive tests, LAN exposure, release packaging, branch creation,
 commit, push, or PR creation.
 
+For operational Upload or Delete safety, this draft is superseded by
+`docs/164`, `docs/171`, `docs/173`, and `docs/176`. Historical documents
+`docs/151`, `docs/156`, and `docs/157` remain evidence/context only and cannot
+be used as approval wording, a current execution contract, or a recovery plan.
+
 ## Source Documents Reviewed
 
 - `AGENTS.md`
@@ -25,10 +30,14 @@ commit, push, or PR creation.
 - `DESIGN.md`
 - `docs/00_product_scope.md`
 - `docs/01_development_roadmap.md`
-- `docs/151_operator_upload_gate_runbook.md`
-- `docs/156_operator_already_in_db_delete_contract.md`
-- `docs/157_operator_2026-01-19_delete_execution.md`
+- `docs/151_operator_upload_gate_runbook.md` (superseded historical runbook)
+- `docs/156_operator_already_in_db_delete_contract.md` (superseded historical implementation contract)
+- `docs/157_operator_2026-01-19_delete_execution.md` (superseded historical execution evidence)
 - `docs/158_operator_status_language_policy.md`
+- `docs/164_operator_data_mutation_safety_gate.md` (current mutation gate)
+- `docs/171_v2_operational_delete_verification_gate.md` (current Delete gate)
+- `docs/173_v2_operational_upload_verification_gate.md` (current Upload gate)
+- `docs/176_v1_cutover_go_no_go_validation_plan.md` (current cutover gate)
 
 ## Operator Summary
 
@@ -178,8 +187,9 @@ Multi-user LAN cannot ship until all of these are true:
 
 ## Delete Policy
 
-V2 delete work must preserve the existing delete contract unless explicitly
-re-scoped.
+V2 Delete work must satisfy the current protected contract in `docs/164` and
+`docs/171` unless a later approved document strengthens it. The historical
+contracts in `docs/156` and `docs/157` are not an operational baseline.
 
 Baseline rules:
 
@@ -191,19 +201,17 @@ Baseline rules:
   copy, i18n, and runbook approval are separately completed.
 - Supabase Management delete UI, if introduced, must be admin/maintainer-only.
 - Operator UI must not present destructive DB cleanup as a normal upload fix.
-- Start Delete requires typed exact count, no-undo acknowledgement, rollback
-  limitation acknowledgement, local DB target proof, and audit-start success
-  before DB mutation.
+- Start Delete requires every protected coordinator, exact-target, single-use
+  preflight/result/approval, exact-byte source-provenance, exact DB-before-image,
+  mutation-marker, reconciliation, recovery-disposition, and evidence gate in
+  `docs/164` and `docs/171` before DB mutation.
 - A failed, unknown, or unresolved delete blocks the next delete until
   reconciliation or explicit recovery is complete.
 
-No-undo approval language must be explicit:
-
-```text
-I understand this delete has no app-level undo. Recovery requires fresh Preview
-and separately approved Start Upload from unchanged source files, if those files
-still exist and still parse to the same exact keys.
-```
+No-undo approval wording must be taken only from the current canonical contract
+in `docs/164` and `docs/171`. A fresh Preview or Start Upload is a new upload,
+not an exact restoration of deleted DB row values; source files never replace
+the approval-bound complete typed DB before-image.
 
 ## Independent DB Delta
 
@@ -323,8 +331,9 @@ Future implementation rollback:
   access independently;
 - database migrations must include forward and rollback plans before merge;
 - LAN rollout must be reversible to localhost-only operation;
-- delete operations have no app-level undo and must rely on fresh Preview plus
-  separately approved Start Upload from unchanged source files;
+- delete operations have no app-level undo; exact recovery is possible only
+  through the protected DB-before-image restore/disposition lifecycle in
+  `docs/164` and `docs/171`, and a fresh Preview/Start is not rollback;
 - unresolved `commit_unknown` or reconciliation failures must block further
   destructive actions until resolved.
 

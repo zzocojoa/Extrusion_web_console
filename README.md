@@ -43,7 +43,10 @@ Already-in-DB hard delete is a production-critical maintenance flow, not a gener
 
 That is not the complete operational Delete gate. The current v1 path cannot
 count as operational or V2 proof until production code/tests also implement the
-exact-target singleton coordinator across Preview chains; durable preflight
+  exact-target singleton coordinator across Preview chains in one fixed
+  authenticated machine-global authority shared by every Windows user/package/
+  install/state-DB, with an ACL-restricted cross-session mutex and target-side
+  mutation epoch; durable preflight
 owner/fence/claim-and-completion deadlines; an owner-only exact-byte source-
 provenance snapshot with canonical-root/handle identity, ceiling, capacity,
 confidentiality, retention, and separately approved disposition controls; an
@@ -54,8 +57,17 @@ sequence, replication/CDC/notification, and affected-relation class is absent or
 inert, leaving no secondary relation or externally observable effect;
 distinct committed dual-record versus aborted source-only cleanup authority; and
 one pre-reserved target-side Delete mutation marker whose
-marker-first reconciliation proves outcome despite response loss or external
-writers. Source bytes alone never make Delete rollback-ready.
+  marker-first reconciliation proves outcome despite response loss or external
+  writers; and a separately pre-authorized bounded encrypted incident escrow for
+  a marker still unknown at the standard retention deadline, ending in marker-
+  proven resolution or permanent recovery-loss/security-incident NO-GO. Source
+  bytes alone never make Delete rollback-ready.
+
+Final cutover GO also requires a content-addressed ZIP/installer, authenticated
+full-file manifest, verification that the installed and executing trees match
+that artifact, and an immutable authenticated, non-revoked final sign-off record.
+A mutable unpacked folder, self-reported build-info file, or copied Markdown sign-
+off cannot prove release readiness.
 
 The same exact-target requirement applies to DB-dependent Preview, Start Upload,
 Retry Failed, target-marker recovery, and whole-attempt reconciliation. Safe
@@ -578,11 +590,11 @@ Browser QA has been run against:
 - `docs/02-design/features/upload-preview-range-options.design.md`
 - `docs/01-plan/features/upload-preview-preferences-and-audit-panel-polish.plan.md`
 - `docs/02-design/features/upload-preview-preferences-and-audit-panel-polish.design.md`
-- `docs/156_operator_already_in_db_delete_contract.md`
-- `docs/157_operator_2026-01-19_delete_execution.md`
+- `docs/156_operator_already_in_db_delete_contract.md` (superseded historical implementation reference; non-authorizing)
+- `docs/157_operator_2026-01-19_delete_execution.md` (superseded historical execution evidence; non-authorizing)
 - `docs/158_operator_status_language_policy.md`
-- `docs/159_v2_scope_and_safety_plan.md`
-- `docs/160_v2_delete_lan_audit_rollback_technical_design.md`
+- `docs/159_v2_scope_and_safety_plan.md` (historical scope draft; superseded for operational mutation)
+- `docs/160_v2_delete_lan_audit_rollback_technical_design.md` (historical technical design; superseded for operational mutation)
 - `docs/161_v2_open_decisions_review.md`
 - `docs/162_v2_sidecar_row_attribution_ledger_design.md`
 - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`

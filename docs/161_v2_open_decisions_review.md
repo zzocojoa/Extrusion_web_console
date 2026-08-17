@@ -14,14 +14,22 @@ This is not implementation approval. It does not approve code changes, database
 migrations, production DB access, fixture DB mutation, destructive smoke tests,
 LAN exposure, release packaging, branch creation, commit, push, or PR creation.
 
+For operational Upload/Delete mutation, the later protected contracts in
+`docs/164`, `docs/171`, `docs/173`, and `docs/176` take precedence. Planning
+choices in this record cannot weaken or replace those gates.
+
 ## Source Documents Reviewed
 
 - `AGENTS.md`
 - `README.md`
 - `docs/00_product_scope.md`
-- `docs/156_operator_already_in_db_delete_contract.md`
+- `docs/156_operator_already_in_db_delete_contract.md` (superseded historical implementation contract)
 - `docs/159_v2_scope_and_safety_plan.md`
 - `docs/160_v2_delete_lan_audit_rollback_technical_design.md`
+- `docs/164_operator_data_mutation_safety_gate.md` (current mutation gate)
+- `docs/171_v2_operational_delete_verification_gate.md` (current Delete gate)
+- `docs/173_v2_operational_upload_verification_gate.md` (current Upload gate)
+- `docs/176_v1_cutover_go_no_go_validation_plan.md` (current cutover gate)
 
 ## Classification Rules
 

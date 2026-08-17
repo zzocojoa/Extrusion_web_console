@@ -133,8 +133,11 @@ Conditions to reach a `CONDITIONAL GO` candidate:
    Retry actions; those workers must never reopen operational source and any
    pre-mutation mismatch must produce zero DB writes. The current size/mtime
    signature and a separate pre-call scan are insufficient.
-2. Build the package containing that implementation and verify its label, ZIP
-   hash, and source commit against the artifact the operator will actually run.
+2. Build a content-addressed ZIP/installer containing that implementation,
+   generate a signed or authenticated cryptographic full-file manifest from the
+   trusted artifact, and verify its source commit, ZIP hash, extracted installed
+   tree, and currently executing code/dependency tree. A mutable unpacked folder,
+   self-reported label/build-info file, or `zipCreated=false` cannot support GO.
 3. Confirm an immutable/authenticated owner-only trusted target baseline already
    exists in verified, non-revoked state from separately controlled installation/
    runtime provenance. This plan does not authorize creating or rotating it.
@@ -301,17 +304,20 @@ operational CSV bytes into protected immutable storage, not only hashes or
 metadata. It is not read-only and requires its own exact human approval. It does
 not approve Preview.
 
-```text
-TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
-The manifest-preparation approval id is <manifestPreparationApprovalId> and both claim and completed protected publication must occur by <manifestPreparationExecuteByUtc>.
-I approve exactly one protected local content-manifest plus full-byte immutable snapshot preparation from package sourceCommit <sourceCommit> for inventory record <inventoryEvidenceRecordId>.
-That inventory was observed at <inventoryObservedAtUtc> and is approved for at most <inventoryMaxAgeSeconds> seconds; the preparation deadline above is within that window.
-The approved operator PC class is <operatorPcClass>, source alias is <sourceAlias>, source class is <sourceClass>, expected files is <fileCount>, expected physical rows is <= <rowLimit>, inventory-observed source bytes are <inventoryObservedBytes>, and the separately human-approved full-byte snapshot ceiling is <contentSnapshotMaxBytes> bytes with contentSnapshotMaxBytes >= inventoryObservedBytes.
-The snapshot may be read only by the later separately approved Preview/Start/Retry chain and only until <contentSnapshotRetainUntilUtc>.
-I approve automatic bounded cryptographic disposal at terminal chain completion (zero-target Preview or completed Start/Retry), invalidation, or that deadline, whichever occurs first: stop active access, clear buffers, destroy the per-snapshot encryption key first, remove the byte file, verify absence, and record <snapshotDispositionEvidenceId>. A failed removal must leave keyless bytes unreadable, alert the operator, block new snapshot preparation, and retry idempotently only for the same record.
-I acknowledge that this write stores a confidential complete copy of the approved operational CSV bytes in owner-restricted protected storage.
-This approval permits only that protected manifest/snapshot write and its bounded automatic disposal described above. It does not approve Upload Preview, Start Upload, Retry Failed, Delete, Settings save, DB access, runtime lifecycle, source mutation, any other cleanup, LAN, or deployment.
-```
+Before source access, admission must require `zipCreated=true`, the exact trusted
+ZIP/installer checksum and authenticated full-file manifest, current installed-
+tree and executing-process/tree verification observed before its human-bound
+expiry, and `artifactIntegrityLockEvidenceId`. It must immediately reverify the
+full tree under an OS-enforced read-only package ACL and exclusive machine-global
+integrity lock held through the bounded stage. Expired evidence, a mutable or
+different tree, a tamper signal, or inability to hold the lock stops before any
+source byte is opened.
+
+The exact, copy-ready approval wording is owned only by **Protected Content-
+Manifest Preparation Gate** in `docs/164_operator_data_mutation_safety_gate.md`.
+Do not copy or reconstruct it from this validation plan. The approval record
+must name that canonical section's version/hash and every required field; any
+missing, stale, or non-identical template is invalid.
 
 The approval id must resolve to an immutable/authenticated protected approval
 record, not an arbitrary request string or Markdown alone. Creation atomically
@@ -331,6 +337,11 @@ capacity verified before copying. Publish only:
 | Manifest-preparation approval id | `<manifestPreparationApprovalId>` |
 | Manifest-preparation claim/completion deadline UTC | `<manifestPreparationExecuteByUtc>` |
 | Manifest-preparation approval terminal state | `<consumed \| invalid>` |
+| Trusted artifact ZIP/installer SHA-256 | `<zipSha256; zipCreated=true>` |
+| Authenticated artifact full-file manifest id/hash | `<artifactFullFileManifestId>` |
+| Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
+| Artifact verification observation/expiry UTC | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc>` |
+| Artifact integrity-lock evidence id | `<artifactIntegrityLockEvidenceId>` |
 | Protected content manifest record id | `<contentManifestRecordId>` |
 | Protected immutable content snapshot record id | `<contentSnapshotRecordId>` |
 | Content snapshot state | `<prepared \| invalid>` |
@@ -357,7 +368,9 @@ preparation and target-identity preparation approvals are `consumed`, manifest,
 snapshot, and target DB binding are `prepared`, and Preview approval is
 `available`; during Preview the manifest, target binding, and Preview approval
 are claimed. Preview success consumes the manifest/approval and leaves the
-snapshot/target binding `previewed` for later separately approved actions. A
+snapshot `previewed`; the target binding remains `previewed` only for positive
+target rows, becomes `upload_completed_delete_ready` when only an independently
+eligible Delete branch remains, and becomes `completed` when no branch remains. A
 post-claim Preview failure invalidates the claimed chain without changing either
 already-consumed preparation approval.
 
@@ -370,16 +383,12 @@ This plan does not authorize trusted-baseline creation or rotation. If the
 pre-existing verified baseline is absent, stop and require a separate security-
 reviewed installation/provisioning work package and explicit approval.
 
-```text
-TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
-The target-identity preparation approval id is <targetIdentityPreparationApprovalId>; claim and protected publication must complete by <targetIdentityPreparationExecuteByUtc>.
-I approve exactly one read-only target-identity preparation for package sourceCommit <sourceCommit>, operator PC class <operatorPcClass>, inventory <inventoryEvidenceRecordId>, manifest <contentManifestRecordId>, snapshot <contentSnapshotRecordId>, and configured safe target class <targetClassStatus>.
-The expected exact target is anchored by pre-existing protected baseline <trustedTargetBaselineId> in state <trustedTargetBaselineState>, human-reviewed privacy-safe alias <trustedTargetAlias>, and safe out-of-band verification evidence <trustedTargetBaselineEvidenceId>. This preparation may not create, replace, or self-attest that baseline from the first DB observation.
-The baseline/evidence ids must be random, opaque, path-independent, and not derived from DB URL, cluster/system id, database name, or other target material; the alias must be human-supplied and not a deterministic target derivative. Exact identity and all keyed integrity values remain owner-only.
-This approval binds exact-target singleton coordinator <targetGlobalCoordinatorId> as either the existing coordinator for that trusted identity or the one pre-reserved random id that exact-match publication may uniqueness-CAS-create. It may not create a sibling coordinator.
-The resulting opaque target DB binding may remain valid only until <targetDbBindingValidUntilUtc>, no later than snapshot retention <contentSnapshotRetainUntilUtc>.
-This approval permits only authenticated DB-instance/database identity metadata read and one protected local evidence/audit write. It does not approve operational table row/key queries, Upload Preview, Start Upload, Retry Failed, Delete, Settings save, DB mutation, runtime lifecycle, cleanup, LAN, or deployment.
-```
+The exact, copy-ready approval wording is owned only by **Protected Target-
+Identity Preparation Approval** in
+`docs/164_operator_data_mutation_safety_gate.md`. Do not copy or reconstruct it
+from this validation plan. The approval record must name that canonical
+section's version/hash and every required field; any missing, stale, or non-
+identical template is invalid.
 
 Before any DB connection/read, production code must atomically claim the
 immutable/authenticated approval once, record opaque owner
@@ -397,12 +406,27 @@ mismatch/expiry/failure. Exact identity and
 versioned domain-separated keyed integrity material remain owner-only. Human
 review of this safe result is required before Preview approval:
 
+Coordinator resolution/publication must use the fixed authenticated machine-
+global authority and ACL-restricted cross-session mutex defined by `docs/173`,
+not a user-profile/app-state database. Every Windows user, package, installation,
+and `EWC_STATE_DB_PATH` on the approved operator PC must resolve the same opaque
+coordinator; inability to prove that single-PC/local-target invariant hard-stops
+before DB access.
+
+The same operational artifact admission contract above applies before this DB
+read: current checksum/full-file-manifest and installed/executing-tree evidence,
+unexpired observation/validity, immediate full-tree reverify, and a held read-
+only ACL plus machine-global integrity lock are mandatory through publication.
+
 | Field | Value |
 | --- | --- |
 | Target-identity preparation approval id | `<targetIdentityPreparationApprovalId>` |
 | Claim/publication deadline UTC | `<targetIdentityPreparationExecuteByUtc>` |
 | Approval terminal state | `<consumed \| invalid>` |
 | Claim owner id/fence | `<targetIdentityPreparationClaimId> / <targetIdentityPreparationFence>` |
+| Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
+| Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Exact-target singleton coordinator id/state/generation/evidence | `<targetGlobalCoordinatorId> / <idle \| terminal \| invalidated_terminal> / <targetGlobalCoordinatorGeneration> / <targetGlobalCoordinatorEvidenceId>` |
 | Trusted target baseline id/alias/state/evidence | `<trustedTargetBaselineId> / <trustedTargetAlias> / <verified \| revoked \| invalid> / <trustedTargetBaselineEvidenceId>` |
 | Protected exact target DB binding id | `<targetDbBindingId>` |
@@ -419,7 +443,10 @@ first observation and after binding, wrong DB present at first observation,
 missing/revoked/rotated baseline, candidate-enumeration resistance for baseline/
 evidence ids and alias, private
 identity/all keyed-integrity-value redaction, cross-chain reuse, and zero
-operational-table reads/DB writes.
+operational-table reads/DB writes. They must also run two concurrent runtimes with
+different Windows users/install directories/state DB paths against the same
+target and prove only one machine-global coordinator/owner/generation exists;
+authority/mutex unavailability or tamper must cause zero DB reads/writes.
 
 ## Preview-Only Approval Template
 
@@ -455,6 +482,9 @@ keyset inside that snapshot's protected encrypted boundary, expose only
 | Preview approval id | `<previewApprovalId>` |
 | Preview approval terminal state | `<consumed \| invalid>` |
 | Preview run id | `<previewRunId>` |
+| Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
+| Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Inventory evidence record id | `<inventoryEvidenceRecordId>` |
 | Inventory observed source bytes | `<inventoryObservedBytes>` |
 | Human-approved snapshot byte ceiling | `<contentSnapshotMaxBytes>` |
@@ -502,7 +532,10 @@ Pass requires unexpired inventory and manifest deadlines, exact
 `inventoryObservedBytes` equality across inventory, manifest preparation,
 Preview approval, and Preview evidence, a separately approved
 `contentSnapshotMaxBytes >= inventoryObservedBytes`, immutable/authenticated
-approval records, unchanged `manifestPreparationApprovalId` and
+approval records, `zipCreated=true`, exact trusted checksum/full-file manifest,
+current installed/executing-tree evidence, unexpired artifact observation/
+validity, immediate full-tree reverify, and integrity-lock evidence held through
+Preview, unchanged `manifestPreparationApprovalId` and
 trusted target baseline id/alias/state/evidence,
 `targetIdentityPreparationApprovalId`/`previewApprovalId` across all stages, all
 three approvals terminally `consumed`, and
@@ -540,30 +573,19 @@ Follow the Start transition table in `docs/173`: `invalid` is allowed only when
 no job commits; once one job commits the approval remains `consumed` regardless
 of response loss or later job outcome.
 
-```text
-TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
-The Start Upload approval id is <startUploadApprovalId> and it must be claimed by <startUploadExecuteByUtc>.
-I approve exactly one Start Upload for preview run <previewRunId> with target files <targetFiles> and target rows <targetRows>.
-The protected exact target-only set binding is <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>.
-This approval is for package sourceCommit <sourceCommit>, operator PC class <operatorPcClass>, source alias <sourceAlias>, and source class <sourceClass>.
-It binds the same pre-existing trusted target baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId> used by Preview.
-It binds protected target operation fence <targetOperationFenceId> in chain state idle, upload branch preview_ready, with exact generation <targetOperationFenceGeneration> and safe evidence <targetOperationFenceEvidenceId>. Job creation must atomically claim that generation for consumer start; a concurrent Delete preflight or any stale/terminal generation must fail.
-It binds exact-target singleton coordinator <targetGlobalCoordinatorId>, sole owner fence <targetOperationFenceId>, state chain_ready, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, and safe evidence <targetGlobalCoordinatorEvidenceId>. Job creation must atomically claim both generations for consumer start; any different Preview-chain owner or concurrent target consumer must fail.
-The approved exact operational DB target comes from consumed preparation approval <targetIdentityPreparationApprovalId>, completed by <targetIdentityPreparationExecuteByUtc>, and is protected binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, with safe evidence <targetDbBindingEvidenceId>. It must be unexpired and revalidated on the authoritative target transaction; safe target/readiness classes do not replace it.
-It is bound to immutable content snapshot <contentSnapshotRecordId> and atomic snapshot binding evidence <atomicSnapshotBindingEvidenceId> from that Preview.
-That snapshot may be read only until <contentSnapshotRetainUntilUtc>; this approval does not authorize snapshot deletion or extend retention.
-The action maximum duration is <actionMaxDurationSeconds> seconds and the required disposition margin is <snapshotDispositionMarginSeconds> seconds. Job creation must atomically create one unrenewable snapshot action lease whose expiry is claim time plus that duration and whose expiry plus that margin is no later than both <targetDbBindingValidUntilUtc> and <contentSnapshotRetainUntilUtc>, and claim the pre-reserved <actionMutationId>.
-The random unique actionMutationId above is pre-reserved in this immutable approval and may only be claimed with this approval, snapshot, exact subset, duration, margin, lease, and job.
-As part of that one Start action, I approve creation of exactly one target-side prepared outcome/fence marker for the same actionMutationId before any all_metrics write; it authorizes no other DB mutation. Every action write and the prepared-to-committed marker transition must share one authoritative target transaction; a guarded prepared-to-aborted finalization may occur only after non-commit is authoritative.
-That transaction must first revalidate the exact target identity and unexpired target binding using the authoritative target DB clock, then serializably revalidate every key in the protected approved-absent set, use canonical key fences honored by every application writer and conflict-rejecting conditional inserts, and commit only if the exact inserted keyset/count equals the binding. Any expired/substituted target, preexisting/concurrent key, or mismatch must roll back every action all_metrics write without overwrite and require a fresh Preview and approval.
-I approve bounded read-only target-outcome reconciliation for that same actionMutationId within this window and, only if its immutable aborted marker is finalized and observed before lease expiry, exactly one whole-attempt exact DB reconciliation plus protected retry-reconciliation evidence record. Timeout, response loss, or lease expiry must become commit_unknown_blocked unless the immutable target marker proves committed or aborted/complete rollback.
-This authorization explicitly excludes Start target-absence drift/conflict. For that failure class the reconciliation-creation entitlement must become invalid, no reconciliation DB read or record is allowed, and a fresh Preview/manifest/snapshot approval chain is required.
-Any eligible reconciliation must atomically claim the source action's unique single-use creation entitlement before any DB read, durably recording and binding its source action class, safe terminal failure class, owner claim id, monotonic fence, and absolute publication deadline no later than the source lease, target-binding validity, and snapshot boundaries. Publication must compare-and-set that exact eligible action/failure class, unexpired token/fence, the same unexpired target binding, and current rollback/snapshot/disposition state; invalidation advances the fence, so a delayed publisher cannot succeed. Duplicate or response-loss recovery may return only the same record. Its exact private subset must remain owner-only, tamper-evident, per-record encrypted, use the named snapshot retention deadline as its non-extendable access ceiling, and be cryptographically disposed earlier on successful/non-retryable terminal Retry, invalidation, expiry, snapshot disposition, or after an eligible retryable rollback's atomic successor publication has claimed/copied the exact subset. A retryable rollback keeps the old record in `awaiting_successor_reconciliation`; expiry before successor publication disposes it and permanently blocks that chain.
-This approval does not approve Retry Failed, Delete, Settings save, or feature gate enablement.
-```
+The exact, copy-ready approval wording is owned only by **Start Upload Gate** in
+`docs/164_operator_data_mutation_safety_gate.md`. Do not copy or reconstruct it
+from this validation plan. The approval record must name that canonical
+section's version/hash and every required field; any missing, stale, or non-
+identical template is invalid.
 
 Required before approval:
 
+- `zipCreated=true`, exact trusted ZIP/installer checksum, authenticated full-file
+  manifest, current installed/executing-tree evidence, unexpired artifact
+  observation/validity, and integrity-lock evidence; admission immediately
+  reverifies under the read-only ACL and machine-global integrity lock held
+  through Start;
 - fresh succeeded Preview-only evidence;
 - preview run id;
 - exact target-only rows;
@@ -597,6 +619,10 @@ Required before approval:
   Preview detail.
 - protected Start approval state is `available` and its package/operator/source/
   Preview/count/deadline/snapshot/atomic-evidence bindings are exact;
+- its human-supplied `successorRetryReconciliationExecuteByUtc` is pre-reserved
+  and within the source action lease, target-binding validity, and snapshot
+  retention, or is explicitly `not_applicable` only for a policy that cannot
+  create a retryable successor;
 - deterministic tests prove source replacement after Preview, equal-size/equal-
   mtime replacement, concurrent writes, missing/tampered snapshots, and worker
   source-reopen attempts cannot change uploaded bytes and produce zero DB writes
@@ -622,6 +648,9 @@ Required before approval:
 | Start approval deadline UTC | `<startUploadExecuteByUtc>` |
 | Start approval terminal state | `<consumed \| invalid>` |
 | Preview run id | `<previewRunId>` |
+| Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
+| Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Protected immutable content snapshot record id | `<contentSnapshotRecordId>` |
 | Content snapshot terminal state | `<upload_bound \| retryable \| completed \| invalid>` |
 | Snapshot retention deadline UTC | `<contentSnapshotRetainUntilUtc>` |
@@ -630,6 +659,7 @@ Required before approval:
 | Atomic snapshot binding evidence id | `<atomicSnapshotBindingEvidenceId>` |
 | Action maximum duration seconds | `<actionMaxDurationSeconds>` |
 | Snapshot disposition margin seconds | `<snapshotDispositionMarginSeconds>` |
+| Source Start approval's pre-reserved successor reconciliation claim deadline | `<successorRetryReconciliationExecuteByUtc \| not_applicable>` |
 | Snapshot action lease id | `<snapshotActionLeaseId>` |
 | Snapshot action lease expiry UTC | `<snapshotActionLeaseExpiresAtUtc>` |
 | Snapshot action lease terminal state | `<released_committed \| released_rolled_back \| expired_rolled_back \| commit_unknown_blocked>` |
@@ -643,7 +673,8 @@ Required before approval:
 | Target-identity preparation approval id/state/deadline/claim owner/fence | `<targetIdentityPreparationApprovalId> / <consumed> / <targetIdentityPreparationExecuteByUtc> / <targetIdentityPreparationClaimId> / <targetIdentityPreparationFence>` |
 | Protected exact target DB binding id | `<targetDbBindingId>` |
 | Target DB binding state/validity/evidence | `<upload_bound \| retryable \| completed \| invalid> / <targetDbBindingValidUntilUtc> / <targetDbBindingEvidenceId>` |
-| Retry reconciliation source action/failure class, creation state/owner claim/fence/expiry/evidence and record id/state/observation/claim deadline, only after an eligible retryable rollback | `<retryReconciliationSourceActionClass> / <retryReconciliationSourceFailureClass> / <retryReconciliationCreationState> / <retryReconciliationCreationClaimId> / <retryReconciliationCreationFence> / <retryReconciliationCreationExpiresAtUtc> / <retryReconciliationCreationEvidenceId> / <retryReconciliationRecordId> / <available \| consumed \| awaiting_successor_reconciliation \| invalid> / <retryReconciliationObservedAtUtc> / <retryReconciliationExecuteByUtc> \| not_created>` |
+| Retry reconciliation source action/failure class, creation state/owner claim/fence/expiry/evidence and record id/state/observation/parent-approved claim deadline, only after an eligible retryable rollback | `<retryReconciliationSourceActionClass> / <retryReconciliationSourceFailureClass> / <retryReconciliationCreationState> / <retryReconciliationCreationClaimId> / <retryReconciliationCreationFence> / <retryReconciliationCreationExpiresAtUtc> / <retryReconciliationCreationEvidenceId> / <retryReconciliationRecordId> / <available \| consumed \| awaiting_successor_reconciliation \| superseded_disposed \| invalid> / <retryReconciliationObservedAtUtc> / <retryReconciliationExecuteByUtc=source approval successorRetryReconciliationExecuteByUtc> \| not_created>` |
+| Reconciliation predecessor id/state/disposition evidence | `<not_applicable for Start-source record \| retryReconciliationPredecessorRecordId / superseded_disposed / retryReconciliationPredecessorDispositionEvidenceId>` |
 | Retry reconciliation private-subset retention/disposition/evidence | `<retryReconciliationRetainUntilUtc> / <scheduled \| in_progress \| disposed \| disposal_failed_blocked> / <retryReconciliationDispositionEvidenceId> \| not_created>` |
 | Upload job id | `<uploadJobId>` |
 | Approved target-only row count | `<targetRows>` |
@@ -687,6 +718,11 @@ no retry job/event commits; once one action commits the approval remains
 
 Required before requesting approval:
 
+- `zipCreated=true`, exact trusted ZIP/installer checksum, authenticated full-file
+  manifest, current installed/executing-tree evidence, unexpired artifact
+  observation/validity, and integrity-lock evidence; admission immediately
+  reverifies under the read-only ACL and machine-global integrity lock held
+  through Retry;
 - failed or retryable upload job evidence;
 - job id;
 - exact remaining physical rows;
@@ -728,6 +764,10 @@ Required before requesting approval:
 - confirmation no broad cleanup is requested;
 - protected Retry approval state is `available` and its package/operator/source/
   source-job/remaining-count/deadline/snapshot/atomic-evidence bindings are exact;
+- its human-supplied `successorRetryReconciliationExecuteByUtc` is pre-reserved
+  and within the source action lease, target-binding validity, and snapshot
+  retention, or is explicitly `not_applicable` only for a policy that cannot
+  create a retryable successor;
 - deterministic tests prove source change before Retry, equal-size/equal-mtime
   replacement, concurrent writes, missing/tampered snapshots, and worker source-
   reopen attempts cannot change retried bytes and produce zero DB writes on any
@@ -746,28 +786,11 @@ Required before requesting approval:
   and reject a lease/publication deadline beyond the minimum target-binding/
   snapshot ceiling.
 
-Approval wording:
-
-```text
-TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
-The Retry Failed approval id is <retryApprovalId> and it must be claimed by <retryExecuteByUtc>.
-I approve exactly one Retry Failed using protected reconciliation record <retryReconciliationRecordId>, observed at <retryReconciliationObservedAtUtc> and claimable by <retryReconciliationExecuteByUtc>, for upload job <jobId> with freshly reconciled still-absent files <remainingFiles> and physical rows <remainingRows> from the entire prior attempted subset, preserving root failure class <rootFailureClass>.
-That reconciliation record is the protected approved-absent set binding <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>.
-This approval is for package sourceCommit <sourceCommit>, operator PC class <operatorPcClass>, source alias <sourceAlias>, and source class <sourceClass>.
-It binds the same pre-existing trusted target baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId> used by Preview/source action/reconciliation.
-It binds protected target operation fence <targetOperationFenceId> in chain state idle, upload branch retryable, with exact generation <targetOperationFenceGeneration> and safe evidence <targetOperationFenceEvidenceId>. Retry creation must atomically claim that generation for consumer retry; any Delete owner or stale/terminal generation must fail.
-It binds exact-target singleton coordinator <targetGlobalCoordinatorId>, sole owner fence <targetOperationFenceId>, state chain_ready, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, and safe evidence <targetGlobalCoordinatorEvidenceId>. Retry creation must atomically claim both generations for consumer retry; any different Preview-chain owner or concurrent target consumer must fail.
-The approved exact operational DB target comes from consumed preparation approval <targetIdentityPreparationApprovalId>, completed by <targetIdentityPreparationExecuteByUtc>, and is protected binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, with safe evidence <targetDbBindingEvidenceId>. It must match Preview, the source action, reconciliation record, marker, and authoritative Retry transaction.
-It is bound to immutable content snapshot <contentSnapshotRecordId> and atomic snapshot binding evidence <atomicSnapshotBindingEvidenceId> from the source job.
-That snapshot may be read only until <contentSnapshotRetainUntilUtc>; this approval does not authorize snapshot deletion or extend retention.
-The action maximum duration is <actionMaxDurationSeconds> seconds and the required disposition margin is <snapshotDispositionMarginSeconds> seconds. Retry creation must atomically create one unrenewable snapshot action lease whose expiry is claim time plus that duration and whose expiry plus that margin is no later than both <targetDbBindingValidUntilUtc> and <contentSnapshotRetainUntilUtc>, and claim the pre-reserved <actionMutationId>.
-The random unique actionMutationId above is pre-reserved in this immutable approval and may only be claimed with this approval, reconciliation record, snapshot, exact subset, duration, margin, lease, and retry action.
-As part of that one Retry action, I approve creation of exactly one target-side prepared outcome/fence marker for the same actionMutationId before any all_metrics write; it authorizes no other DB mutation. Every retry write and the prepared-to-committed marker transition must share one authoritative target transaction; a guarded prepared-to-aborted finalization may occur only after non-commit is authoritative.
-That transaction must first revalidate the exact target identity and unexpired target binding using the authoritative target DB clock, then serializably revalidate every key in the protected still-absent set, use canonical key fences honored by every application writer and conflict-rejecting conditional inserts, and commit only if the exact inserted keyset/count equals the binding. Any expired/substituted target, preexisting/concurrent key, or mismatch must roll back every action all_metrics write without overwrite and require a fresh whole-attempt reconciliation and approval.
-I approve bounded read-only target-outcome reconciliation for that same actionMutationId within this window and, only if its immutable aborted marker is finalized and observed before lease expiry, exactly one whole-attempt exact DB reconciliation plus a new protected retry-reconciliation evidence record. Timeout, response loss, or lease expiry must become commit_unknown_blocked unless the immutable target marker proves committed or aborted/complete rollback.
-That reconciliation must atomically claim the source action's unique single-use creation entitlement before any DB read, durably recording and binding source action class retry, its safe terminal failure class, an owner claim id, monotonic fence, and absolute publication deadline no later than the source lease, target-binding validity, and snapshot boundaries. Publication must compare-and-set that exact eligible action/failure class, unexpired token/fence, the same unexpired target binding, and current rollback/snapshot/disposition state; invalidation advances the fence, so a delayed publisher cannot succeed. Duplicate or response-loss recovery may return only the same record. Its exact private subset must remain owner-only, tamper-evident, per-record encrypted, use the named snapshot retention deadline as its non-extendable access ceiling, and be cryptographically disposed earlier on successful/non-retryable terminal Retry, invalidation, expiry, snapshot disposition, or after an eligible retryable rollback's atomic successor publication has claimed/copied the exact subset. The retryable rollback path must retain the old record as `awaiting_successor_reconciliation`; expiry before publication disposes it and permanently blocks the chain.
-This approval does not approve Start Upload, Delete, Settings save, or feature gate enablement.
-```
+Approval wording is owned only by **Retry Failed Gate** in
+`docs/164_operator_data_mutation_safety_gate.md`. Do not copy or reconstruct it
+from this validation plan. The approval record must name that canonical
+section's version/hash and every required field; any missing, stale, or non-
+identical template is invalid.
 
 Evidence after retry:
 
@@ -777,6 +800,9 @@ Evidence after retry:
 | Retry approval deadline UTC | `<retryExecuteByUtc>` |
 | Retry approval terminal state | `<consumed \| invalid>` |
 | Source upload job id | `<jobId>` |
+| Trusted artifact/checksum/full-file manifest | `<zipCreated=true> / <zipSha256> / <artifactFullFileManifestId>` |
+| Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
+| Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Protected immutable content snapshot record id | `<contentSnapshotRecordId>` |
 | Content snapshot terminal state | `<upload_bound \| retryable \| completed \| invalid>` |
 | Snapshot retention deadline UTC | `<contentSnapshotRetainUntilUtc>` |
@@ -799,8 +825,10 @@ Evidence after retry:
 | Protected exact target DB binding id | `<targetDbBindingId>` |
 | Target DB binding state/validity/evidence | `<upload_bound \| retryable \| completed \| invalid> / <targetDbBindingValidUntilUtc> / <targetDbBindingEvidenceId>` |
 | Retry reconciliation source action/failure class and creation state/owner claim/fence/expiry/evidence id | `<retryReconciliationSourceActionClass=retry> / <retryReconciliationSourceFailureClass> / <record_consumed \| invalid> / <retryReconciliationCreationClaimId> / <retryReconciliationCreationFence> / <retryReconciliationCreationExpiresAtUtc> / <retryReconciliationCreationEvidenceId>` |
-| Claimed retry reconciliation record id/state | `<retryReconciliationRecordId> / <consumed \| awaiting_successor_reconciliation \| invalid>` |
+| Claimed retry reconciliation record id/state | `<retryReconciliationRecordId> / <consumed \| awaiting_successor_reconciliation \| superseded_disposed \| invalid>` |
+| Reconciliation predecessor id/state/disposition evidence | `<not_applicable for Start-source record \| retryReconciliationPredecessorRecordId / superseded_disposed / retryReconciliationPredecessorDispositionEvidenceId>` |
 | Retry reconciliation observation/deadline UTC | `<retryReconciliationObservedAtUtc> / <retryReconciliationExecuteByUtc>` |
+| Source Retry approval's pre-reserved successor reconciliation claim deadline | `<successorRetryReconciliationExecuteByUtc \| not_applicable>` |
 | Retry reconciliation retention/disposition/evidence | `<retryReconciliationRetainUntilUtc> / <scheduled \| in_progress \| disposed \| disposal_failed_blocked> / <retryReconciliationDispositionEvidenceId>` |
 | Reconciled attempted/still-absent safe counts | `<attemptedFiles>/<attemptedRows> -> <remainingFiles>/<remainingRows>` |
 | Retry job id or event id | `<retryJobOrEventId>` |
@@ -911,7 +939,7 @@ or exact keys.
 | Grafana/Vector non-core attention is silently ignored or confused with core readiness. | Medium | Medium | Resolve it or record owner, residual-risk acceptance, and non-destructive stop/rollback procedure. | Release owner/operator | Sanitized runtime state and signed caveat |
 | A new CSV or failure class escapes the current fixture/Audit coverage. | High | Low-medium | Add representative fixtures and keep failure-path API/UI checks in regression and approved operations. | Maintainer QA and operator sign-off | Fixture/soak and safe Audit/Job Logs evidence |
 | Accidental destructive delete or cleanup is bundled into validation, or delete preflight/delete approval text is replayed. | Production-critical | Low | Treat delete, reset, cleanup, and Docker destructive commands as hard exclusions. A future delete requires every `docs/164`/`docs/171` hardened gate: target-global coordination across Preview chains; fenced single-use preflight claim/result with completion deadline; owner-only canonical-root source-provenance snapshot; complete typed DB before-image captured atomically with DELETE/marker under exact schema/column/side-effect/ceiling/capacity/confidentiality/retention bindings; an engine-appropriate DDL/schema fence proving every DELETE and restore-INSERT secondary relation or externally observable effect absent/inert; committed dual-record versus aborted source-only cleanup with split authority; exact restore/disposition approvals; and a single-use Delete approval/run with marker-first reconcile. Source CSV never proves exact rollback. No separate Delete evidence may be imported into this cutover, and any Delete here forces NO-GO. | Hardened destructive plan plus operator approvals | Exclusion record or full implemented/tested coordinator/preflight/source-provenance/schema-fence/side-effect/DB-before-image/restore/disposition/marker lifecycles and exact package |
-| Package/source mismatch leads to testing the wrong build. | High | Low | Verify package metadata and source commit before every evidence package. | Release owner | Package commit, label, and hash/metadata evidence |
+| Package/source mismatch or post-verification tree replacement leads to testing the wrong build. | Production-critical | Low-medium | Require a content-addressed artifact, authenticated full-file manifest, current installed/executing-tree verification, immediate rehash under a read-only ACL, and one exclusive machine-global integrity lock held through each bounded stage. | Release owner | Package commit/label/hash, artifact observation/validity, installed/executing evidence, and integrity-lock evidence |
 | Secrets or raw operational data leak into evidence. | High | Medium | Store externally only opaque random ids, safe classes/counts, approved package hashes, and reason codes; keep exact operational material plus any keyed integrity data owner-only and review screenshots before attachment. | Security reviewer/maintainer | Redaction checklist and sanitized artifacts |
 
 ## Stop Conditions
@@ -1038,6 +1066,11 @@ not-applicable values and reasons:
   older chain is ready/active/retryable/delete-ready/commit-unknown, or any
   Start/Retry/Delete action can claim without CAS-checking the same target-global
   owner and generation;
+- the coordinator is scoped to a user-profile/app-state DB, differs by Windows
+  user/package/install/`EWC_STATE_DB_PATH`, lacks the fixed authenticated machine-
+  global authority/ACL-restricted cross-session mutex, the approved single-PC/
+  local-target boundary is unproved, or a mutating transaction omits the same
+  target-side mutation epoch;
 - a prior Delete leaves target-global/chain/Delete-branch
   `recovery_disposition_pending`, unresolved restore/disposal, or failed cleanup;
   any new Preview/Start/Retry/Delete can race that state; or a coordinator is
@@ -1065,6 +1098,11 @@ not-applicable values and reasons:
   reconcile/disposition margin, or pre-reserved target mutation marker with
   atomic before-image + Delete + marker commit and marker-first outcome proof
   required by `docs/164`/`docs/171`;
+- an unresolved Delete marker can reach the standard retention deadline without
+  the pre-authorized bounded incident-escrow deadline/state/evidence, can destroy
+  a possibly committed before-image or retain source bytes, or final escrow
+  expiry can release the coordinator instead of key-first permanent recovery-
+  loss/security-incident NO-GO;
 - full-byte snapshot preparation lacks an explicit approved byte ceiling,
   protected capacity/confidentiality controls, retention deadline, or human
   acknowledgement of automatic cryptographic disposal; or disposal cannot
@@ -1073,7 +1111,22 @@ not-applicable values and reasons:
 - source class differs between inventory, Preview, approval, and config evidence;
 - Grafana/Vector attention lacks resolution or explicit residual-risk acceptance,
   an owner, and a non-destructive stop/rollback procedure;
-- final release-owner/operator sign-off is incomplete;
+- the source Start/Retry approval did not pre-reserve the exact human-supplied
+  successor reconciliation claim deadline, a record uses an inferred/different
+  deadline, a prepared successor becomes `available`/`retryable` before its
+  Retry-source predecessor is terminal `superseded_disposed` with verified
+  disposition evidence, cleanup failure leaves a claimable successor, or the
+  final publication CAS does not bind both records and coordinator/fence states;
+- the candidate uses `zipCreated=false`, lacks exact trusted artifact checksum/
+  authenticated full-file manifest/installed-tree/executing-tree evidence,
+  `artifactVerificationObservedAtUtc`/`artifactVerificationValidUntilUtc` is
+  missing/inferred/expired, immediate full-tree reverify is absent, the read-only
+  ACL/machine-global integrity lock is not held with exact
+  `artifactIntegrityLockEvidenceId`, or a governed file/build-info/dependency/
+  tree differs from the verified artifact;
+- final release-owner/operator sign-off lacks the immutable authenticated
+  approval/record lifecycle, current evidence generation, approver evidence, or
+  not-revoked state, or exists only as replayable Markdown/chat text;
 - raw sensitive data would be written to evidence;
 - request bundles Preview, Start Upload, Retry Failed, Delete, Settings save,
   reset, cleanup, LAN, migration, deployment, Docker destructive command, or
@@ -1084,14 +1137,33 @@ not-applicable values and reasons:
 
 ## Final Sign-Off Record
 
+This table is only a display/export of an immutable authenticated protected
+decision record. Markdown, chat text, or a copied table is not sign-off. Before
+finalization a human-authenticated `finalSignoffApprovalId` in `available` must
+bind the exact decision, evidence generation, artifact/installed/running-tree
+attestations, reviewer, approver, and deadline. One protected transaction claims
+it, creates exactly one `finalSignoffRecordId`, and ends `consumed` or `invalid`;
+response loss returns the same record. Revocation advances the evidence
+generation and forces `NO-GO` until a new approval reviews the complete current
+set. This decision record authorizes no upload, delete, runtime lifecycle,
+deployment, or other operation.
+
 | Field | Value |
 | --- | --- |
+| Final sign-off approval id/state/deadline | `<finalSignoffApprovalId> / <consumed for GO/CONDITIONAL GO \| actual non-proceed state> / <finalSignoffExecuteByUtc>` |
+| Final sign-off record id/evidence generation/authenticated approver evidence | `<random immutable finalSignoffRecordId> / <monotonic finalSignoffEvidenceGeneration> / <opaque finalSignoffApproverEvidenceId>` |
+| Final sign-off revocation state/evidence | `<not_revoked for GO/CONDITIONAL GO \| revoked: evidence id>` |
 | Decision | `<GO \| CONDITIONAL GO \| NO-GO \| BLOCKED \| DEFERRED / NOT V1 SCOPE>` |
 | Evidence ids | `<all actual available ids; complete for GO/CONDITIONAL GO \| none: reason only if none exist>` |
 | Accepted package commit | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
 | Accepted package label | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
-| Package ZIP created/applicability | `<true with exact checksum \| false/not_applicable with reason>` |
-| Package ZIP SHA-256 | `<exact when zipCreated=true \| not_applicable: zipCreated=false>` |
+| Package ZIP/installer created | `<true required for GO/CONDITIONAL GO \| false: force NO-GO/BLOCKED>` |
+| Trusted artifact ZIP/installer SHA-256 | `<exact required for GO/CONDITIONAL GO \| not_observed: force NO-GO/BLOCKED>` |
+| Authenticated artifact full-file manifest id/hash | `<exact id/hash covering executable code, frontend assets, dependencies, and build metadata; required for GO/CONDITIONAL GO>` |
+| Installed tree verification evidence id/time | `<exact evidence/time proving every governed installed file equals the trusted manifest; required for GO/CONDITIONAL GO>` |
+| Executing tree/process verification evidence id/time | `<exact evidence/time proving the running backend/frontend/dependency roots are that verified tree; required for GO/CONDITIONAL GO>` |
+| Artifact verification observation/validity UTC | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc>; current and unexpired for every stage and final sign-off>` |
+| Artifact integrity-lock evidence id | `<artifactIntegrityLockEvidenceId; immediate full-tree reverify plus held read-only ACL/machine-global integrity lock required>` |
 | Inventory evidence record id | `<actual if created; exact for GO/CONDITIONAL GO \| not_created/not_observed/not_applicable: reason only if unavailable>` |
 | Inventory observed at UTC | `<exact for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
 | Inventory observed source bytes | `<inventoryObservedBytes: exact value from the same inventory/manifest/Preview chain for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
@@ -1122,20 +1194,22 @@ not-applicable values and reasons:
 | Target-identity preparation approval id/state/deadline/claim owner/fence | `<actual / consumed / exact deadline / exact owner id / fence for GO/CONDITIONAL GO \| not_approved/not_applicable: reason>` |
 | Protected exact target DB binding id | `<same opaque id verified by Preview and every Start/Retry/marker/reconciliation stage; required for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
 | Target DB binding terminal state/validity/evidence id | `<completed for an accepted zero-target no_upload or terminal accepted Start/Retry chain; exact validity/evidence required for GO/CONDITIONAL GO \| actual/not_observed/not_applicable: reason>` |
-| Exact-target global coordinator id/state/owner/consumer/generation/evidence | `<same singleton id; terminal state; final chain owner/no active consumer/generation/evidence required for GO/CONDITIONAL GO; recovery_disposition_pending is never proceed \| actual/not_created/not_applicable: reason>` |
+| Exact-target global coordinator id/state/owner/consumer/generation/evidence | `<same singleton id from fixed authenticated machine-global authority; terminal state; final chain owner/no active consumer/generation/evidence proving cross-user/install/state-DB exclusion and target-side mutation epoch required for GO/CONDITIONAL GO; recovery_disposition_pending is never proceed \| actual/not_created/not_applicable: reason>` |
 | Target operation fence id/chain state/upload branch/Delete branch/consumer/generation/evidence | `<same protected fence id; terminal chain state; upload and Delete branches terminal or not_eligible; no active consumer; exact final generation/evidence for GO/CONDITIONAL GO \| actual/not_created/not_applicable: reason>` |
 | Start Upload approval id/state/deadline | `<actual if issued; consumed when one job committed \| not_approved/not_applicable: reason>` |
 | Start Upload action maximum duration seconds | `<actual if Start approval issued \| not_approved/not_applicable: reason>` |
 | Start Upload snapshot disposition margin seconds | `<actual if Start approval issued \| not_approved/not_applicable: reason>` |
+| Start approval's pre-reserved successor reconciliation claim deadline | `<exact human-supplied value if eligible \| not_applicable: no eligible successor class>` |
 | Start Upload snapshot action lease id/expiry/state | `<actual if Start job created; released_committed or released_rolled_back for an accepted recovered chain \| not_created/not_applicable: reason>` |
 | Start Upload pre-reserved mutation id/outcome/evidence id | `<exact approval-bound id if Start job created; authoritative committed or rolled_back evidence required for GO/CONDITIONAL GO \| not_created/not_applicable: reason>` |
 | Start Upload approved-absent set binding/distinct-key count/target-revalidation evidence | `<exact protected binding/count/evidence if Start created \| not_created/not_applicable: reason>` |
 | Upload job id | `<actual if created \| not_created/not_applicable: reason>` |
 | Upload job terminal status | `<succeeded, or failed/retryable/cancelled only with authoritative rollback plus a later accepted successful Retry \| actual/not_applicable: reason>` |
 | Retry approval id/state/deadline, repeat per action | `<every actual issued approval; consumed when its action record committed \| not_approved/not_applicable: reason>` |
-| Retry reconciliation source action/failure class, creation state/owner claim/fence/expiry/evidence plus record id/state/observation/claim deadline and source action/mutation/outcome binding, repeat per action | `<every source entitlement and protected record claimed by Retry; exact eligible-class fenced publication and record_consumed/consumed for an accepted chain \| not_created/not_applicable: reason>` |
+| Retry reconciliation source action/failure class, creation state/owner claim/fence/expiry/evidence plus record id/state/observation/parent-approved claim deadline, predecessor id/state/disposition evidence, and source action/mutation/outcome binding, repeat per action | `<every source entitlement and protected record claimed by Retry; exact eligible-class fenced publication; currently consumed record_consumed/consumed, and each Retry-source predecessor superseded_disposed with evidence (Start-source predecessor not_applicable), for an accepted chain \| not_created/not_applicable: reason>` |
 | Retry reconciliation retention/disposition/evidence, repeat per action | `<every private subset; disposed with safe evidence for GO/CONDITIONAL GO \| not_created/not_applicable: reason>` |
 | Retry action maximum duration/disposition margin, repeat per action | `<every actual approved pair \| not_approved/not_applicable: reason>` |
+| Retry approval's pre-reserved successor reconciliation claim deadline, repeat per action | `<every exact human-supplied value if eligible \| not_applicable: no eligible successor class>` |
 | Retry snapshot action lease id/expiry/state, repeat per action | `<every actual created lease; released_committed for final success or released_rolled_back for an accepted prior retry \| not_created/not_applicable: reason>` |
 | Retry pre-reserved mutation id/outcome/evidence id, repeat per action | `<every exact approval-bound mutation; authoritative committed or rolled_back evidence required for GO/CONDITIONAL GO \| not_created/not_applicable: reason>` |
 | Retry approved-absent set binding/distinct-key count/target-revalidation evidence, repeat per action | `<every exact protected binding/count/evidence for an accepted action \| not_created/not_applicable: reason>` |
@@ -1156,6 +1230,22 @@ not-applicable values and reasons:
 
 Decision-conditional rules:
 
+- `GO` or `CONDITIONAL GO` requires a consumed, unexpired, immutable/
+  authenticated `finalSignoffApprovalId`, exactly one matching
+  `finalSignoffRecordId`, current monotonic evidence generation, authenticated
+  approver evidence, and `not_revoked`. A copied Markdown record, stale evidence
+  generation, replayed approval, missing approver authentication, or revocation
+  forces `NO-GO`/`BLOCKED`.
+- `GO` or `CONDITIONAL GO` requires `zipCreated=true`, the exact trusted artifact
+  checksum, authenticated full-file manifest, and time-bound installed-tree and
+  executing-process/tree verification evidence. It also requires exact current
+  `artifactVerificationObservedAtUtc`/`artifactVerificationValidUntilUtc`, an
+  immediate full-tree reverify, and `artifactIntegrityLockEvidenceId` proving the
+  read-only ACL and machine-global integrity lock remained held through each
+  bounded stage. Any expired evidence, lock gap, changed executable, Python/
+  JS file, frontend asset, dependency, build-info file, unexpected extra governed
+  file, different unpacked directory, or self-reported-only package identity
+  forces `NO-GO`/`BLOCKED`.
 - `GO` or `CONDITIONAL GO` requires every lifecycle identifier above, including
   exact `inventoryObservedBytes` equality across inventory, manifest preparation,
   Preview approval/evidence, and final sign-off, plus a separately human-approved
@@ -1169,7 +1259,9 @@ Decision-conditional rules:
   branches terminal or `not_eligible` at final sign-off;
   exact equality of the singleton target-global coordinator id and its owner/
   consumer/generation/evidence transitions, with no overlapping older/newer
-  Preview chain;
+  Preview chain, and evidence that every Windows user/package/install/
+  `EWC_STATE_DB_PATH` used the same fixed authenticated machine-global authority,
+  ACL-restricted cross-session mutex, and target-side mutation epoch;
   exact equality with the consumed protected manifest and succeeded Preview
   evidence; plus the exact immutable snapshot id/state and exact Start/Retry
   approval/job identifiers when those stages occurred,
@@ -1193,8 +1285,11 @@ Decision-conditional rules:
   identity preparation approval id/state/deadline/claim owner/fence, and protected exact target DB
   binding id/state/validity/evidence, is preserved,
   remains within its approved validity for every DB read/write, and is
-  revalidated. Every consumed/invalid reconciliation private subset is
-  `disposed` with safe evidence. Every committed action also has exact protected
+  revalidated. Every superseded reconciliation record is terminal
+  `superseded_disposed`, and every consumed/invalid reconciliation private subset
+  is `disposed` with safe evidence; each record claim deadline exactly equals the
+  `successorRetryReconciliationExecuteByUtc` pre-reserved by its source action
+  approval. Every committed action also has exact protected
   absent-set/distinct-key bindings and transaction-time absence/committed-set
   evidence proving no overwrite. Remaining retryable
   physical rows must be zero. For either proceed path,
@@ -1225,8 +1320,13 @@ Proceed acknowledgement for `GO` or `CONDITIONAL GO` only:
 
 ```text
 TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block while this document is NO-GO; it may be used only in a new record after every hard gate passes and a human separately approves GO or CONDITIONAL GO.
-I reviewed the evidence ids above and approve the recorded decision only for the
-accepted package commit/label and ZIP checksum/applicability, inventory record
+I reviewed the evidence ids above and approve the recorded decision only through
+the consumed immutable <finalSignoffApprovalId>, exact <finalSignoffRecordId>,
+current <finalSignoffEvidenceGeneration>, authenticated approver evidence, and
+not-revoked state. It is bound to the accepted package commit/label, trusted ZIP/
+installer checksum, authenticated full-file manifest, installed-tree verification,
+executing-process/tree verification, exact artifact observation/validity, and
+integrity-lock evidence, inventory record
 and observation/max-age/deadline/observed-source-byte fields, the separately approved snapshot byte ceiling, manifest-preparation approval plus its
 claim/completed-publication deadline, consumed
 protected manifest record and prepared/deadline fields, immutable content
@@ -1235,10 +1335,14 @@ final pre-call check, atomic snapshot binding evidence, the target-identity
 trust anchor baseline id/privacy-safe alias/verified state/safe evidence,
 preparation approval id/state/claim-publication deadline/claim owner/fence and protected exact
 target DB binding id/state/validity/evidence, exact-target singleton coordinator
-id/state/owner/consumer/generation/evidence, target operation fence id/chain
+id/state/owner/consumer/generation/evidence from the fixed authenticated machine-
+global authority including cross-user/install/state-DB exclusion and target-side
+mutation epoch, target operation fence id/chain
 state/upload branch/Delete branch/consumer/generation/evidence, any Start/Retry approval,
-pre-reserved mutation id, Retry reconciliation creation entitlement/record/
-private-subset disposition evidence, approved-absent set and transaction-time
+pre-reserved mutation id and successor reconciliation claim deadline, Retry
+reconciliation creation entitlement/record including terminal
+`superseded_disposed` predecessors/private-subset disposition evidence, approved-
+absent set and transaction-time
 revalidation evidence, action-duration/
 disposition-margin, lease, target-mutation outcome/evidence, and
 job identifiers for stages that
