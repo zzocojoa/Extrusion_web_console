@@ -2,16 +2,20 @@
 
 Date: 2026-06-18 Asia/Seoul
 
-Status: `executed_evidence_for_review`
+Status: `superseded_historical_execution_evidence_non_authorizing`
 
 ## Purpose
 
 This document records evidence for the approved removal of `2026-01-19`
 rows from the local Supabase `public.all_metrics` table.
 
-This is an execution evidence record, not a reusable operator procedure. It
-does not grant permission for any additional delete, reset, truncate, Docker
-cleanup, Supabase lifecycle, Upload Start, or Retry Failed action.
+This is a superseded historical execution evidence record, not a reusable
+operator procedure, current safety baseline, rollback guide, or proof of
+operational Delete readiness. It does not grant permission for any additional
+delete, reset, truncate, Docker cleanup, Supabase lifecycle, Upload Preview,
+Upload Start, or Retry Failed action. Current Delete decisions must follow
+`docs/164_operator_data_mutation_safety_gate.md` and
+`docs/171_v2_operational_delete_verification_gate.md`.
 
 ## Scope And Approval
 
@@ -74,13 +78,13 @@ The `partialOverlap = 1` result is expected because one source item spans
 multiple timestamp dates. The remaining overlap belongs to dates outside the
 deleted `2026-01-19` timestamp-date scope.
 
-## Maintainer-Only Date Scope
+## Historical Maintainer-Only Date Scope
 
-The date-scoped delete fields are a maintainer-only control path. They are not
-a general operator UI feature and must not be documented as generally available
-operator functionality.
+The date-scoped fields below describe only the recorded 2026-01-19 execution.
+They are not a current maintainer runbook, a general operator UI feature, or an
+authorization template.
 
-Use this path only when all of the following are true:
+At the time of the historical execution, the recorded conditions were:
 
 - a mixed-date source item makes whole-item delete unsafe;
 - the exact timestamp date range has been separately approved;
@@ -90,8 +94,12 @@ Use this path only when all of the following are true:
   acknowledgements;
 - fresh post-delete evidence is captured.
 
-If these conditions are not true, stop. Do not use whole-item delete to remove
-a date from a mixed-date item.
+These conditions are historical evidence and are insufficient for any new
+Delete. Do not copy or replay them. A future Delete remains blocked until every
+protected coordinator, exact-target, single-use preflight, exact-byte source-
+provenance, exact DB-before-image, mutation-marker, reconciliation, recovery-
+disposition, and evidence lifecycle required by `docs/164` and `docs/171` is
+implemented, tested, separately approved, and current for that exact action.
 
 ## Code Disposition Decision
 
@@ -121,9 +129,13 @@ Required review scope before merge:
 
 There is no automatic undo.
 
-Recovery means running a fresh Preview and then using a separately approved
-Start Upload from unchanged source files. Reverting code or documentation does
-not restore already deleted DB rows.
+A fresh Preview or a later Start Upload from source files is a new upload
+action, not restoration of the deleted DB values. Matching source keys or bytes
+do not prove the complete typed pre-delete row values and therefore are not an
+exact rollback image. Exact Delete recovery requires the protected DB before-
+image and restore/disposition lifecycle defined in `docs/164` and `docs/171`.
+Reverting code or documentation does not restore already deleted DB rows, and
+this historical record authorizes no recovery action.
 
 ## Safety Notes
 

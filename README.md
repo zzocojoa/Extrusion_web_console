@@ -19,7 +19,7 @@ The current local console baseline is in place:
 - Dashboard Variant D UI using design tokens from `docs/04_design_system.md`.
 - Upload Preview UI with Preview/Job tabs, status summary, polling, filters, and the five preview states.
 - Upload Job API/UI with Start Upload, Retry Failed, pause/resume/cancel, SQLite job/file/event state, snapshot-safe SSE replay, terminal event/file sealing, explicit restart-required worker recovery failures, and canonical `acceptedRows` counts for Edge/Supabase upsert-accepted rows.
-- Already-in-DB hard delete API/UI for selected `already_in_db` Preview rows only, with local DB target guard, DELETE privilege preflight, typed exact-key confirmation, rollback-readiness gate, commit-unknown reconciliation, and safe audit evidence.
+- Already-in-DB hard delete API/UI for selected `already_in_db` Preview rows only, with local DB target guard, DELETE privilege preflight, typed exact-key confirmation, rollback-readiness gate, commit-unknown reconciliation, and sanitized local audit evidence that is not approved for public/committed operational evidence.
 - Local Supabase runtime status/start/stop API with required-container precheck, runtime events, and audit logging.
 - Dashboard runtime module connected to the runtime API in API mode.
 - Settings save UI connected to `GET /api/config` and `PUT /api/config`, with editable config fields, dirty state, Save/Reset controls, validation feedback, and save status.
@@ -39,7 +39,70 @@ Upload Preview v1 scans configured local CSV folders, extracts exact `(timestamp
 
 Preview requests are audit logged as `upload.preview`. Successful previews write `success` rows; DB unavailable, DB query failure, missing source, malformed JSON, validation failure, and worker submission failure write `failure` rows; active preview conflicts write `blocked` rows. Worker submission failure finalizes the run and audit atomically; if either write fails, both roll back so startup interruption recovery can repair the still-active run after the required launcher restart. Audit params use safe summary fields such as `previewRunId`, counts, `dbStatus`, `reasonCode`, and `requestedFilters`. Raw file paths, filenames, DB URLs, tokens, anon keys, service role values, secrets, and malformed raw request bodies are not stored in audit params.
 
-Already-in-DB hard delete is a production-critical maintenance flow, not a general database cleanup tool. It can target only selected Preview items whose status is `already_in_db`. The backend rebuilds exact keys from current source files, verifies rollback readiness, proves the configured DB is the expected local Supabase target, checks DELETE privilege non-destructively, writes `delete_run` state and `upload.delete_start` audit before DB mutation, then performs an all-or-nothing transaction. API responses and audits expose counts, hashes, status, and safe reason codes only; raw `(timestamp, device_id)` values, source paths, filenames, DB URLs, tokens, Authorization values, JWTs, and secrets are not returned.
+Already-in-DB hard delete is a production-critical maintenance flow, not a general database cleanup tool. It can target only selected Preview items whose status is `already_in_db`. The current backend rebuilds exact keys from current source files and reports rollback readiness, but a source CSV with matching keys does not preserve the actual pre-delete DB values and therefore is not an exact rollback image. The backend also checks a coarse local DB target class/fingerprint and DELETE privilege non-destructively, writes `delete_run` state and `upload.delete_start` audit before DB mutation, then performs an all-or-nothing transaction. The current API includes legacy unkeyed selection/keyset hash fields; because a small candidate set can make those values guessable, they are owner-only diagnostics and must not be copied into committed/public approval or evidence records. The sanitized coarse DB fingerprint may be retained as public diagnostic evidence, but it cannot authorize a target or distinguish a different local cluster/database using the same safe host/port classes. Operational Delete remains blocked until production code uses opaque random protected data-binding ids externally, carries one protected exact `targetDbBindingId` through preflight/delete/reconcile, revalidates authenticated exact instance/database identity, and keeps exact material plus any versioned domain-separated keyed HMAC integrity data in an authenticated owner-only store. Raw `(timestamp, device_id)` values, source paths, filenames, CSV/DB row values, DB URLs, tokens, Authorization values, JWTs, secrets, and private HMACs must never be returned or published.
+
+That is not the complete operational Delete gate. The current v1 path cannot
+count as operational or V2 proof until production code/tests also implement the
+  exact-target singleton coordinator across Preview chains in one fixed
+  authenticated machine-global authority shared by every Windows user/package/
+  install/state-DB, with an ACL-restricted cross-session mutex and target-side
+  mutation epoch; durable preflight
+owner/fence/claim-and-completion deadlines; an owner-only exact-byte source-
+provenance snapshot with canonical-root/handle identity, ceiling, capacity,
+confidentiality, retention, and separately approved disposition controls; an
+owner-only complete typed DB before-image captured atomically with the exact
+DELETE and marker only after a protected DDL/schema fence proves every DELETE
+and restore-INSERT foreign-key/cascade, trigger/rule, policy, generated/default,
+sequence, replication/CDC/notification, and affected-relation class is absent or
+inert, leaving no secondary relation or externally observable effect;
+distinct committed dual-record versus aborted source-only cleanup authority with
+non-interchangeable preflight-owned source-snapshot, hard-delete-owned DB-before-
+image, and restore-owned cleanup ids/deadlines/states/evidence; and
+one human-bound non-renewable hard-Delete active-use commit deadline plus positive
+mutation-to-reconcile margin, with a shared target-side epoch fence that prevents
+any delayed transaction from committing after reconcile/cleanup; and one pre-
+reserved target-side Delete mutation marker whose
+  marker-first reconciliation proves outcome despite response loss or external
+  writers; and a separately pre-authorized bounded authenticated keyless-bytes/
+  metadata incident escrow for a marker still unknown at the standard retention
+  deadline, ending in marker-proven committed resolution followed by approval-
+  bound permanent-block disposal, marker-proven aborted resolution plus
+  authoritative no-image and source-cleanup terminal evidence, or immediate
+  cleanup claim at the incident reconcile cutoff and strict completion
+  before its cleanup deadline with permanent recovery-loss/security-incident NO-GO.
+  A positive human-approved incident cleanup margin must separate the last
+  marker-first read from the earlier escrow/target-validity ceiling.
+  Once standard recovery retention has expired, incident evidence cannot reopen
+  ordinary restore/disposition. Source
+  bytes alone never make Delete rollback-ready.
+
+Final cutover GO also requires a content-addressed ZIP/installer whose signature
+and full-file manifest verify against a pre-provisioned, non-revoked owner-
+controlled release trust root outside the candidate, with exact signer/
+algorithm/independent-verifier evidence; verification that the installed and
+executing trees match that artifact; and an immutable authenticated, non-revoked final sign-off record.
+A mutable unpacked folder, self-reported build-info file, or copied Markdown sign-
+off cannot prove release readiness.
+
+Future source admission also requires a separately controlled pre-existing,
+human-reviewed opaque source-root binding resolving owner-only to the canonical
+root stable volume/share and opened-directory identity plus config generation.
+Read-only inventory may only revalidate it; manifest preparation revalidates it
+before byte access and atomically binds the immutable snapshot. Alias/class/count/
+size/mtime cannot substitute, and these docs do not authorize binding provisioning
+or repair.
+
+The same exact-target requirement applies to DB-dependent Preview, Start Upload,
+Retry Failed, target-marker recovery, and whole-attempt reconciliation. Safe
+loopback/port/target/readiness classes are diagnostic only. Future operational
+execution remains blocked until a pre-existing owner-only trusted target baseline
+from separately verified installation/runtime provenance is human-reviewed under
+a privacy-safe alias, the first observed DB identity matches that expected
+baseline, and one protected opaque `targetDbBindingId` is then verified by
+Preview, bound with the baseline id/state/evidence through every later approval/
+action/record, and revalidated unexpired against authenticated exact instance/
+database identity on each
+authoritative DB session or transaction.
 
 Date-scoped delete is a maintainer-only extension of the delete API for
 mixed-date `already_in_db` evidence. It is not a general operator UI feature.
@@ -225,10 +288,23 @@ The NSIS build script searches `PATH`, standard NSIS install locations, Scoop, a
 
 For operator handoff, follow `docs/32_operator_package_handoff_runbook.md` for zip/checksum verification, extraction, shortcut install, first launch, Settings checks, log collection, rollback, and support escalation.
 
-For day-to-day upload decisions, including the normal "no upload target" outcome,
-follow `docs/151_operator_upload_gate_runbook.md`. This keeps fresh Preview-only,
-target count review, separate Start Upload approval, and separate Retry Failed
-approval as the required operating path.
+`docs/151_operator_upload_gate_runbook.md` is a superseded historical runbook and
+must not be used to authorize Preview, Start Upload, Retry Failed, or Delete.
+Current operational decisions must follow the blocked protected chain in
+`docs/164`, `docs/173`, and `docs/176`: a separately provisioned/verified trusted
+target baseline and a separately controlled pre-existing human-reviewed protected
+source-root binding/config generation must already exist; read-only inventory may
+only revalidate that binding. Then successor inventory, separately approved
+manifest/snapshot preparation that revalidates and snapshot-binds the exact root,
+separately approved read-only target-identity
+preparation with human review of the exact-match opaque binding, and only then a
+later Preview approval may proceed. These documents do not authorize baseline
+provisioning/review/repair or any execution and require production implementation and
+deterministic tests first. Start/Retry also require a
+human-bounded unrenewable lease, target-side transaction fence and durable
+outcome marker, commit-unknown reconciliation, whole-subset retry
+reconciliation, and disposition-race tests; Delete requires separate atomic single-use preflight and mutation
+approval lifecycles. All three remain separately blocked after Preview.
 
 ## Backend Development
 
@@ -259,7 +335,7 @@ $env:EWC_SUPABASE_EDGE_URL="<local Supabase Edge URL>"
 $env:EWC_STATE_DB_PATH="<local state DB path>"
 ```
 
-For developer API-mode runs started through `launcher/start_web_console.ps1`, the launcher enforces the approved mapped-drive process-data source class before the backend starts. If process env, repo `.env`, or config JSON provides a non-canonical `plcDataDir`, the launcher refuses to start by default so Preview cannot drift to a fixture, stale UNC, or other wrong source. `-AllowNonCanonicalSource` is available only as an explicit diagnostics opt-in. Backend `Settings` does not silently replace explicit env/config source bindings. This is a developer launcher guard, not an operator package pin. Verify the active source with read-only `GET /api/config` and a backend-side path existence preflight before running Upload Preview.
+For developer API-mode runs started through `launcher/start_web_console.ps1`, the launcher enforces the approved mapped-drive process-data source class before the backend starts. If process env, repo `.env`, or config JSON provides a non-canonical `plcDataDir`, the launcher refuses to start by default so Preview cannot drift to a fixture, stale UNC, or other wrong source. `-AllowNonCanonicalSource` is available only as an explicit diagnostics opt-in. Backend `Settings` does not silently replace explicit env/config source bindings. This is a developer launcher guard, not an operator package pin. Until the protected runtime lifecycle is implemented, tested, and separately approved, API-mode checks against an operator backend are limited to the read-only status, config, and audit observations documented below; Preview and Upload Job testing must use disposable synthetic fixtures through automated tests.
 
 The API-mode frontend does not use Settings mock fallback values for active source binding. Settings, Upload Preview, and Start Upload readiness must be judged from the backend `/api/config` response and its sanitized `items` / `targetClasses` fields. The default frontend mock build may show development sample values only; it is for screenshot QA and UI development, not operational source evidence.
 
@@ -285,37 +361,46 @@ Docker Desktop's `Expose daemon on tcp://localhost:2375 without TLS` setting mus
 
 The legacy local stack can still be selected explicitly through env/config overrides for rollback during rollout, but it is no longer the built-in default.
 
-Config API smoke check:
+Config API read-only smoke check:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/api/config
-
-$body = @{
-  values = @{
-    grafanaUrl = "http://localhost:3001"
-    localSupabaseApiPort = 55321
-  }
-} | ConvertTo-Json -Depth 4
-
-Invoke-RestMethod -Method Put `
-  -Uri http://127.0.0.1:8000/api/config `
-  -ContentType "application/json" `
-  -Body $body
-
 Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=settings.save&limit=20"
 ```
+
+The copy-ready `PUT /api/config` smoke recipe is intentionally omitted. Settings
+save mutates local configuration and requires an immutable, authenticated,
+expiring, single-use approval binding the exact package and operator, the expected
+current config version and state, the exact reviewed non-secret before/after value
+for every allowed field, the claim deadline, exclusions, stop conditions, and
+audit evidence. The claim and save must atomically reject stale state, substituted
+values, extra fields, replay, or concurrent claims. The read-only commands above
+do not authorize a save. The canonical protected approval id/state/deadline,
+config-generation/change-set binding, operation id, response-loss behavior,
+durable commit-pending/commit-unknown outcome, machine-global no-active-stage
+coordinator/CAS proof shared with every protected stage, failure audit, and
+deterministic negative-test contract is in `docs/164`; until
+it is implemented and tested, operational Settings save evidence is blocked.
 
 `PUT /api/config` accepts only known config keys. It rejects environment-overridden keys, including repo `.env` key-presence overrides, writes blocked audit rows for those attempts, and writes failure audit rows for validation failures including malformed JSON bodies. Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason`; they do not store raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies. Config writes use a per-config-file lock, a unique temp filename, and atomic replace. Settings precedence is built-in defaults, then config JSON, then repo `.env` or launcher env, then process environment.
 
 The Settings page uses the config API in `VITE_API_MODE="api"`. Non-secret editable fields are sent only when changed. Secret fields display only an empty replacement input and hidden-value status; existing secret raw values are never rendered. Empty or unchanged secret inputs are excluded from the save payload, and a secret key is included only when the operator types a replacement value.
 
-Runtime API smoke check. Run the start/stop calls only when no upload job or preview run is active:
+Runtime API read-only smoke check:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/api/runtime/local-supabase
-$runtime = Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/runtime/local-supabase/start
-Invoke-RestMethod http://127.0.0.1:8000/api/runtime/operations/$($runtime.operationId)
 ```
+
+Copy-ready Local Supabase start/stop recipes are intentionally omitted. Either
+action changes runtime state and requires its own explicit bounded approval, no
+active canonical machine-global consumer, including manifest/target-identity/
+Preview/upload/retry/delete-preflight/delete/disposition/restore/reconcile/
+recovery/final-signoff, exact before/after status and audit evidence, and the protected single-use
+approval/action/state/operation/outcome lifecycle plus deterministic partial-
+transition/replay/concurrency/response-loss tests. Both claim orders must contend
+on the same authenticated machine-global coordinator in `docs/164` and `docs/176`. This read-
+only status check does not authorize start or stop.
 
 Audit Logs API smoke check:
 
@@ -327,67 +412,29 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/audit?q=upload.start&limit=10"
 
 The `q` parameter searches only safe scalar fields such as `auditId`, `action`, `targetType`, `targetId`, `result`, `jobId`, `requestId`, `actor`, and `errorCode`. It does not search raw `error_message` values or raw/redacted params JSON, so legacy rows containing secret-like diagnostics cannot be reverse-searched through `/api/audit`.
 
-Upload Preview API smoke check:
-
-```powershell
-$body = @{
-  rangeMode = "today"
-  sources = @("plc")
-  options = @{
-    stableLagMinutes = 3
-    sampleRows = 200
-    chunkRows = 20000
-    maxFiles = 500
-    maxRunSeconds = 120
-    maxFileSeconds = 30
-    forceFullScan = $false
-  }
-  retryOfRunId = $null
-} | ConvertTo-Json -Depth 5
-
-$preview = Invoke-RestMethod -Method Post `
-  -Uri http://127.0.0.1:8000/api/upload/preview `
-  -ContentType "application/json" `
-  -Body $body
-
-$previewDetail = Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/$($preview.previewRunId)
-Invoke-RestMethod http://127.0.0.1:8000/api/upload/preview/latest
-Invoke-RestMethod "http://127.0.0.1:8000/api/audit?action=upload.preview&limit=20"
-```
-
-Upload Job API smoke check after a successful preview with target rows:
-
-```powershell
-$expectedTargetRows = [int]$previewDetail.run.summary.targetRows
-$expectedTargetFiles = [int]$previewDetail.run.summary.target
-if ($expectedTargetRows -le 0 -or $expectedTargetFiles -le 0) {
-  throw "Preview has no upload target rows/files."
-}
-
-$jobBody = @{
-  previewRunId = $preview.previewRunId
-  mode = "preview_targets"
-  expectedTargetRows = $expectedTargetRows
-  expectedTargetFiles = $expectedTargetFiles
-} | ConvertTo-Json
-
-$job = Invoke-RestMethod -Method Post `
-  -Uri http://127.0.0.1:8000/api/upload/jobs `
-  -ContentType "application/json" `
-  -Body $jobBody
-
-Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/$($job.jobId)
-Invoke-RestMethod http://127.0.0.1:8000/api/upload/jobs/latest
-```
+Upload Preview and Upload Job live smoke commands are intentionally omitted.
+The current backend does not enforce a disposable-fixture source/DB identity, so
+a caller-set environment variable or copied command is not a safety boundary.
+Use automated synthetic tests only. Do not issue either POST against an operator
+backend until the protected runtime lifecycle in `docs/164`, `docs/173`, and
+`docs/176` is implemented, tested, and separately approved.
 
 Already-in-DB hard delete API contract:
 
-- `POST /api/upload/delete/preflight` is a protected preflight. It accepts a Preview run id, selected Preview item ids, an expected selected item count, and optional maintainer-only `timestampStartDate` / `timestampEndDate` values for mixed-date delete scope. It returns `ready` or `blocked`, exact selected key count, rollback readiness, sanitized DB target guard, hashes, expiry, optional date scope, and safe reason code.
+- `POST /api/upload/delete/preflight` is a protected preflight. It accepts a Preview run id, selected Preview item ids, an expected selected item count, and optional maintainer-only `timestampStartDate` / `timestampEndDate` values for mixed-date delete scope. The current response returns `ready` or `blocked`, exact selected key count, rollback readiness, sanitized coarse DB target guard, legacy unkeyed hashes, expiry, optional date scope, and safe reason code. The legacy hashes are not approved public evidence. The sanitized coarse DB fingerprint is diagnostic public evidence only and is never exact target authorization; the future operational contract must expose opaque protected data bindings and revalidate a protected exact `targetDbBindingId` instead.
+- This current preflight/job/reconcile contract is not operational proof. The full mandatory coordinator, preflight fencing/deadline, exact-byte source-provenance snapshot, DELETE side-effect/recoverability binding, atomic complete-row DB-before-image/restore/disposition with distinct committed and aborted cleanup branches and non-interchangeable source/DB/restore cleanup lifecycles, and target mutation-marker requirements are defined in `docs/164` and `docs/171`; every one must be implemented and deterministically tested before operational use.
 - `POST /api/upload/delete/jobs` is protected and destructive. It requires a ready preflight, typed exact key count, no-undo acknowledgement, and rollback-limit acknowledgement. It must not be used against operational data without separate explicit approval.
 - `GET /api/upload/delete/jobs/latest` is read-only and safe for status checks.
 - `POST /api/upload/delete/jobs/{deleteRunId}/reconcile` is protected but read-only against local Supabase. It updates local delete state/audit for `commit_unknown` or explicitly retried `reconciliation_failed` runs and never issues a delete.
 
-Implementation and destructive smoke for delete must use disposable local fixture DBs unless an operator gives separate production approval. Normal upload troubleshooting must still not use DB reset, truncate, broad manual cleanup, Supabase lifecycle, or Docker cleanup. Date-scoped delete remains maintainer-only until frontend controls, operator copy, i18n, and runbook approval are implemented separately.
+Implementation and destructive smoke for delete must use automated disposable
+fixture DBs. Operational delete remains blocked even with prose approval until
+the protected atomic single-use preflight/delete lifecycles in `docs/164` and
+`docs/171` are implemented and tested under a separate plan. Normal upload
+troubleshooting must still not use DB reset, truncate, broad manual cleanup,
+Supabase lifecycle, or Docker cleanup. Date-scoped delete remains maintainer-only
+until frontend controls, operator copy, i18n, and runbook approval are implemented
+separately.
 
 Backend tests:
 
@@ -424,7 +471,7 @@ The Vite dev server proxies `/api` to `http://127.0.0.1:8000`.
 
 Important mode split: `?state=ready|attention|blocked|running` is a frontend mock-mode feature only. When `VITE_API_MODE="api"` is used, Dashboard calls `/api/dashboard` and `/api/dashboard/summary`; those endpoints aggregate the active state DB latest upload job, runtime readiness, and safe audit summary. API mode should show neutral empty/unknown state when data is missing, not the old fake running job.
 
-The Upload Preview and Upload Job pages also use mock data by default so preview/job states can be inspected without local Supabase. These mock paths are development and screenshot QA aids only. To use the real backend preview and job APIs, run the frontend with `VITE_API_MODE="api"` and configure the backend environment values above.
+The Upload Preview and Upload Job pages also use mock data by default so preview/job states can be inspected without local Supabase. These mock paths are development and screenshot QA aids only. API mode against an operator backend remains limited to the approved read-only status, config, and audit observations until the protected lifecycle is implemented, tested, and separately approved. Preview and Upload Job API behavior must be exercised only by automated tests using disposable synthetic source and database fixtures.
 
 For release-maintainer API-mode package builds and operator validation, prefer:
 
@@ -578,16 +625,18 @@ Browser QA has been run against:
 - `docs/02-design/features/upload-preview-range-options.design.md`
 - `docs/01-plan/features/upload-preview-preferences-and-audit-panel-polish.plan.md`
 - `docs/02-design/features/upload-preview-preferences-and-audit-panel-polish.design.md`
-- `docs/156_operator_already_in_db_delete_contract.md`
-- `docs/157_operator_2026-01-19_delete_execution.md`
+- `docs/156_operator_already_in_db_delete_contract.md` (superseded historical implementation reference; non-authorizing)
+- `docs/157_operator_2026-01-19_delete_execution.md` (superseded historical execution evidence; non-authorizing)
 - `docs/158_operator_status_language_policy.md`
-- `docs/159_v2_scope_and_safety_plan.md`
-- `docs/160_v2_delete_lan_audit_rollback_technical_design.md`
+- `docs/159_v2_scope_and_safety_plan.md` (historical scope draft; superseded for operational mutation)
+- `docs/160_v2_delete_lan_audit_rollback_technical_design.md` (historical technical design; superseded for operational mutation)
 - `docs/161_v2_open_decisions_review.md`
 - `docs/162_v2_sidecar_row_attribution_ledger_design.md`
 - `docs/163_v2_sidecar_row_attribution_ledger_migration_plan.md`
 - `docs/164_operator_data_mutation_safety_gate.md`
 - `docs/165_v2_status_matrix.md`
+- `docs/171_v2_operational_delete_verification_gate.md`
+- `docs/173_v2_operational_upload_verification_gate.md`
 - `docs/175_legacy_gui_replacement_gap_audit.md`
 - `docs/176_v1_cutover_go_no_go_validation_plan.md`
 - `docs/177_operator_pc_read_only_smoke_evidence.md`
@@ -595,6 +644,7 @@ Browser QA has been run against:
 - `docs/179_operator_pc_read_only_smoke_evidence_after_backend_readiness.md`
 - `docs/180_backend_availability_root_cause_diagnostic_plan.md`
 - `docs/181_backend_availability_read_only_diagnostic_approval_record.md`
+- `docs/182_v1_cutover_read_only_inventory_evidence.md`
 
 ## Reference Project
 

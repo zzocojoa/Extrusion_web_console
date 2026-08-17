@@ -2,8 +2,15 @@
 
 Date: 2026-06-17 Asia/Seoul
 
+Status: `superseded_historical_retry_semantics_evidence_non_authorizing`
+
 Scope: report-only P1 investigation for Retry Failed result counters, DB row
 delta evidence, UI copy, audit/job evidence, and test coverage.
+
+This document preserves historical counter evidence only. It is not a current
+Retry approval, runbook, approved-absent-set definition, or recovery contract.
+Operational Retry decisions must use the protected lifecycle in `docs/164`,
+`docs/173`, and `docs/176`; `docs/151` is a superseded historical runbook.
 
 Verdict: `accepted_rows_db_delta_semantics_verified_with_row_level_caveat`
 
@@ -67,7 +74,8 @@ instead of by a specific `(timestamp, device_id)` key.
 | README | `acceptedRows` is documented as Edge/Supabase upsert accepted count, not net-new insert count |
 | `docs/146` | Retry executed exactly once and succeeded |
 | `docs/149` | Direct read-only DB count reconciled `863,419` unique target rows |
-| `docs/151` | Future Retry Failed requires remaining physical row review and separate approval |
+| `docs/151` | Historical evidence only; it is superseded and cannot authorize a future Retry |
+| `docs/164`, `docs/173`, `docs/176` | Current protected Retry approval, exact-DB reconciliation, target-fencing, and cutover gates |
 | Backend service | Deduplicates before Edge call and tracks processed/uploaded/accepted separately |
 | Backend repository | Retry job creation validates expected remaining physical rows inside `BEGIN IMMEDIATE` |
 | Backend API | Missing/mismatched retry expected counts are blocked and audit logged |

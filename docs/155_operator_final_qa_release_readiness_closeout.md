@@ -2,6 +2,21 @@
 
 Date: 2026-06-17 Asia/Seoul
 
+Status: `superseded_historical_closeout_non_authorizing`
+
+> **Superseded historical record:** This document preserves a past QA closeout
+> and the evidence available on its date. It is not current release, Preview,
+> upload, Retry, rollout, or mutation authority, and its runtime observations do
+> not prove current readiness. `docs/151_operator_upload_gate_runbook.md` and the
+> earlier records listed below are not controlling current policy. Current
+> non-executable safety and verification contracts are
+> `docs/164_operator_data_mutation_safety_gate.md`,
+> `docs/171_v2_operational_delete_verification_gate.md`,
+> `docs/173_v2_operational_upload_verification_gate.md`, and
+> `docs/176_v1_cutover_go_no_go_validation_plan.md`. Each remains subject to its
+> implementation, deterministic-test, protected-record, and new human-approval
+> gates.
+
 Scope: final QA/release-readiness closeout for screenshot QA drift, API-mode
 browser smoke, stale PR cleanup, Preview approval-scope caveat closure,
 release/tag/package decision, and steady operating period acceptance decision.
@@ -95,7 +110,8 @@ The following open PRs were closed as superseded. Branches were not deleted.
 | #118 | Stage 4 Preview-only rerun report | Superseded by current upload gate runbook and latest accepted upload evidence |
 | #119 | Stage 4 DB reset decision review | Superseded by current no-destructive-cleanup and rollback boundaries |
 
-The controlling current-main records are:
+The following records were treated as controlling at the time of this historical
+closeout only:
 
 - `docs/150_operator_handoff_caveat_release_steady_template.md`;
 - `docs/151_operator_upload_gate_runbook.md`;
@@ -103,6 +119,11 @@ The controlling current-main records are:
 - `docs/154_operator_post_upload_acceptance_summary.md`;
 - PR #177 / `f2609fc` for the backend `approvalScope` Preview contract;
 - `af9219b` for the post-upload acceptance summary.
+
+That list is superseded for current decisions. In particular,
+`docs/151_operator_upload_gate_runbook.md` must not be used. Use `docs/164`,
+`docs/171`, `docs/173`, and `docs/176` for the current non-executable gate
+contracts; none of them authorizes an operational action by itself.
 
 ## Docs 153 Caveat Closeout
 
@@ -198,7 +219,8 @@ material.
 
 ## Next Action
 
-Open a review PR for this closeout branch.
-
-Do not create a release/tag/package artifact unless a maintainer separately
-approves the formal release path in `docs/33_operator_release_tag_checklist.md`.
+This historical closeout requires no execution follow-up and grants no release,
+tag, package, Preview, upload, Retry, rollout, Delete, or runtime authority.
+Current work must begin from the applicable successor gate in `docs/164`,
+`docs/171`, `docs/173`, or `docs/176` and obtain a new explicit human approval
+after every implementation and deterministic-test prerequisite is satisfied.

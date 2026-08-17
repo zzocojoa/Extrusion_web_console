@@ -2,7 +2,7 @@
 
 Date: 2026-06-19 Asia/Seoul
 
-Status: `technical_design_draft_pre_implementation`
+Status: `historical_technical_design_superseded_for_operational_mutation`
 
 ## Purpose
 
@@ -13,6 +13,11 @@ design draft.
 It is not an implementation approval. It does not approve code changes,
 database migrations, production DB access, destructive smoke tests, LAN
 exposure, release packaging, branch creation, commit, push, or PR creation.
+
+For operational Upload/Delete mutation, this historical draft is superseded by
+`docs/164`, `docs/171`, `docs/173`, and `docs/176`. Its older endpoint and
+recovery descriptions may be used only as implementation history; they are not
+an execution contract or approval template.
 
 The business goal is to let V2 delete, LAN, audit, DB-delta, row-attribution,
 and rollback work proceed only after the security and data-loss boundaries are
@@ -27,8 +32,12 @@ explicit enough for review.
 - `docs/01_development_roadmap.md`
 - `docs/02_engineering_plan.md`
 - `docs/10_audit_logs_plan.md`
-- `docs/156_operator_already_in_db_delete_contract.md`
+- `docs/156_operator_already_in_db_delete_contract.md` (superseded historical implementation contract)
 - `docs/159_v2_scope_and_safety_plan.md`
+- `docs/164_operator_data_mutation_safety_gate.md` (current mutation gate)
+- `docs/171_v2_operational_delete_verification_gate.md` (current Delete gate)
+- `docs/173_v2_operational_upload_verification_gate.md` (current Upload gate)
+- `docs/176_v1_cutover_go_no_go_validation_plan.md` (current cutover gate)
 
 ## Current Constraints
 
@@ -128,10 +137,13 @@ change.
 
 ### Baseline Policy
 
-The current delete contract in
-`docs/156_operator_already_in_db_delete_contract.md` remains the baseline.
+The current operational Delete contract is the protected lifecycle in
+`docs/164_operator_data_mutation_safety_gate.md` and
+`docs/171_v2_operational_delete_verification_gate.md`.
+`docs/156_operator_already_in_db_delete_contract.md` is a superseded historical
+implementation contract and cannot authorize operational use.
 
-The existing endpoints remain the V1 compatibility contract:
+The existing endpoints remain an implementation compatibility surface only:
 
 ```text
 POST /api/upload/delete/preflight
@@ -140,7 +152,8 @@ GET  /api/upload/delete/jobs/latest
 POST /api/upload/delete/jobs/{deleteRunId}/reconcile
 ```
 
-V2 may add a delete policy layer, but it must not weaken existing guards.
+Their presence does not prove operational readiness. V2 may add a delete policy
+layer, but it must not weaken any current `docs/164`/`docs/171` guard.
 
 Recommended V2 policy model:
 
@@ -621,9 +634,10 @@ Future implementation must support:
 - unresolved `commit_unknown` or `reconciliation_failed` blockers that prevent
   further destructive operations.
 
-Delete has no app-level undo. Recovery means a fresh Preview plus separately
-approved Start Upload from unchanged source files, if those files still exist
-and still parse to the same exact keys.
+Delete has no app-level undo. A fresh Preview or Start Upload is a new upload,
+not restoration of complete typed pre-delete DB values. Exact recovery requires
+the protected DB-before-image restore/disposition lifecycle in `docs/164` and
+`docs/171`; matching source files or keys cannot replace that before-image.
 
 ### LAN Rollback
 
