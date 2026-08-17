@@ -94,13 +94,17 @@ downstream of the additional atomic-binding implementation/test and rebuilt-
 package gate described below. The future alias must be random or otherwise
 resistant to path guessing, and the human must confirm out of band that it maps
 to the exact configured folder.
+No protected source config generation or pre-existing human-reviewed opaque
+source-root binding was supplied or observed. This historical read-only record
+does not create, review, advance, rotate, or repair one.
 
 ## Historical Baseline Evidence Fields (Non-Canonical Subset)
 
 This table records truthful sentinels for this historical inventory baseline. It
 is not the canonical complete field schema and omitted fields are never evidence.
-The complete current field/state contract is `docs/173`; a successor record must
-use that contract and may not infer values from this table.
+The complete current field/state contract is defined collectively by `docs/164`,
+`docs/171`, and `docs/173`; a successor record must use all applicable canonical
+contracts and may not infer values from this table.
 
 | Field | Current value |
 | --- | --- |
@@ -118,6 +122,11 @@ use that contract and may not infer values from this table.
 | `artifactIntegrityLockEvidenceId` | `not_created` |
 | `inventoryMaxAgeSeconds` | `not_approved` |
 | `previewExecuteByUtc` | `not_approved` |
+| `sourceConfigGeneration` | `not_observed` |
+| `sourceRootBindingId` | `not_provisioned` |
+| `sourceRootBindingState` | `not_provisioned` |
+| `sourceRootBindingGeneration` | `not_created` |
+| `sourceRootBindingEvidenceId` | `not_created` |
 | `previewApprovalId` | `not_approved` |
 | `previewApprovalState` | `not_approved` |
 | `manifestPreparationApprovalId` | `not_approved` |
@@ -145,6 +154,12 @@ use that contract and may not infer values from this table.
 | `dbStatusClass` | `not_queried` |
 | `targetClassStatus` | `not_observed` |
 | `runtimeReadinessClass` | `not_observed` |
+| `machineGlobalOperationCoordinatorId` | `not_created` |
+| `machineGlobalOperationCoordinatorState` | `not_created` |
+| `machineGlobalOperationCoordinatorOwnerId` | `not_created` |
+| `machineGlobalOperationCoordinatorConsumer` | `not_created` |
+| `machineGlobalOperationCoordinatorGeneration` | `not_created` |
+| `machineGlobalOperationCoordinatorEvidenceId` | `not_created` |
 | `trustedTargetBaselineId` | `not_provisioned` |
 | `trustedTargetAlias` | `not_provisioned` |
 | `trustedTargetBaselineState` | `not_provisioned` |
@@ -288,7 +303,11 @@ package verification pass. Then repeat the same read-only inventory and create a
 successor evidence record. A separate exact manifest-preparation approval must
 create a protected single-use record before any later Preview-only approval.
 Before the successor inventory, a separately controlled, pre-existing verified/
-non-revoked trusted target baseline must already exist. After manifest/snapshot
+non-revoked trusted target baseline and a separately controlled pre-existing,
+human-reviewed protected source-root binding must already exist. The latter must
+resolve owner-only to the exact canonical root stable volume/share and opened-
+directory identity plus config generation. This record does not authorize
+provisioning, review, rotation, or repair of either baseline. After manifest/snapshot
 preparation, a separate read-only target-identity preparation
 approval/run/result must exactly match the observed DB identity to that owner-
 only baseline before any later Preview approval.
@@ -296,6 +315,11 @@ Stop if:
 
 - the human has not supplied the safe operator PC class or privacy-safe source
   alias;
+- the pre-existing source-root binding id/state/exact monotonic generation/
+  evidence or protected config
+  generation is missing, unreviewed, unresolved, substituted, invalid, changed,
+  or the successor inventory would create/advance it instead of read-only
+  revalidation;
 - the successor record does not contain `inventoryObservedAtUtc`, a
   human-approved `inventoryMaxAgeSeconds`, and `previewExecuteByUtc`;
 - the current time is later than `previewExecuteByUtc` or the inventory age
@@ -314,6 +338,9 @@ Stop if:
   or mismatched; or
 - protected manifest preparation is unapproved or its record is missing,
   expired, reused, tampered, unauthenticated, or mismatched; or
+- manifest preparation does not bind and revalidate the exact source config/root
+  binding before byte access, a drive/share/Settings remap or stable root identity
+  change is detected, or alias/class/count/size/mtime equality is used instead;
 - trusted target baseline id/alias/state/evidence is missing, unresolved,
   substituted, revoked, or was created/self-attested from the first DB
   observation;
@@ -325,7 +352,8 @@ Stop if:
   evidence, or the observed authenticated exact identity does not match the
   owner-only expected trusted baseline identity; or
 - Preview approval wording does not name the execution-adjacent successor
-  inventory record, protected content manifest/snapshot, trusted target baseline,
+  inventory record, exact source config/root binding/state/evidence, protected
+  content manifest/snapshot, trusted target baseline,
   consumed target-identity preparation approval, and prepared unexpired target
   DB binding.
 
@@ -341,11 +369,17 @@ concurrency/source-reopen/lease-disposition/commit-window tests, and rebuilt-pac
 after those pass, the artifact signature/full manifest verifies against a pre-
 provisioned non-revoked release trust root outside the candidate under the exact
 canonical contract revision, and a separately controlled pre-provisioned verified target
-baseline already exists may the operator and maintainer repeat the read-only
+baseline plus a separately controlled pre-existing human-reviewed protected
+source-root binding already exist may the operator and maintainer repeat the read-only
 inventory, create a new record id, timestamp,
 and reviewer confirmation bound to the exact package, a human-supplied safe
 operator PC class, and a privacy-safe source alias that the human confirms out
-of band maps to the exact configured folder. The successor record and approval
+of band maps to the exact configured folder. Inventory must only read/revalidate
+the same pre-existing `sourceRootBindingId` in state `reviewed`, its exact
+monotonic generation and safe lifecycle evidence,
+owner-only stable volume/share plus opened-directory identity, and exact
+`sourceConfigGeneration`; it may not provision, review, advance, rotate, or
+repair the binding. The successor record and approval
 must also name `inventoryObservedAtUtc`, a human-approved
 `inventoryMaxAgeSeconds`, and the resulting `previewExecuteByUtc`. No default
 validity window may be inferred.
@@ -355,7 +389,14 @@ write must resolve and atomically claim an immutable/authenticated
 `manifestPreparationApprovalId`, reject duplicate/concurrent claims, and create
 exactly one owner-restricted, tamper-evident, single-use private content manifest
 and immutable exact-byte snapshot bound to that approval plus inventory/package/
-operator/source/scope. The approval ends `consumed` with one manifest/snapshot
+operator/source/scope and the exact source config/root binding/state/evidence.
+Before reading any file byte, the claim must revalidate the owner-only canonical
+root identity/config generation under the machine-global coordinator and
+atomically advance the same binding from `reviewed` to `snapshot_bound` with the
+manifest through the intermediate `preparing` generation. Same alias/class/count/
+size/mtime is insufficient; remap, identity mismatch, copy/expiry/crash, or
+publication failure terminally invalidates that generation and disposes partial
+bytes; terminal bindings never regress/reuse. The approval ends `consumed` with one manifest/snapshot
 pair or `invalid` on failure. It must also bind the inventory observation,
 human-supplied maximum age, and a human-supplied claim/completed-publication
 deadline within that validity window; a late claim or late publication is
@@ -429,7 +470,8 @@ authorizes none of those actions.
 Public/committed content-snapshot evidence is limited to random opaque record ids,
 safe states/classes/counts/timestamps, and approved package hashes. Separately
 reviewed target evidence may additionally contain random non-derived baseline,
-binding, claim, target-global-coordinator, operation-fence, and evidence ids plus a human-supplied privacy-
+binding, claim, machine-global-operation-coordinator, target-global-coordinator,
+operation-fence, and evidence ids plus a human-supplied privacy-
 safe target alias and safe lifecycle states/timestamps. A later Delete record may
 also publish random non-derived before-image ids plus safe counts/states/
 timestamps, but never row values or private integrity material. Exact DB identity,

@@ -55,13 +55,23 @@ DELETE and marker only after a protected DDL/schema fence proves every DELETE
 and restore-INSERT foreign-key/cascade, trigger/rule, policy, generated/default,
 sequence, replication/CDC/notification, and affected-relation class is absent or
 inert, leaving no secondary relation or externally observable effect;
-distinct committed dual-record versus aborted source-only cleanup authority; and
-one pre-reserved target-side Delete mutation marker whose
+distinct committed dual-record versus aborted source-only cleanup authority with
+non-interchangeable preflight-owned source-snapshot, hard-delete-owned DB-before-
+image, and restore-owned cleanup ids/deadlines/states/evidence; and
+one human-bound non-renewable hard-Delete active-use commit deadline plus positive
+mutation-to-reconcile margin, with a shared target-side epoch fence that prevents
+any delayed transaction from committing after reconcile/cleanup; and one pre-
+reserved target-side Delete mutation marker whose
   marker-first reconciliation proves outcome despite response loss or external
-  writers; and a separately pre-authorized bounded encrypted incident escrow for
-  a marker still unknown at the standard retention deadline, ending in marker-
-  proven resolution followed by approval-bound permanent-block disposal, or
-  final-ceiling disposal with permanent recovery-loss/security-incident NO-GO.
+  writers; and a separately pre-authorized bounded authenticated keyless-bytes/
+  metadata incident escrow for a marker still unknown at the standard retention
+  deadline, ending in marker-proven committed resolution followed by approval-
+  bound permanent-block disposal, marker-proven aborted resolution plus
+  authoritative no-image and source-cleanup terminal evidence, or immediate
+  cleanup claim at the incident reconcile cutoff and strict completion
+  before its cleanup deadline with permanent recovery-loss/security-incident NO-GO.
+  A positive human-approved incident cleanup margin must separate the last
+  marker-first read from the earlier escrow/target-validity ceiling.
   Once standard recovery retention has expired, incident evidence cannot reopen
   ordinary restore/disposition. Source
   bytes alone never make Delete rollback-ready.
@@ -73,6 +83,14 @@ algorithm/independent-verifier evidence; verification that the installed and
 executing trees match that artifact; and an immutable authenticated, non-revoked final sign-off record.
 A mutable unpacked folder, self-reported build-info file, or copied Markdown sign-
 off cannot prove release readiness.
+
+Future source admission also requires a separately controlled pre-existing,
+human-reviewed opaque source-root binding resolving owner-only to the canonical
+root stable volume/share and opened-directory identity plus config generation.
+Read-only inventory may only revalidate it; manifest preparation revalidates it
+before byte access and atomically binds the immutable snapshot. Alias/class/count/
+size/mtime cannot substitute, and these docs do not authorize binding provisioning
+or repair.
 
 The same exact-target requirement applies to DB-dependent Preview, Start Upload,
 Retry Failed, target-marker recovery, and whole-attempt reconciliation. Safe
@@ -274,11 +292,14 @@ For operator handoff, follow `docs/32_operator_package_handoff_runbook.md` for z
 must not be used to authorize Preview, Start Upload, Retry Failed, or Delete.
 Current operational decisions must follow the blocked protected chain in
 `docs/164`, `docs/173`, and `docs/176`: a separately provisioned/verified trusted
-target baseline must already exist; then successor inventory, separately approved
-manifest/snapshot preparation, separately approved read-only target-identity
+target baseline and a separately controlled pre-existing human-reviewed protected
+source-root binding/config generation must already exist; read-only inventory may
+only revalidate that binding. Then successor inventory, separately approved
+manifest/snapshot preparation that revalidates and snapshot-binds the exact root,
+separately approved read-only target-identity
 preparation with human review of the exact-match opaque binding, and only then a
 later Preview approval may proceed. These documents do not authorize baseline
-provisioning or any execution and require production implementation and
+provisioning/review/repair or any execution and require production implementation and
 deterministic tests first. Start/Retry also require a
 human-bounded unrenewable lease, target-side transaction fence and durable
 outcome marker, commit-unknown reconciliation, whole-subset retry
@@ -356,7 +377,9 @@ audit evidence. The claim and save must atomically reject stale state, substitut
 values, extra fields, replay, or concurrent claims. The read-only commands above
 do not authorize a save. The canonical protected approval id/state/deadline,
 config-generation/change-set binding, operation id, response-loss behavior,
-failure audit, and deterministic negative-test contract is in `docs/164`; until
+durable commit-pending/commit-unknown outcome, machine-global no-active-stage
+coordinator/CAS proof shared with every protected stage, failure audit, and
+deterministic negative-test contract is in `docs/164`; until
 it is implemented and tested, operational Settings save evidence is blocked.
 
 `PUT /api/config` accepts only known config keys. It rejects environment-overridden keys, including repo `.env` key-presence overrides, writes blocked audit rows for those attempts, and writes failure audit rows for validation failures including malformed JSON bodies. Audit params store safe metadata such as `savedSettings`, `rejectedSettings`, and `validationReason`; they do not store raw config values, DB URLs, tokens, anon keys, service role values, or malformed request bodies. Config writes use a per-config-file lock, a unique temp filename, and atomic replace. Settings precedence is built-in defaults, then config JSON, then repo `.env` or launcher env, then process environment.
@@ -371,9 +394,12 @@ Invoke-RestMethod http://127.0.0.1:8000/api/runtime/local-supabase
 
 Copy-ready Local Supabase start/stop recipes are intentionally omitted. Either
 action changes runtime state and requires its own explicit bounded approval, no
-active Preview/upload/delete action, exact before/after status and audit evidence,
-and the protected single-use action/state/operation lifecycle plus deterministic
-replay/concurrency/response-loss tests in `docs/164` and `docs/176`. This read-
+active canonical machine-global consumer, including manifest/target-identity/
+Preview/upload/retry/delete-preflight/delete/disposition/restore/reconcile/
+recovery/final-signoff, exact before/after status and audit evidence, and the protected single-use
+approval/action/state/operation/outcome lifecycle plus deterministic partial-
+transition/replay/concurrency/response-loss tests. Both claim orders must contend
+on the same authenticated machine-global coordinator in `docs/164` and `docs/176`. This read-
 only status check does not authorize start or stop.
 
 Audit Logs API smoke check:
@@ -396,7 +422,7 @@ backend until the protected runtime lifecycle in `docs/164`, `docs/173`, and
 Already-in-DB hard delete API contract:
 
 - `POST /api/upload/delete/preflight` is a protected preflight. It accepts a Preview run id, selected Preview item ids, an expected selected item count, and optional maintainer-only `timestampStartDate` / `timestampEndDate` values for mixed-date delete scope. The current response returns `ready` or `blocked`, exact selected key count, rollback readiness, sanitized coarse DB target guard, legacy unkeyed hashes, expiry, optional date scope, and safe reason code. The legacy hashes are not approved public evidence. The sanitized coarse DB fingerprint is diagnostic public evidence only and is never exact target authorization; the future operational contract must expose opaque protected data bindings and revalidate a protected exact `targetDbBindingId` instead.
-- This current preflight/job/reconcile contract is not operational proof. The full mandatory coordinator, preflight fencing/deadline, exact-byte source-provenance snapshot, DELETE side-effect/recoverability binding, atomic complete-row DB-before-image/restore/disposition with distinct committed and aborted cleanup branches, and target mutation-marker requirements are defined in `docs/164` and `docs/171`; every one must be implemented and deterministically tested before operational use.
+- This current preflight/job/reconcile contract is not operational proof. The full mandatory coordinator, preflight fencing/deadline, exact-byte source-provenance snapshot, DELETE side-effect/recoverability binding, atomic complete-row DB-before-image/restore/disposition with distinct committed and aborted cleanup branches and non-interchangeable source/DB/restore cleanup lifecycles, and target mutation-marker requirements are defined in `docs/164` and `docs/171`; every one must be implemented and deterministically tested before operational use.
 - `POST /api/upload/delete/jobs` is protected and destructive. It requires a ready preflight, typed exact key count, no-undo acknowledgement, and rollback-limit acknowledgement. It must not be used against operational data without separate explicit approval.
 - `GET /api/upload/delete/jobs/latest` is read-only and safe for status checks.
 - `POST /api/upload/delete/jobs/{deleteRunId}/reconcile` is protected but read-only against local Supabase. It updates local delete state/audit for `commit_unknown` or explicitly retried `reconciliation_failed` runs and never issues a delete.

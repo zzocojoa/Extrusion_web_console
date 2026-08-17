@@ -25,9 +25,11 @@ evidence but not an executing package, complete operator/source binding, or
 approved Preview. Production atomic content-manifest/snapshot binding retained
 through Preview, Start, and Retry plus deterministic
 replacement/concurrency/tamper/replay tests must pass first, followed by a
-rebuilt and verified executing package. A separately controlled, pre-provisioned
-verified target baseline must already exist. Only then may an execution-adjacent
-successor inventory, separately approved protected manifest preparation,
+rebuilt and verified executing package. Separately controlled, pre-provisioned
+verified target and source-root baselines must already exist; the source baseline
+must be a human-reviewed random opaque `sourceRootBindingId` tied owner-only to
+the exact config generation and stable root identity. Only then may an execution-adjacent
+successor inventory read-only revalidate that binding, separately approved protected manifest preparation,
 separately approved read-only target-identity preparation with human exact-match
 review, and a later separately approved current Preview be prepared. This plan
 does not authorize baseline provisioning/rotation. Any required disposition of
@@ -83,8 +85,8 @@ Relationship to source documents:
 
 | State | Meaning | Required evidence | Example |
 | --- | --- | --- | --- |
-| `GO` | V1 Core Ops replacement is approved only for the named package, inventory record, manifest-preparation approval, protected manifest/snapshot, pre-existing verified target baseline, consumed target-identity preparation approval, exact target binding/state/validity/evidence, Preview approval/run, atomic snapshot binding evidence, operator PC, privacy-safe exact-source alias, source class, and evidence window. | All identifiers exactly match the consumed manifest, trusted target chain, succeeded Preview, and same-snapshot Start/Retry evidence when those stages occurred; all required evidence is current; Audit/Job Logs visibility and final sign-off are complete. | Preview consumes the named manifest, reads the protected snapshot, and revalidates the exact target against the trusted baseline; a separately approved Start reads only that same snapshot, no retryable rows remain, and sanitized evidence is reviewed. |
-| `CONDITIONAL GO` | Replacement may proceed only inside the same complete package/inventory/manifest/Preview/operator/source bindings and evidence window, with explicit residual risk acceptance. | The same exact lifecycle identifiers required for `GO` are present and equal, all hard stops are clear, and only a named non-core caveat remains with an owner and rollback/stop procedure. | Grafana status is attention-only while the bound API, DB, manifest, Preview, Audit, and upload evidence are normal. |
+| `GO` | V1 Core Ops replacement is approved only for the named package, inventory record, manifest-preparation approval, protected manifest/snapshot, pre-existing reviewed source-root binding/config generation/generation/evidence, pre-existing verified target baseline, consumed target-identity preparation approval, exact target binding/state/validity/evidence, Preview approval/run, atomic snapshot binding evidence, operator PC, privacy-safe exact-source alias, source class, and evidence window. | All identifiers and monotonic transitions exactly match the consumed manifest, source-root `reviewed -> preparing -> snapshot_bound` chain, trusted target chain, succeeded Preview, and same-snapshot Start/Retry evidence when those stages occurred; all required evidence is current; Audit/Job Logs visibility and final sign-off are complete; final sign-off atomically releases the machine-global coordinator to `idle` with empty owner/consumer, advanced generation, and safe evidence. | Preview consumes the named manifest, reads the protected snapshot, revalidates the snapshot-bound source identity and exact target against their trusted baselines; a separately approved Start reads only that same snapshot, no retryable rows remain, and sanitized evidence is reviewed. |
+| `CONDITIONAL GO` | Replacement may proceed only inside the same complete package/inventory/manifest/Preview/operator/source-root/target bindings and evidence window, with explicit residual risk acceptance. | The same exact lifecycle identifiers, source-root transition, and final machine-global idle/release evidence required for `GO` are present and equal, all hard stops are clear, and only a named non-core caveat remains with an owner and rollback/stop procedure. | Grafana status is attention-only while the bound API, DB, manifest, Preview, Audit, upload, and coordinator-release evidence are normal. |
 | `NO-GO` | Replacement must not proceed. | One or more required V1 cutover evidence items failed or is missing. | Large Preview soak fails, Audit Logs do not show failure rows, or target row counts mismatch between UI/API/approval. |
 | `BLOCKED` | The decision cannot be made because evidence or approval is unavailable. | The blocker is documented and no workaround is allowed without violating a safety gate. | Operator PC cannot reach the configured local Supabase DB, or package metadata cannot be matched to source commit. |
 | `DEFERRED / NOT V1 SCOPE` | Item is intentionally excluded from the V1 cutover decision. | Source document classification shows deferred or excluded status. | Multi-user LAN, executable date-scoped delete UI, Supabase schema attribution migration, and legacy upload state import. |
@@ -118,9 +120,10 @@ retroactively validate the earlier Preview. Exact executing-package
 verification remains downstream of production atomic content-manifest/snapshot
 binding retained through Preview, Start, and Retry,
 deterministic replacement/concurrency/tamper/replay tests, and a rebuilt package.
-After those pass, a separately controlled pre-provisioned verified target
-baseline must already exist; then an execution-adjacent successor inventory
-record, separately approved protected manifest preparation, separately approved
+After those pass, separately controlled pre-provisioned verified target and
+human-reviewed source-root baselines must already exist; then an execution-adjacent successor inventory
+record may only read/revalidate the exact source config/binding/generation/evidence,
+followed by separately approved protected manifest preparation, separately approved
 read-only target-identity preparation and human exact-match review, and a later
 separately approved current Preview may be prepared. Baseline provisioning/
 rotation is not authorized here. Any required disposition of partial-overlap rows, final sign-off,
@@ -138,17 +141,23 @@ Conditions to reach a `CONDITIONAL GO` candidate:
    trusted artifact, and verify its source commit, ZIP hash, extracted installed
    tree, and currently executing code/dependency tree. A mutable unpacked folder,
    self-reported label/build-info file, or `zipCreated=false` cannot support GO.
-3. Confirm an immutable/authenticated owner-only trusted target baseline already
-   exists in verified, non-revoked state from separately controlled installation/
-   runtime provenance. This plan does not authorize creating or rotating it.
+3. Confirm both an immutable/authenticated owner-only trusted target baseline and
+   a pre-existing human-reviewed protected source-root binding already exist from
+   separately controlled installation/Settings provenance. The random opaque
+   source binding must resolve owner-only to the canonical root stable volume/
+   share and opened-directory identity plus exact config generation. This plan
+   does not authorize creating, reviewing, rotating, or repairing either baseline.
 4. Use `docs/182` only as baseline evidence. Repeat the inventory and create a
    successor record bound to a human-supplied safe operator PC class and
-   privacy-safe alias for the exact configured source.
+   privacy-safe alias for the exact configured source; inventory only revalidates
+   the pre-existing reviewed source-root binding and performs no binding write.
 5. Under a separate exact approval, atomically claim the immutable/authenticated
    `manifestPreparationApprovalId` and prepare exactly one protected,
    tamper-evident, single-use private content-manifest record bound to that
    approval, successor inventory, and package. Reject concurrent/duplicate
-   claims. Do not publish raw identities, paths, filenames, digests, or entries.
+   claims. Before any file byte read, revalidate the same root identity/config
+   generation and atomically bind the snapshot to it. Do not publish raw
+   identities, paths, filenames, digests, or entries.
 6. Under a separate read-only approval, atomically claim
    `targetIdentityPreparationApprovalId`, compare the observed authenticated DB
    instance/database identity to the owner-only trusted baseline, and publish at
@@ -166,8 +175,8 @@ Conditions to reach a `CONDITIONAL GO` candidate:
 9. Resolve Grafana/Vector attention or record explicit residual-risk acceptance,
    an owner, and the non-destructive stop/rollback procedure.
 10. Complete the final human sign-off record below for the exact package,
-   execution-adjacent inventory record id, operator PC class, privacy-safe
-   exact-source alias, source class, and evidence window.
+   execution-adjacent inventory record id, source config/root binding, operator
+   PC class, privacy-safe exact-source alias, source class, and evidence window.
 
 The zero-target Preview supports `no target-only upload` for this evidence
 window. It does not mean every local row is DB-matched: 64,766 rows are in the
@@ -181,12 +190,12 @@ should be created merely to turn a not-applicable gate into a test case.
 | Package/source commit verification | Package label, source commit, build metadata, and source tree commit record | Read-only package metadata inspection; `git rev-parse HEAD`; `git show --stat --oneline --name-status HEAD` | Rebuilding, deploying, or editing package metadata during evidence capture | Package source commit and label match the accepted package and docs | Missing, stale, or mismatched package metadata | Maintainer | `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
 | README/API no-live-smoke and schema contract verification | Contract note proving live Preview/Upload Job POST examples are intentionally absent while backend schema/API retain `previewRunId`, `expectedTargetRows`, and `expectedTargetFiles` | Read-only README, schema, API, and automated-test inspection | Start Upload execution or ad hoc live POST | README keeps live POST commands omitted until the protected runtime lifecycle exists; tests cover missing and positive-count mismatch plus the mandatory zero boundaries: `expectedTargetRows: 0` -> 422 `expected_target_rows_required`, and optional `expectedTargetFiles: 0` -> 422 `expected_target_files_invalid`, each with one sanitized blocked audit and zero job creation | Live POST example is reintroduced, required fields drift, either zero-boundary test is absent/fails, claimed coverage exceeds the actual suite, or an ad hoc payload is treated as evidence | Maintainer | `README.md`; `backend/app/api/upload_jobs.py`; `backend/app/schemas/upload_jobs.py`; `tests/backend/test_upload_jobs_api_contract.py` |
 | GET `/api/config` safe snapshot | Sanitized config evidence showing source class, target classes, mode, and override classes | `GET /api/config` against an already running local operator backend; store sanitized classes only | `PUT /api/config`, Settings save, raw path or secret capture | Snapshot confirms expected API mode/source class without raw paths or secret values | Config source class is wrong, raw sensitive value would be recorded, or endpoint unavailable | Maintainer/operator | `backend/app/api/config.py`; `backend/app/services/config_service.py`; `README.md` |
-| Settings save evidence, only if separately approved | Protected `operatorControlApprovalId` lifecycle, exact current config generation, reviewed allowed-key before/after binding, operation id, terminal state, and sanitized audit/evidence ids | Exactly one Settings save only after the `docs/164` lifecycle and deterministic tests exist and a new human approval is atomically claimed | Arbitrary/Markdown approval authority, extra/env-overridden key, stale generation, replay/concurrent save, raw secret evidence, or bundling runtime/data actions | Exact approval is consumed once; authoritative config generation and reviewed change set match; response loss returns the same operation; success/failure/blocked audit is sanitized | Approval/action/deadline/actor/package/trust/state/value mismatch, expired/replayed/concurrent claim, extra field, audit failure, or any unreviewed change | Maintainer/operator approver | `docs/164_operator_data_mutation_safety_gate.md`; `backend/app/api/config.py`; `backend/app/services/config_service.py` |
+| Settings save evidence, only if separately approved | Protected `operatorControlApprovalId`/`operatorControlApprovalState` lifecycle, exact current config generation, reviewed allowed-key before/after binding, operation id/outcome state, machine-global no-active-stage evidence, and sanitized audit/evidence ids | Exactly one Settings save only after the `docs/164` lifecycle and deterministic tests exist and a new human approval is atomically claimed | Arbitrary/Markdown approval authority, extra/env-overridden key, stale generation, replay/concurrent save, any nonempty canonical coordinator consumer including disposition/restore/final-signoff, raw secret evidence, or bundling runtime/data actions | Exact approval is consumed once only after authoritative full-state verification; response loss returns the same operation; any partial/unknown effect remains `commit_unknown_blocked`; success/failure/blocked audit is sanitized | Approval/action/deadline/actor/package/trust/state/value mismatch, expired/replayed/concurrent claim, nonempty protected-stage consumer, extra field, partial/unknown effect, audit failure, or any unreviewed change | Maintainer/operator approver | `docs/164_operator_data_mutation_safety_gate.md`; `backend/app/api/config.py`; `backend/app/services/config_service.py` |
 | Local Supabase status evidence | Sanitized runtime readiness/status-class output | Read-only dashboard/runtime status observation and existing status endpoints | Start/stop/reset/cleanup/init/migration | Status proves local Supabase readiness class or a clear blocked class | DB-dependent class is blocked and unresolved | Maintainer/operator | `docs/00_product_scope.md`; `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
-| Local Supabase start/stop evidence, only if separately approved | Protected `operatorControlApprovalId` lifecycle, exact action, current and intended terminal status bindings, no-active-operation evidence, operation id, terminal state, and sanitized audit/evidence ids | Exactly one `local_supabase_start` or `local_supabase_stop` only after the `docs/164` lifecycle/tests exist and a new human approval is atomically claimed | Arbitrary/Markdown approval authority, opposite/replayed/concurrent action, active Preview/upload/retry/delete/recovery, init/reset/migration/cleanup, Docker create/rm/prune/up/down, volume deletion | Exact action approval is consumed once, before state matches, only the allowlisted transition occurs, response loss returns the same operation, and audit is sanitized | Required containers missing, state/action/deadline/actor/package/trust mismatch, active operation, replay/concurrency, excluded command, or audit unavailable | Maintainer/operator approver | `docs/164_operator_data_mutation_safety_gate.md`; `backend/app/services/runtime_control.py`; `backend/app/services/command_runner.py` |
-| Read-only inventory precheck | Filled inventory template with random record id, operator PC class, privacy-safe exact-source alias, counts, row ceiling, excluded data, and reviewer | Read-only file inventory/count procedure that stores no raw names, paths, content, or keys | Preview, upload, delete, settings save, cleanup, LAN, deployment | Exact bindings, file count, and approved physical row ceiling are current and reviewer-signed | Missing/mismatched binding, guessed count, stale inventory, source class mismatch, or raw sensitive evidence | Maintainer with operator review | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
-| Protected content-manifest preparation | Approval id, human claim/completion deadline, opaque manifest/snapshot ids, observed/approved bytes, retention/disposition fields, inventory observation/max-age and package/source bindings, safe counts/timestamps, and lifecycle classes | One separately approved protected local full-byte evidence write with pre-authorized bounded disposal after implementation/package/inventory gates pass | Preview, operational DB access, upload, retry, delete, Settings save, runtime lifecycle, source mutation, unbounded/manual snapshot cleanup | Human explicitly acknowledges full-byte copying and automatic cryptographic disposal; claim and completed publication occur before the human deadline within inventory validity; protected capacity/confidentiality controls pass; records are tamper-evident, inventory-bound, unexpired, and single-use; only opaque safe evidence is published | Missing/inferred observation/max-age/deadline or informed scope/byte ceiling/capacity/confidentiality/retention/disposal, late claim/completion, mismatch, tamper, prior claim/use, mutable snapshot, raw private publication, failed disposal without blocking/alert evidence | Backend maintainer with operator approval | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
-| Preview-only evidence | Preview approval id, preview run id, inventory/manifest/snapshot record ids, observation/deadline/lifecycle fields, consumed target-identity preparation approval id/deadline, target DB binding id/state/validity/evidence, operator PC class, privacy-safe source alias, final unchanged-snapshot check, opaque atomic snapshot binding evidence id, summary counts, DB status class, audit evidence | Exactly one separately approved Preview-only run after atomic content and exact target-identity binding are implemented/tested, manifest preparation is separately approved, and the target-identity preparation result is human-reviewed | Start Upload, Retry Failed, Delete, Settings save, reset, cleanup, LAN, deployment | Preview atomically claims the protected records before deadline, verifies private digests, parses the same immutable snapshot, revalidates the protected exact target identity and unexpired validity on its DB session, and terminally consumes the manifest while retaining the snapshot/target binding for later approved actions; it then succeeds with DB reachable | Manifest/snapshot, atomic binding, target-identity preparation approval, or target DB binding unavailable, expired/reused/tampered/mismatched, same-host/port target replacement, failed unchanged-snapshot check, risky count > 0, DB unreachable, stale preview, or conflict unresolved | Maintainer/operator | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_preview.py`; `backend/app/services/upload_preview.py` |
+| Local Supabase start/stop evidence, only if separately approved | Protected `operatorControlApprovalId`/`operatorControlApprovalState` lifecycle, exact action, current and intended terminal status bindings, machine-global no-active-stage evidence, operation id/outcome state, and sanitized audit/evidence ids | Exactly one `local_supabase_start` or `local_supabase_stop` only after the `docs/164` lifecycle/tests exist and a new human approval is atomically claimed | Arbitrary/Markdown approval authority, opposite/replayed/concurrent action, any nonempty canonical coordinator consumer including disposition/restore/final-signoff, init/reset/migration/cleanup, Docker create/rm/prune/up/down, volume deletion | Exact action approval is consumed once only after the complete intended runtime state is authoritative; response loss returns the same operation; a partial multi-container transition remains `commit_unknown_blocked`; audit is sanitized | Required containers missing, state/action/deadline/actor/package/trust mismatch, nonempty protected-stage consumer, replay/concurrency, partial/unknown transition, excluded command, or audit unavailable | Maintainer/operator approver | `docs/164_operator_data_mutation_safety_gate.md`; `backend/app/services/runtime_control.py`; `backend/app/services/command_runner.py` |
+| Read-only inventory precheck | Filled inventory template with random record id, operator PC class, privacy-safe exact-source alias, pre-existing reviewed source-root binding/config generation, positive counts/bytes/row ceiling, expected exclusions outside the approved set, and reviewer | Complete read-only file inventory/count and protected root-binding revalidation that stores no raw names, paths, content, keys, or new binding state | Root-binding provisioning/review/advance, Preview, upload, delete, settings save, cleanup, LAN, deployment | Exact bindings and positive file/byte/physical-row evidence are current, complete, and reviewer-signed; `fileCount=inventoryObservedFiles`, `rowLimit=inventoryApprovedPhysicalRowsCeiling`; later snapshot preparation reads every approved file and proves at least one eligible physical data row in each | Missing/mismatched alias/root/config binding, inventory binding write, zero/guessed/stale count, any approved file zero-byte/header-only/excluded/unreadable, incomplete source, enumeration/read error, source class mismatch, or raw sensitive evidence | Maintainer with operator review | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
+| Protected content-manifest preparation | Approval id, human claim/completion deadline, opaque manifest/snapshot ids, pre-existing root-binding/config fields, observed/approved bytes, retention/disposition fields, inventory observation/max-age and package/source bindings, safe counts/timestamps, and lifecycle classes | One separately approved protected local full-byte evidence write with pre-authorized bounded disposal after implementation/package/inventory gates pass | Root-binding provisioning/repair, Preview, operational DB access, upload, retry, delete, Settings save, runtime lifecycle, source mutation, unbounded/manual snapshot cleanup | Before byte access the reviewed root generation CASes to preparing and exact owner-only identity/config is revalidated; only complete publication CASes to terminal snapshot_bound, while every failure CASes terminal invalid; informed full-byte/disposal controls and deadlines pass; only opaque safe evidence is published | Missing/substituted/changed root/config binding, same-alias root remap, invalid generation/state transition, terminal reuse/regression, missing/inferred scope/deadline/ceiling/control, late claim/completion, mismatch, tamper, mutable snapshot, raw private publication, or failed disposal without blocking/alert evidence | Backend maintainer with operator approval | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md` |
+| Preview-only evidence | Preview approval id, preview run id, inventory/manifest/snapshot record ids, source config/root-binding state/generation/evidence, observation/deadline/lifecycle fields, consumed target-identity preparation approval id/deadline, target DB binding id/state/validity/evidence, operator PC class, privacy-safe source alias, final unchanged-snapshot check, opaque atomic snapshot binding evidence id, summary counts, DB status class, audit evidence | Exactly one separately approved Preview-only run after atomic content and exact source/target-identity binding are implemented/tested, manifest preparation is separately approved, and the target-identity preparation result is human-reviewed | Start Upload, Retry Failed, Delete, Settings save, reset, cleanup, LAN, deployment | Preview atomically claims the exact terminal snapshot-bound source generation plus other protected records before deadline, parses only the immutable snapshot, revalidates the protected exact target identity on its DB session, and terminally consumes the manifest while retaining required bindings; it then succeeds with DB reachable | Source config/root binding generation, manifest/snapshot, atomic binding, target-identity approval, or target binding unavailable/expired/reused/tampered/mismatched; same-alias root or same-host/port target replacement; failed unchanged check; risky rows; DB unreachable; stale preview; or conflict | Maintainer/operator | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_preview.py`; `backend/app/services/upload_preview.py` |
 | Start Upload approval package, separate and optional | Immutable/authenticated single-use approval naming package/operator/source, Preview run, exact target rows/files, protected exact target DB binding, deadline, duration/margin, snapshot/binding ids, and one mutation id | Approval preparation only after lifecycle/target-fenced lease, exact DB-identity binding, durable outcome-marker implementation/tests, and fresh Preview | Running Start Upload from this plan; source-path reopen; replay/concurrent claim; bundling Retry Failed/Delete/Settings save | Approval and `previewed` snapshot are atomically claimed with one upload job, unrenewable lease, target DB binding, and mutation id; exact target identity is revalidated and all action writes plus commit marker share one authoritative target transaction; local state releases only from marker evidence | Zero target rows, stale/mismatched Preview, missing/substituted target DB binding or same-port target swap, absent lifecycle/fence/marker, insufficient retention margin, expired/substituted/replayed approval, missing/tampered snapshot, source reopen, non-atomic job creation, `commit_unknown_blocked`, or disposition/lease race | Operator approval with maintainer evidence | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_jobs.py` |
 | Retry Failed approval package, separate and conditional | Immutable/authenticated single-use approval naming package/operator/source, source job, fresh reconciled still-absent subset, protected exact target DB binding, failure class, deadline, duration/margin, snapshot/binding ids, and one mutation id | Approval preparation only after lifecycle/target-fenced lease, exact DB-identity binding, durable outcome-marker implementation/tests, authoritative rollback, and fresh exact DB reconciliation | Automatic retry, worker-cursor remainder, source-path reopen, broad cleanup, reset, replay/concurrent claim, target-binding substitution, or retry without exact reconciled rows | Approval and same `retryable` snapshot subset are atomically claimed with one retry job/event, unrenewable lease, target DB binding, and mutation id; exact target identity is revalidated and all retry writes plus commit marker share one authoritative target transaction; local state releases only from marker evidence | No retryable rows, target DB binding/identity mismatch, count/reconciliation/failure mismatch, absent lifecycle/fence/marker, insufficient retention margin, expired/substituted/replayed approval, missing/tampered snapshot, source reopen, non-atomic retry creation, `commit_unknown_blocked`, or disposition/lease race | Operator approval with maintainer evidence | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `backend/app/api/upload_jobs.py`; `frontend/src/pages/UploadPage.tsx` |
 | Audit Logs success/failure visibility | Sanitized Audit Logs API/UI evidence for success, failure, and blocked classes | `GET /api/audit?limit=1`; UI Audit Logs observation; non-destructive failure-path validation | Raw params JSON search, arbitrary SQL, secret capture, destructive failure creation | Operators can see relevant safe action/result/reason evidence | Audit unavailable, missing failure rows, unsafe raw values displayed | Maintainer QA and operator | `backend/app/api/audit.py`; `backend/app/db/audit_repository.py`; `README.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
@@ -199,7 +208,7 @@ should be created merely to turn a not-applicable gate into a test case.
 | LAN exclusion | Localhost-only sign-off | Config/doc review; `/api/health` sanitized LAN state if available | LAN enablement, non-loopback bind, LAN CORS widening, auth/session rollout | V1 remains localhost-only and LAN stays deferred | Non-loopback access requested or LAN feature gate enabled | Release owner | `docs/00_product_scope.md`; `backend/app/core/lan_security.py`; `docs/165_v2_status_matrix.md` |
 | Supabase reset/cleanup exclusion | Explicit exclusion record | Documentation review and command-policy review | `supabase init`, `supabase db reset`, Docker rm/prune/compose up/down, volume delete | No reset/cleanup/create command is part of cutover evidence | Missing containers trigger cleanup request instead of blocked evidence | Release owner/maintainer | `README.md`; `backend/app/services/command_runner.py` |
 | Security/secrets redaction | Sanitized evidence review checklist | Redaction review before attaching evidence | Raw paths, filenames, CSV content, DB URLs, tokens, JWTs, Authorization values, exact keys, internal URLs, secrets | Evidence contains only path-independent ids, safe classes/counts, approved package hashes, and reason codes | Sensitive value or a deterministic raw-path-derived digest would be written, or screenshot cannot be safely redacted | Maintainer/security reviewer | `README.md`; `backend/app/db/audit_repository.py`; `docs/171_v2_operational_delete_verification_gate.md` |
-| Final sign-off record | Completed decision-conditional sign-off table with all package/inventory/manifest/Preview/operator/source fields, blockers, residual risks, and next action | Documentation-only sign-off | Treating old evidence, reused manifest state, future folder growth, or successful intermediate evidence as cutover approval | `GO`/`CONDITIONAL GO` requires exact complete bindings; stop/defer decisions preserve actual ids/states for stages reached and use explicit unavailable markers only for stages not reached, while decision metadata and reasons remain mandatory | A proceed decision has any missing/invalid/mismatched field, or a stop/defer record erases/fabricates observed evidence or omits mandatory decision data | Release owner/operator approver | `docs/173_v2_operational_upload_verification_gate.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
+| Final sign-off record | Completed decision-conditional sign-off table with all package/inventory/manifest/Preview/operator/source/control/coordinator fields, blockers, residual risks, and next action | Documentation-only sign-off atomically claimed with the machine-global operation coordinator | Treating old evidence, reused manifest state, future folder growth, successful intermediate evidence, or an unresolved control/coordinator state as cutover approval | `GO`/`CONDITIONAL GO` requires exact complete bindings, committed control outcomes, and final sign-off publication plus coordinator release in one fenced generation; stop/defer decisions preserve actual ids/states for stages reached and use explicit unavailable markers only for stages not reached, while decision metadata and reasons remain mandatory | A proceed decision has any missing/invalid/mismatched field, pending/unknown control, non-idle/nonempty coordinator, or a stop/defer record erases/fabricates observed evidence or omits mandatory decision data | Release owner/operator approver | `docs/164_operator_data_mutation_safety_gate.md`; `docs/173_v2_operational_upload_verification_gate.md`; `docs/175_legacy_gui_replacement_gap_audit.md` |
 
 Settings save and runtime start/stop may contribute evidence only after the
 canonical `docs/164` protected lifecycle is implemented and its deterministic
@@ -294,8 +303,10 @@ It records counts and classes, not raw operational data.
 | Package label | `<packageLabel>` |
 | Privacy-safe exact-source alias | `<sourceAlias>` |
 | Source class, not raw path | `<sourceClass>` |
-| Observed file count | `<fileCount>` |
-| Approved physical row ceiling | `<rowLimit>` |
+| Protected source config generation | `<sourceConfigGeneration>` |
+| Pre-existing source-root binding id/state/generation/evidence | `<sourceRootBindingId> / <reviewed> / <sourceRootBindingGeneration> / <sourceRootBindingEvidenceId>` |
+| Observed file count | `<inventoryObservedFiles=fileCount>` |
+| Approved physical row ceiling | `<inventoryApprovedPhysicalRowsCeiling=rowLimit>` |
 | Observed source bytes | `<inventoryObservedBytes>` |
 | Human-approved full-byte snapshot ceiling | `<contentSnapshotMaxBytes>` |
 | Excluded data | `<excludedDataClasses>` |
@@ -308,6 +319,11 @@ The record id must be random and path-independent. Do not publish a
 deterministic hash or fingerprint derived from a raw path; it can disclose the
 path through candidate-path guessing. The human must confirm out of band that
 the privacy-safe source alias maps to the exact configured source.
+The root-binding id must pre-exist in human-reviewed protected state and resolve
+owner-only to the exact canonical root stable volume/share and opened-directory
+identity plus the recorded config generation. Inventory may only read/revalidate
+it; this template does not authorize provisioning, review, rotation, repair, or
+state advancement. Any Settings/drive/share remap invalidates the record.
 
 ## Protected Content-Manifest Preparation Template
 
@@ -341,7 +357,8 @@ claim and completed publication must both occur by the human-supplied
 claim fails before copying; expiry during copying invalidates and disposes any
 partial bytes without publishing `prepared`. The
 private records bind that approval plus canonical file identities/content
-digests and snapshot bytes to the inventory/package/operator/source/scope in an
+digests and snapshot bytes to the inventory/package/operator/source/scope, exact
+source config generation, and pre-existing reviewed root binding in an
 owner-restricted, confidentiality-protected, tamper-evident protected store with
 capacity verified before copying. Publish only:
 
@@ -357,6 +374,8 @@ capacity verified before copying. Publish only:
 | Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
 | Artifact verification observation/expiry UTC | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc>` |
 | Artifact integrity-lock evidence id | `<artifactIntegrityLockEvidenceId>` |
+| Protected source config generation | `<sourceConfigGeneration>` |
+| Source-root binding id/input generation-state/output generation-state/evidence | `<sourceRootBindingId> / <G:reviewed> / <G+1:preparing then G+2:snapshot_bound \| G+2:invalid> / <sourceRootBindingEvidenceId>` |
 | Protected content manifest record id | `<contentManifestRecordId>` |
 | Protected immutable content snapshot record id | `<contentSnapshotRecordId>` |
 | Content snapshot state | `<prepared \| invalid>` |
@@ -369,6 +388,13 @@ capacity verified before copying. Publish only:
 | Preview execution deadline UTC | `<contentManifestExecuteByUtc>` |
 | Safe binding/count result | `<match \| blocked: reason>` |
 | Lifecycle state | `<prepared \| invalid>` |
+
+Before any file-byte access, atomically claim and revalidate the owner-only
+canonical root stable identity and config generation under the machine-global
+coordinator. Same alias/class/count/bytes/size/mtime is insufficient. A Settings
+change, drive/share remap, missing/substituted binding, or identity mismatch must
+cause zero out-of-binding byte access, invalidation, and partial-byte disposal;
+this preparation does not provision or repair the root binding.
 
 Raw paths, filenames, identities, content digests, manifest entries, snapshot
 bytes, and store authentication material must remain private and confidential.
@@ -484,7 +510,8 @@ Immediately before the API call, repeat the read-only scan and record only the
 safe check timestamp plus `preCallSnapshotUnchanged=true`. Stop if the deadline
 or maximum age is exceeded, or if the exact file set, scope, size/mtime metadata,
 file count, physical-row ceiling, package, operator PC class, source alias, or
-source class differs from the approved inventory evidence.
+source class, protected config generation, or root-binding id/state/generation/evidence
+differs from the approved inventory and manifest evidence.
 
 Do not call Preview under the current implementation. The separate metadata
 check does not prevent replacement after the check or equal-size/equal-mtime
@@ -509,6 +536,8 @@ keyset inside that snapshot's protected encrypted boundary, expose only
 | Installed/executing tree evidence ids | `<installedTreeVerificationEvidenceId> / <executingTreeVerificationEvidenceId>` |
 | Artifact verification observation/expiry/integrity-lock evidence | `<artifactVerificationObservedAtUtc> / <artifactVerificationValidUntilUtc> / <artifactIntegrityLockEvidenceId>` |
 | Inventory evidence record id | `<inventoryEvidenceRecordId>` |
+| Protected source config generation | `<sourceConfigGeneration>` |
+| Source-root binding id/state/generation/evidence | `<sourceRootBindingId> / <snapshot_bound> / <sourceRootBindingGeneration> / <sourceRootBindingEvidenceId>` |
 | Inventory observed source bytes | `<inventoryObservedBytes>` |
 | Human-approved snapshot byte ceiling | `<contentSnapshotMaxBytes>` |
 | Manifest-preparation approval id | `<manifestPreparationApprovalId>` |
@@ -559,6 +588,8 @@ approval records, `zipCreated=true`, exact trusted checksum/full-file manifest,
 current installed/executing-tree evidence, unexpired artifact observation/
 validity, immediate full-tree reverify, and integrity-lock evidence held through
 Preview, unchanged `manifestPreparationApprovalId` and
+source config/root-binding id/evidence plus exact monotonic `reviewed -> preparing
+-> snapshot_bound` generations across inventory, manifest, and Preview,
 trusted target baseline id/alias/state/evidence,
 `targetIdentityPreparationApprovalId`/`previewApprovalId` across all stages, all
 three approvals terminally `consumed`, and
@@ -925,7 +956,7 @@ data.
 | Local token protection confirmation, if available | `not assessed` | `pending/not applicable to read-only route smoke` | Config secret masking was observed, but token enforcement was not exercised and is not claimed here. |
 | Config snapshot | `wp02-config-runtime-20260713` | `pass` | Only classes and booleans are retained here. |
 | Runtime readiness | `wp02-config-runtime-20260713` | `conditional` | Core services ready; Grafana/Vector non-core attention remains. |
-| Preview-only readiness | `wp02-preview-prv_ca38650a9e7d`; `docs/182` | `blocked` | The earlier execution remains historical evidence. A new Preview is blocked until protected atomic binding/target-identity lifecycles and deterministic replacement/concurrency/tamper/replay/wrong-initial-target tests pass and the rebuilt package is verified; a separately controlled verified baseline must already exist, then successor inventory, separate manifest preparation, separate target-identity preparation/exact-match review, and later Preview approval may proceed. |
+| Preview-only readiness | `wp02-preview-prv_ca38650a9e7d`; `docs/182` | `blocked` | The earlier execution remains historical evidence. A new Preview is blocked until protected atomic binding/target-identity lifecycles and deterministic replacement/concurrency/tamper/replay/wrong-initial-target tests pass and the rebuilt package is verified; separately controlled verified target and reviewed source-root baselines must already exist, inventory may only read/revalidate the exact source binding/config generation, then separate manifest preparation must CAS it through `reviewed -> preparing -> snapshot_bound` or terminal `invalid`, followed by separate target-identity preparation/exact-match review and later Preview approval. |
 | Logs/audit visibility | `wp02-audit-readonly-20260713`; `wp02-joblogs-readonly-20260713` | `pass` | Existing success/failure/blocked and terminal-job evidence were visible. |
 
 Screenshots are allowed only if they do not expose secrets, raw paths, filenames,
@@ -937,7 +968,7 @@ or exact keys.
 | Item | Required before GO | Evidence id | Status | Approver | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Accepted package/source commit | Yes | `wp02-main-5695b93` | `pending: hard stop` | `<approver>` | Source tree is known; accepted executing package label/build metadata is not yet bound. |
-| README/API no-live-smoke and schema contract | Yes | `wp02-wp01-automated-5695b93` | `pass` | `<approver>` | Live Preview/Upload Job POST examples are intentionally omitted; API source enforces missing/non-positive target-row rejection and tests cover missing/mismatch paths. |
+| README/API no-live-smoke and schema contract | Yes | `wp02-wp01-automated-5695b93` | `blocked: zero-boundary tests absent` | `<approver>` | Live Preview/Upload Job POST examples are intentionally omitted; API source enforces missing/non-positive target-row rejection and tests cover missing/mismatch paths, but required `expectedTargetRows=0` and `expectedTargetFiles=0` audit/zero-job oracles are not both present. Do not credit this item until both deterministic tests pass. |
 | Sanitized config snapshot | Yes | `wp02-config-runtime-20260713` | `pass` | `<approver>` | Safe classes only. |
 | Local Supabase readiness | Yes | `wp02-config-runtime-20260713` | `pass` | `<approver>` | API/DB/Studio/Edge ready; non-core attention recorded separately. |
 | Read-only inventory precheck | Yes | `docs/182`; `inv_20260815T031829Z_0d41338f` | `partial: baseline only` | `human_operator` | Do not refresh for approval yet. Atomic binding implementation/tests and rebuilt-package verification come first; the later successor record also needs safe operator/source bindings. |
@@ -963,8 +994,9 @@ or exact keys.
 | Risk statement | Severity | Likelihood | Mitigation | Owner or approval gate | Required evidence |
 | --- | --- | --- | --- | --- | --- |
 | Accepted package metadata is not bound to the verified source tree before final sign-off. | High | Medium | Verify `package-build-info.json`, package label, and source commit for the executing artifact. | Release owner/operator | Accepted package metadata and final sign-off |
-| The later `docs/182` inventory is misapplied retroactively to the old zero-target Preview, reused without exact operator/source/target binding, or unresolved partial-overlap rows are hidden. | High | Medium | Treat `docs/182` as baseline only; first complete atomic binding implementation/tests and rebuilt-package verification, confirm a separately controlled verified target baseline already exists, then create a successor inventory, separately approve protected manifest preparation, separately approve/read-only-run and human-review exact-match target-identity preparation, and record any required partial-overlap disposition before later Preview approval. | Backend maintainer, then separate operator approvals plus maintainer evidence capture | Production implementation/tests, trusted baseline and target-preparation/binding evidence, current inventory/manifest/Preview records, executing-package metadata, partial-overlap disposition; Start only if target rows exist |
+| The later `docs/182` inventory is misapplied retroactively to the old zero-target Preview, reused without exact operator/source-root/target binding, or unresolved partial-overlap rows are hidden. | High | Medium | Treat `docs/182` as baseline only; first complete atomic binding implementation/tests and rebuilt-package verification, confirm separately controlled verified target and reviewed source-root baselines already exist, let successor inventory only revalidate the exact source binding/config generation, separately approve manifest preparation and its monotonic root transition, separately approve/read-only-run and human-review exact-match target-identity preparation, and record any required partial-overlap disposition before later Preview approval. | Backend maintainer, then separate operator approvals plus maintainer evidence capture | Production implementation/tests, trusted source/target baseline and target-preparation/binding evidence, current inventory/manifest/Preview records, executing-package metadata, partial-overlap disposition; Start only if target rows exist |
 | The approved source changes after inventory but before Preview. | High | Medium | Bind a human-approved maximum age/deadline and repeat the full read-only unchanged-snapshot check immediately before the API call; do not call Preview on expiry or mismatch. | Operator approval plus maintainer evidence capture | Observation/deadline fields and `preCallSnapshotUnchanged=true` with safe check timestamp |
+| The configured drive/share root is replaced between inventory and manifest while alias/class/count/size/mtime stay equal. | Production-critical | Medium until protected binding exists | Require a pre-existing human-reviewed opaque source-root binding resolving owner-only to stable root identity plus config generation; inventory only revalidates its exact reviewed monotonic generation, manifest revalidates before byte access and atomically snapshot-binds the successor generation, and Settings/remap/root-swap races are deterministic blockers. | Separately controlled source-baseline owner, backend maintainer, and manifest approver | Root-binding id/state/exact monotonic generation/evidence/config generation across inventory/manifest/Preview/final sign-off; same-alias root-swap and remap tests |
 | Source content changes after the final metadata check or is replaced with equal-size/equal-mtime content. | Production-critical | Medium | Keep Preview blocked until protected manifest/snapshot lifecycles exist; Preview verifies and parses the immutable snapshot, and that snapshot is retained through later approved Start/Retry actions. Cover replacement, tamper, expiry, replay, and source-reopen windows deterministically. | Backend maintainer plus separate manifest-preparation and Preview approvals | Production implementation/tests, opaque `contentManifestRecordId`, `contentSnapshotRecordId`, and `atomicSnapshotBindingEvidenceId` |
 | Full operational CSV bytes are copied without informed scope, capacity, confidentiality, retention, or bounded disposition controls. | Production-critical | Medium until lifecycle exists | Exact preparation approval states full-byte copying/ceiling and pre-authorizes automatic per-snapshot key destruction plus verified byte removal at terminal/invalidation/deadline; failed removal leaves keyless data, alerts, and blocks new preparation. | Backend maintainer plus manifest-preparation approver | Approved byte ceiling/deadline, protected-store evidence, disposition state/evidence id, and deterministic deadline/crash/failure recovery tests |
 | Start Upload or Retry Failed approval is replayed/concurrent, binds different bytes, outlives retention, or loses the remote-commit/local-release acknowledgement. | Production-critical | Medium until lifecycle exists | Keep both actions blocked until approvals atomically claim the same snapshot with one job/event, one unrenewable bounded lease, and one target-fenced mutation id; writes and durable outcome marker share the authoritative target transaction; timeouts never infer rollback; `commit_unknown_blocked` prevents Retry/cutover; disposition cannot race an active/pending outcome. | Backend maintainer plus separate mutation approval | Production implementation/tests, approval/snapshot/lease/outcome terminal states, duration/margin, target marker/reconciliation evidence, atomic binding evidence, job/event id, and audit evidence |
@@ -991,11 +1023,25 @@ not-applicable values and reasons:
   be inferred or autofilled from Preview output;
 - read-only inventory is missing, stale, broader than the requested scope, or
   guessed;
+- the pre-existing source-root binding/config generation is missing, unreviewed,
+  unresolved, substituted, invalid, changed, or its same-id generations do not
+  follow `reviewed -> preparing -> snapshot_bound` across inventory, manifest
+  approval/result, Preview approval/evidence, Start/Retry provenance, and final
+  sign-off; a failed claim does not end terminal `invalid`; terminal state regresses/
+  reuses; inventory attempted to create/advance it; or exact stable
+  identity is replaced by alias/class/count/size/mtime equality;
+- inventory/snapshot evidence contains zero files, bytes, or physical data rows;
+  `fileCount != inventoryObservedFiles` or
+  `rowLimit != inventoryApprovedPhysicalRowsCeiling`; any approved file is zero-
+  byte/header-only/excluded/unreadable; enumeration/count/read is incomplete; or
+  there is no proof that every approved file was read and at least one eligible
+  physical data row was parsed from each in the bound immutable snapshot;
 - inventory observation time, human-approved maximum age, or Preview execution
   deadline is missing, inferred, expired, or mismatched;
 - the immediately-before-call read-only scan is missing or does not confirm the
   exact file set, scope, size/mtime metadata, counts, package, operator PC,
-  source alias, and source class are unchanged;
+  source alias/class, protected config generation, and source-root binding are
+  unchanged;
 - the stage-specific approval/manifest state differs from the `docs/173`
   transition table; before Preview claim the preparation approval must be
   `consumed`, manifest `prepared`, and Preview approval `available`;
@@ -1013,8 +1059,11 @@ not-applicable values and reasons:
   substituted, mismatched, double-claimed, replayed, or not atomically claimed
   with creation of exactly one corresponding job/event;
 - a Settings save or runtime start/stop occurred without the exact protected
-  `docs/164` control approval/action/deadline/before-after/operation/audit
-  lifecycle and passing deterministic replay/concurrency/response-loss suite, or
+  `docs/164` control approval/state/action/deadline/before-after/operation/outcome/
+  audit lifecycle and passing deterministic partial-transition/replay/concurrency/
+  response-loss suite; the machine-global operation coordinator was not atomically
+  claimed/released with every control/protected stage or is not idle with empty
+  owner/consumer after terminal evidence; or
   a read-only status observation is presented as mutation authority;
 - Start Upload or Retry Failed lacks a human-approved action maximum duration,
   exact pre-retention disposition margin, one unrenewable target-fenced active-
@@ -1135,16 +1184,28 @@ not-applicable values and reasons:
   side-effect/ceiling/capacity/confidentiality/retention bindings, committed dual-
   record versus aborted source-only cleanup with split authority and exact
   restore/disposition approvals plus an unrenewable restore action lease and
-  reconcile/disposition margin, or pre-reserved target mutation marker with
+  reconcile/disposition margin, a human-bound non-renewable hard-Delete active-
+  use commit deadline plus positive reconcile margin and shared target-side epoch
+  fence against delayed transactions, or pre-reserved target mutation marker with
   atomic before-image + Delete + marker commit and marker-first outcome proof
   required by `docs/164`/`docs/171`;
 - an unresolved Delete marker can reach the standard retention deadline without
-  the pre-authorized bounded incident-escrow deadline/state/evidence, can destroy
-  a possibly committed before-image or retain source bytes, can route a post-
+  the pre-authorized bounded incident reconcile/cleanup/final deadlines, positive
+  cleanup margin, separately owned source-snapshot, DB-before-image, and restore
+  cleanup ids/deadlines/states/evidence, can cross-claim another record's cleanup,
+  fails to atomically destroy any existing image key and retain only authenticated
+  keyless bytes/metadata in `incident_keyless_cleanup_pending`, removes those bytes
+  before marker-proven committed resolution or the reconcile cutoff, removes them
+  afterward through anything except the bound cleanup, or
+  retains readable source bytes, can route a post-
   retention committed proof into ordinary restore/disposition instead of
-  approval-bound permanent-block cleanup, or final escrow
-  expiry can release the coordinator instead of key-first permanent recovery-
-  loss/security-incident NO-GO;
+  approval-bound permanent-block cleanup, or committed/unknown outcome fails to
+  claim cleanup immediately at proof/reconcile cutoff and finish key-absence
+  verification plus byte removal and permanent recovery-loss/security-incident
+  NO-GO strictly before `deleteDbBeforeImageCleanupByUtc`, or marker-proven aborted
+  resolution fails to CAS `incident_locked -> not_applicable_aborted_incident`
+  with authoritative absence evidence and wait for committed source-cleanup
+  evidence before terminal join/coordinator release;
 - a restore outcome that remains unknown at its reconcile/retention boundary can
   retain readable bytes indefinitely, issue another DB read/write, retry/release
   the coordinator, or lacks approval-bound key-first disposal with terminal
@@ -1187,9 +1248,17 @@ This table is only a display/export of an immutable authenticated protected
 decision record. Markdown, chat text, or a copied table is not sign-off. Before
 finalization a human-authenticated `finalSignoffApprovalId` in `available` must
 bind the exact decision, evidence generation, artifact/installed/running-tree
-attestations, reviewer, approver, and deadline. One protected transaction claims
-it, creates exactly one `finalSignoffRecordId`, and ends `consumed` or `invalid`;
-response loss returns the same record. Revocation advances the evidence
+attestations, reviewer, approver, deadline, pre-reserved random
+`finalSignoffClaimId`, and exact machine-global operation coordinator id in
+expected `idle` state with empty owner/consumer, expected generation, next owner
+equal to that claim id, consumer `final_signoff`, and acquisition/release evidence
+ids. One protected machine-global transaction must CAS the approval
+`available -> claimed`, claim that exact coordinator generation, create exactly
+one `finalSignoffRecordId`, publish the immutable decision, move the approval to
+`consumed`, and release the coordinator to `idle` with empty owner/consumer and a
+strictly advanced generation. Any failure before that atomic commit creates no
+record and leaves no claim; response loss after commit returns the same record.
+`invalid` is allowed only before a claim/effect begins. Revocation advances the evidence
 generation and forces `NO-GO` until a new approval reviews the complete current
 set. This decision record authorizes no upload, delete, runtime lifecycle,
 deployment, or other operation.
@@ -1197,6 +1266,7 @@ deployment, or other operation.
 | Field | Value |
 | --- | --- |
 | Final sign-off approval id/state/deadline | `<finalSignoffApprovalId> / <available \| claimed \| consumed \| invalid> / <finalSignoffExecuteByUtc>`; every successfully finalized decision, including `NO-GO`, `BLOCKED`, or `DEFERRED`, records `consumed`. |
+| Final sign-off machine-global claim/release | `<finalSignoffClaimId> / <machineGlobalOperationCoordinatorId> / <expected idle + empty owner/consumer + claim generation> / <claimed owner=finalSignoffClaimId + consumer=final_signoff> / <released idle + empty owner/consumer + strictly advanced generation> / <acquisition and release evidence ids>` |
 | Final sign-off record id/evidence generation/authenticated approver evidence | `<random immutable finalSignoffRecordId> / <monotonic finalSignoffEvidenceGeneration> / <opaque finalSignoffApproverEvidenceId>` |
 | Final sign-off revocation state/evidence | `<not_revoked \| revoked> / <finalSignoffRevocationEvidenceId \| not_triggered>` independently of decision; a successfully finalized `NO-GO` may still be `not_revoked`. |
 | Decision | `<GO \| CONDITIONAL GO \| NO-GO \| BLOCKED \| DEFERRED / NOT V1 SCOPE>` |
@@ -1214,7 +1284,11 @@ deployment, or other operation.
 | Artifact integrity-lock evidence id | `<artifactIntegrityLockEvidenceId; immediate full-tree reverify plus held read-only ACL/machine-global integrity lock required>` |
 | Inventory evidence record id | `<actual if created; exact for GO/CONDITIONAL GO \| not_created/not_observed/not_applicable: reason only if unavailable>` |
 | Inventory observed at UTC | `<exact for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
+| Inventory observed files / approval alias | `<inventoryObservedFiles=fileCount; positive and exact for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
+| Inventory approved physical-row ceiling / approval alias | `<inventoryApprovedPhysicalRowsCeiling=rowLimit; positive and exact for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
 | Inventory observed source bytes | `<inventoryObservedBytes: exact value from the same inventory/manifest/Preview chain for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
+| Protected source config generation | `<same exact sourceConfigGeneration across inventory/manifest/Preview/source action/final sign-off for GO/CONDITIONAL GO \| not_observed/not_applicable: reason>` |
+| Source-root binding id/state/generation/evidence | `<same pre-existing random opaque sourceRootBindingId / snapshot_bound / exact terminal sourceRootBindingGeneration / sourceRootBindingEvidenceId for GO/CONDITIONAL GO; exact identity stays owner-only \| not_provisioned/not_observed/not_applicable: reason>` |
 | Inventory approved maximum age seconds | `<exact human-approved value for GO/CONDITIONAL GO \| not_approved/not_applicable: reason>` |
 | Preview execution deadline UTC | `<exact for GO/CONDITIONAL GO \| not_created/not_applicable: reason>` |
 | Manifest-preparation approval id | `<actual if issued; required for GO/CONDITIONAL GO \| not_approved/not_applicable: reason only if unavailable>` |
@@ -1265,8 +1339,9 @@ deployment, or other operation.
 | Retry terminal status, repeat per action | `<final action succeeded; earlier failure/cancellation allowed only with authoritative rollback and fresh reconciliation \| actual/not_applicable: reason>` |
 | Remaining retryable physical rows | `<0 for GO/CONDITIONAL GO \| actual/not_observed/not_applicable: reason>` |
 | Final operational decision | `<no_upload \| upload_succeeded \| failed_preserved \| blocked>` |
-| Settings-save control approval/operation/state/evidence | `<every actual protected approval and same response-loss-idempotent operation/evidence if Settings save occurred \| not_approved/not_run/not_applicable: reason>` |
-| Runtime-control approval/action/operation/before-after/evidence | `<every actual protected approval and exact start-or-stop operation/status/evidence if runtime control occurred \| not_approved/not_run/not_applicable: reason>` |
+| Settings-save control approval/state/operation/outcome/evidence | `<every actual operatorControlApprovalId/operatorControlApprovalState and same response-loss-idempotent operatorControlOperationId/operatorControlOutcomeState/evidence if Settings save occurred \| not_approved/not_run/not_applicable: reason>` |
+| Runtime-control approval/state/action/operation/outcome/before-after/evidence | `<every actual operatorControlApprovalId/operatorControlApprovalState and exact start-or-stop operatorControlOperationId/operatorControlOutcomeState/status/evidence if runtime control occurred \| not_approved/not_run/not_applicable: reason>` |
+| Machine-global operation coordinator id/state/owner/consumer/generation/evidence | `<machineGlobalOperationCoordinatorId / idle / empty / empty / exact current generation / machineGlobalOperationCoordinatorEvidenceId for GO/CONDITIONAL GO \| actual blocked state/owner/consumer/generation/evidence: reason>` |
 | Delete execution in this cutover | `<excluded required for GO/CONDITIONAL GO \| actual violation: force NO-GO/BLOCKED>` |
 | Operator PC class | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
 | Privacy-safe exact-source alias | `<actual if observed; exact for GO/CONDITIONAL GO \| unknown/not_observed/not_applicable: reason only if unavailable>` |
@@ -1286,6 +1361,16 @@ Decision-conditional rules:
   approver evidence, and `not_revoked`. A copied Markdown record, stale evidence
   generation, replayed approval, missing approver authentication, or revocation
   forces `NO-GO`/`BLOCKED`.
+- `GO` or `CONDITIONAL GO` requires every Settings/runtime control that occurred
+  to have `operatorControlApprovalState=consumed`,
+  `operatorControlOutcomeState=committed`, exact expected-after-state evidence,
+  and successful sanitized audit publication. It also requires the exact
+  machine-global operation coordinator to be `idle` with empty owner/consumer,
+  the current terminal generation, and matching evidence after every control and
+  protected stage. `claimed`, `invalid` after effect start, `commit_pending`,
+  `commit_unknown_blocked`, partial runtime/config transition, missing audit,
+  cleanup failure, or coordinator mismatch/nonempty ownership forces
+  `NO-GO`/`BLOCKED`.
 - `GO` or `CONDITIONAL GO` requires `zipCreated=true`, the exact trusted artifact
   checksum, `approvalContractRevision=docs164-2026-08-17-r1`, exact pre-
   provisioned release trust-root/signer/algorithm/current non-revocation/
@@ -1302,6 +1387,11 @@ Decision-conditional rules:
   exact `inventoryObservedBytes` equality across inventory, manifest preparation,
   Preview approval/evidence, and final sign-off, plus a separately human-approved
   snapshot byte ceiling that is no smaller;
+  exact equality of the pre-existing source config generation, opaque root-
+  binding id, and lifecycle evidence plus the exact monotonic `reviewed ->
+  preparing -> snapshot_bound` generations across inventory, manifest approval/
+  result, Preview, every Start/Retry provenance record, and final sign-off, with
+  exact owner-only stable root identity revalidated before manifest byte access;
   exact equality of trusted target baseline id/alias/state/evidence, target-
   identity preparation approval id/state/deadline/claim owner/fence, and
   target DB binding id/state/validity/evidence across the protected result,
@@ -1323,7 +1413,12 @@ Decision-conditional rules:
   for `excluded_and_human_accepted`, or an exact separately approved policy
   result. Missing, inferred, or mismatched disposition forces `NO-GO`/`BLOCKED`.
 - For `GO`/`CONDITIONAL GO`, snapshot state `previewed` is permitted only when
-  the bound Preview has zero target rows and `finalDecision=no_upload`. If Start
+  the bound Preview has zero target rows, `finalDecision=no_upload`, and the same
+  immutable snapshot has positive file/byte/physical-row evidence plus complete
+  per-approved-file parsing with at least one eligible physical data row in each.
+  An empty, header-only, excluded, unreadable, or incomplete approved file forces
+  `NO-GO`/`BLOCKED`; expected exclusions are outside the approved file set.
+  If Start
   or Retry occurred, snapshot state must be `completed` and the final mutation
   must be target-marker-proven `committed`, lease `released_committed`, and job/
   action terminal `succeeded`, and `finalDecision` must be `upload_succeeded`.
@@ -1403,11 +1498,19 @@ job identifiers for stages that
 occurred, the exact Preview partial-overlap row count and its
 `excluded_and_human_accepted` disposition (or named separately approved policy)
 with approver/evidence id, operator PC class, privacy-safe exact-source alias,
-source class, and time window named in this record. Every lifecycle identifier exactly
+source class, exact protected source config generation and opaque root-binding id/
+state/generation/evidence, and time window named in this record. Every lifecycle identifier exactly
 matches the consumed manifest and succeeded Preview evidence. This sign-off does
 not treat a read-only status observation as Settings/runtime authorization; every
 Settings save or runtime start/stop that occurred is bound to its exact protected
-single-use control approval, operation id, before/after state, and audit evidence.
+single-use control approval/state, operation id/outcome, before/after state,
+machine-global no-active-stage evidence, and audit evidence. The exact
+finalSignoffClaimId atomically claimed the recorded machine-global coordinator
+generation as owner/consumer `final_signoff`; the same decision transaction
+published this record, consumed its approval, and released the coordinator with
+the recorded acquisition/release evidence. Its current strictly advanced
+generation is idle with empty owner/consumer and has no pending, unknown, or
+cleanup-blocked operation.
 This sign-off does
 not approve any future upload,
 retry, delete, reset, cleanup, migration, LAN exposure, deployment, or feature
@@ -1429,9 +1532,22 @@ tables; approver-authentication substitution; exact binding mismatch; stale
 evidence generations; and revocation immediately before, during, or after claim
 but before publication/use. Tests must race concurrent claims and prove exactly
 one immutable `finalSignoffRecordId`, exercise crash/response loss before and
-after record commit, and recover only that same record. They must prove every
+after the atomic approval/coordinator/record/release commit, reject a mismatched
+expected generation/next owner/consumer and delayed or stale-owner publication,
+and recover only that same record without leaving the coordinator claimed. They
+must prove every
 successfully finalized decision consumes its approval independently of whether
 the decision is GO or NO-GO, while revocation state remains a separate dimension.
+The authoritative UTC claim rule is `claimedAtUtc < finalSignoffExecuteByUtc`.
+Injected-clock tests must cover immediately before, exactly at, and immediately
+after the deadline; at/after cases create no sign-off record, do not consume
+reusable authority, and remain `NO-GO`/`BLOCKED`.
+Tests must enumerate control approval/outcome states and prove that only
+`consumed` plus `committed` with exact after-state/audit evidence can support a
+proceed decision. They must inject claimed, invalid-after-start, commit-pending,
+commit-unknown, partial multi-container, missing-audit, response-loss, coordinator
+owner/generation substitution, and nonempty/blocked coordinator states; every
+case forces `NO-GO`/`BLOCKED` and no new protected stage/control claim.
 No GO/CONDITIONAL GO is valid without passing evidence for this matrix and the
 canonical artifact-admission matrix in `docs/173`.
 
@@ -1451,9 +1567,10 @@ artifact and read-only inventory counts, but the safe operator PC class and
 privacy-safe exact-source alias are missing. It does not prove that package is
 installed or executing and does not retroactively validate the earlier Preview.
 Do not refresh for approval yet. First complete WP-C atomic binding/target-
-identity lifecycles, tests, and package rebuild/verification; ensure a separately
-controlled pre-provisioned verified target baseline exists; then refresh the
-inventory and create a successor record before any approval.
+identity lifecycles, tests, and package rebuild/verification; ensure separately
+controlled pre-provisioned verified target and human-reviewed source-root
+baselines exist; then refresh the inventory only as a no-write revalidation of
+that exact root binding/config generation and create a successor record before any approval.
 
 ### WP-C: atomic Preview binding, then approval and evidence capture
 
@@ -1464,9 +1581,11 @@ rows, matching Audit evidence, and no operational DB mutation. It predates
 action is a separately authorized production implementation and test package for
 atomic content-manifest binding plus an immutable snapshot retained through
 Preview, Start, and Retry, followed by package rebuild and verification.
-Only after those pass and a separately controlled pre-provisioned verified target
-baseline already exists may a successor inventory be refreshed. A separate exact
-manifest-preparation approval must then create a protected single-use record;
+Only after those pass and separately controlled pre-provisioned verified target
+and human-reviewed source-root baselines already exist may a successor inventory
+read-only revalidate the exact source binding/config generation. A separate exact
+manifest-preparation approval must then claim the reviewed source binding, create
+a protected single-use record, and publish only `snapshot_bound` or terminal `invalid`;
 after its safe result is reviewed, a separate read-only target-identity
 preparation approval must compare observed exact identity to that baseline and
 its opaque exact-match result must be human-reviewed. Only then may an exact
@@ -1519,14 +1638,17 @@ synthetic soak and separately approved real `folder_all` Preview both passed.
 
 Goal: after WP-C implements and tests atomic content binding with an immutable
 snapshot retained through Preview/Start/Retry and produces a new package, verify
-that exact executing package label/source commit, repeat the
-read-only inventory immediately before any Preview approval, create a successor
+that exact executing package label/source commit, confirm separately controlled
+pre-provisioned verified target and human-reviewed source-root baselines, repeat
+the read-only inventory immediately before any Preview approval solely to
+revalidate the exact source-root binding/config generation, create a successor
 record with human-supplied safe operator PC and privacy-safe exact-source
-bindings, confirm a separately controlled pre-provisioned verified target
-baseline, separately approve and review protected manifest preparation,
+bindings, separately approve and review protected manifest preparation and its
+`reviewed -> preparing -> snapshot_bound|invalid` root transition,
 separately approve read-only target-identity preparation and human-review its
 exact-match opaque result, then request the later exact Preview approval. This
-work does not authorize baseline provisioning/rotation. Record any required human disposition
+work does not authorize source or target baseline provisioning/review/repair/
+rotation. Record any required human disposition
 of partial-overlap rows, resolve or accept the Grafana/Vector caveat with an
 owner and stop/rollback procedure, and fill the Final Sign-Off Record. This
 sign-off work does not itself approve or execute any mutation.

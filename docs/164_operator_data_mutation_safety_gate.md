@@ -116,26 +116,70 @@ either action. Each action requires an immutable, human-authenticated protected
 payload in an append-only approval store. Committed Markdown may export only its
 opaque id/state and sanitized evidence; it is never the runtime authority.
 
+Settings/runtime controls and every protected manifest-preparation, target-
+identity-preparation, Preview, Start, Retry, Delete/preflight, reconcile,
+disposition, recovery, and final-signoff stage must contend on one
+`machineGlobalOperationCoordinatorId` in the same authenticated machine-global
+authority store as control approvals. The coordinator records state
+`idle | claimed | active | commit_unknown_blocked | cleanup_blocked`, exact opaque
+owner id, exact consumer literal (`settings_save`, `local_supabase_start`,
+`local_supabase_stop`, `manifest_preparation`, `target_identity_preparation`,
+`preview`, `start`, `retry`, `delete_preflight`, `delete`, `reconcile`,
+`delete_disposition`, `delete_restore`, `recovery`, or `final_signoff`), monotonic
+generation, and safe evidence id. It is shared
+across Windows users, installations, packages, and `EWC_STATE_DB_PATH` values and
+protected by an ACL-restricted cross-session mutex. Claim and approval/stage
+ownership must commit in one transaction: only `idle` may be claimed, every
+protected stage must reject a control owner, every control must reject a stage
+owner, and stale generations cannot publish or act. Release to `idle` advances
+the generation only after the exact action/stage is terminal, all required audit/
+evidence and cleanup are committed, and no outcome is unknown. `commit_pending`,
+`commit_unknown_blocked`, partial transitions, missing audit, or failed cleanup
+remain non-advanceable; current state alone cannot release them.
+An existing blocked owner may not be replaced or newly claimed. Same-owner
+reconcile is allowed only through either (a) the original consumed action
+approval's pre-reserved, independently stateful single-use reconcile entitlement,
+with exact entitlement id/state/deadline/owner/fence/source-action class, or (b) a
+separate immutable approval when that action contract requires one. Claiming the
+entitlement never reopens or reuses the consumed source approval. Disposition,
+restore, or cleanup recovery likewise requires the exact original pre-authorized
+cleanup entitlement or a separate approval defined by the action contract. The
+claim CASes the exact owner/generation to the corresponding recovery consumer
+while the coordinator remains blocked; release is allowed only after authoritative
+terminal outcome, required cleanup, and audit/evidence commit. A stale/different
+owner or invalid/expired/replayed entitlement performs zero observation, side
+effect, or publication.
+These coordinator fields are mandatory in every protected approval below even
+when a copy-ready block abbreviates them; an omitted/mismatched id, state, owner,
+consumer, generation, or evidence id makes that approval invalid.
+
 Every such payload must bind:
 
 - `approvalContractRevision=docs164-2026-08-17-r1` and all release-trust/artifact
   fields required above;
-- random `operatorControlApprovalId`, state `available`, human-supplied
+- random `operatorControlApprovalId`, `operatorControlApprovalState` in
+  `available`, `claimed`, `consumed`, or `invalid` and initially `available`, human-supplied
   `operatorControlExecuteByUtc`, exact `operatorControlAction` of
   `settings_save`, `local_supabase_start`, or `local_supabase_stop`, named
   approver/executor, and explicit exclusions;
 - opaque `operatorControlExpectedBeforeStateBindingId`, exact reviewed
   `operatorControlExpectedAfterStateClass`, pre-reserved random
   `operatorControlOperationId`, and safe `operatorControlEvidenceId`/
-  `operatorControlAuditEvidenceId` sentinels;
+  `operatorControlAuditEvidenceId` sentinels; `operatorControlOutcomeState` is
+  `not_started`, `commit_pending`, `committed`, or `commit_unknown_blocked` and
+  begins `not_started`;
+- the exact `machineGlobalOperationCoordinatorId`, expected `idle` state, empty
+  owner/consumer, generation, next owner equal to `operatorControlOperationId`,
+  control consumer class, and safe transition evidence id;
 - for Settings, the exact current config generation plus the exact allowed-key
   change set. Non-secret before/after values may be recorded in the protected
   payload; secret replacements use owner-only opaque bindings and are never
   exported. Environment-overridden keys, extra keys, stale generations, and
-  unreviewed values are excluded;
+  unreviewed values are excluded. Machine-global evidence must also prove the
+  coordinator has no nonempty consumer from the exact enum above;
 - for runtime start/stop, the exact current safe runtime status, intended
-  terminal status, allowlisted container/project class, and evidence that no
-  Preview/upload/retry/delete/preflight/reconcile/recovery action is active.
+  terminal status, allowlisted container/project class, and evidence that the
+  coordinator has no nonempty consumer from the exact enum above.
   Bootstrap, init, reset, migration, cleanup, Docker create/remove/prune,
   volume operations, and any action other than the one named are excluded.
 
@@ -143,30 +187,53 @@ Required control approval wording:
 
 ```text
 TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite and a new human approval explicitly releases exactly one action.
-The contract revision is <approvalContractRevision=docs164-2026-08-17-r1>. The protected control approval id is <operatorControlApprovalId>, initially available and claimable exactly once by <operatorControlExecuteByUtc>, for exact action <operatorControlAction=settings_save | local_supabase_start | local_supabase_stop> and pre-reserved operation <operatorControlOperationId>.
+The contract revision is <approvalContractRevision=docs164-2026-08-17-r1>. The protected control approval id is <operatorControlApprovalId>, with <operatorControlApprovalState=available>, claimable exactly once by <operatorControlExecuteByUtc>, for exact action <operatorControlAction=settings_save | local_supabase_start | local_supabase_stop>, pre-reserved operation <operatorControlOperationId>, and initial <operatorControlOutcomeState=not_started>.
 It binds package/release-trust/artifact evidence required by this document, named approver <approver>, named executor <executor>, authoritative before-state <operatorControlExpectedBeforeStateBindingId>, intended terminal state <operatorControlExpectedAfterStateClass>, and sanitized evidence/audit ids <operatorControlEvidenceId>/<operatorControlAuditEvidenceId>.
-For settings_save only, I approve exactly the protected current config generation and reviewed allowed-key change set bound above; extra, stale, environment-overridden, or substituted keys/values are excluded. For runtime start/stop only, I approve exactly the named transition while no Preview/upload/retry/delete/preflight/reconcile/recovery action is active; init/reset/migration/cleanup and Docker create/remove/prune/volume operations are excluded.
+It also binds machine-global operation coordinator <machineGlobalOperationCoordinatorId> in expected idle state with empty owner/consumer, generation <machineGlobalOperationCoordinatorGeneration>, next owner <operatorControlOperationId>, exact control consumer <operatorControlAction>, and safe transition evidence <machineGlobalOperationCoordinatorEvidenceId>. Approval claim and coordinator claim must be one transaction in the fixed authenticated authority.
+For settings_save only, I approve exactly the protected current config generation and reviewed allowed-key change set bound above; extra, stale, environment-overridden, or substituted keys/values are excluded. For either Settings or runtime control, machine-global evidence must prove the coordinator is idle with empty owner/consumer and that no consumer literal in the exact canonical enum above is active. For runtime start/stop only, I approve exactly the named transition; init/reset/migration/cleanup and Docker create/remove/prune/volume operations are excluded.
 Atomic claim, state revalidation, the one bounded side effect, response-loss recovery, and success/failure/blocked audit must follow the lifecycle below. This approval authorizes no other config, runtime, source, DB, upload, delete, LAN, deployment, or cleanup action.
 ```
 
-One protected local transaction must CAS `available -> claimed`, bind exactly
-one `operatorControlOperationId`, and revalidate the authoritative current state,
-deadline, package/trust evidence, actor, and full action payload before the side
-effect. Concurrent, replayed, substituted, stale, or extra-field requests commit
-no mutation and may finish `invalid` only when no side effect committed. Once
-the side effect commits, the approval is permanently `consumed`; response loss
-returns only the same operation/evidence and never repeats the action. Failure or
-blocked outcomes must publish one sanitized audit/evidence record, and missing
-audit publication keeps the action blocked rather than certifying success.
+One protected machine-global transaction must CAS `operatorControlApprovalState` from
+`available -> claimed`, bind exactly one `operatorControlOperationId`, create a
+durable `operatorControlOutcomeState=commit_pending`, atomically claim the exact
+machine-global coordinator generation for that operation/consumer, and revalidate the
+authoritative current state, deadline, package/trust evidence, actor, full action
+payload, and machine-global no-active-stage evidence before the side effect.
+Concurrent, replayed, substituted, stale, or extra-field requests commit no
+mutation and may finish `invalid` only when no side effect began. After any
+external command or Settings write begins, failure, timeout, process death,
+response loss, or partial multi-container transition must leave
+`operatorControlOutcomeState=commit_unknown_blocked`; it may never be reported
+as success or replayed. Recovery may perform only bounded read-only reconciliation
+for the same operation id and exact before/after binding. It may publish
+`committed` and permanently move the approval to `consumed` only when the complete
+intended terminal state and operation-specific durable adapter evidence both
+prove that exact operation committed and no partial/unmodeled transition remains.
+Current config/runtime state alone may never infer success; without attributable
+evidence it stays blocked until a separately approved recovery action.
+No automatic compensating start/stop or Settings rewrite is authorized. Response
+loss returns only the same operation/evidence. Failure or blocked outcomes must
+publish one sanitized audit/evidence record, and missing audit publication keeps
+the action blocked rather than certifying success.
 
 Deterministic tests are mandatory for missing/unresolvable approval ids,
 arbitrary Markdown/request strings, every field substitution, wrong actor,
 just-before/at/after deadline, stale config/runtime state, extra Settings keys,
 environment override, concurrent claims, replay, crash before and after side-
 effect commit, response loss, audit publication failure, and package/trust/
-integrity-lock revocation or loss. Runtime tests must also race active Preview,
-Start, Retry, Delete, reconcile, and recovery states and prove zero runtime
-transition on conflict. Settings tests must prove zero file/config generation
+integrity-lock revocation or loss. They must inject process death, timeout, and
+response loss at every boundary between approval claim, durable `commit_pending`,
+each external command or Settings write, authoritative terminal-state check,
+approval consumption, and audit publication. Runtime tests must fail each
+allowlisted container transition in turn and prove earlier partial transitions
+remain `commit_unknown_blocked`, are never certified as success, and cannot be
+replayed or automatically compensated. Settings and runtime tests must race every
+nonempty canonical coordinator consumer in both directions and prove zero control transition on
+conflict. They must race both claim orders across processes, Windows users,
+installations, packages, and different `EWC_STATE_DB_PATH` values; crash, mutex
+loss, stale-owner publication, and generation substitution must never produce two
+owners or release a pending/unknown control. Settings tests must prove zero file/config generation
 change on any rejected path. Until these lifecycles and tests exist, Settings
 save and Local Supabase start/stop remain blocked.
 
@@ -186,11 +253,16 @@ Preview-only may be considered only after all of these are true:
 - the exact source is confirmed outside chat by the operator or maintainer and
   bound to a human-supplied privacy-safe `sourceAlias` plus
   `operatorPcClass`;
+- a separately controlled, pre-existing, human-reviewed protected source-root
+  binding resolves an opaque random `sourceRootBindingId` owner-only to the exact
+  canonical root stable volume/share and opened-directory identity plus
+  `sourceConfigGeneration`; this gate does not authorize provisioning or repair;
 - local Supabase DB reachability is understood before interpreting DB-dependent
   preview states;
 - a fresh read-only inventory precheck produced a random, path-independent
   `inventoryEvidenceRecordId`, the observed file count, and the approved
-  physical row ceiling for the intended approval scope;
+  physical row ceiling for the intended approval scope, and only revalidated the
+  same reviewed source-root binding without creating or advancing it;
 - the successor inventory record and approval name `inventoryObservedAtUtc`, a
   human-approved `inventoryMaxAgeSeconds`, and `previewExecuteByUtc`;
 - a separately approved protected manifest-preparation step produced an opaque,
@@ -200,7 +272,7 @@ Preview-only may be considered only after all of these are true:
   `manifestPreparationApprovalId`;
 - immediately before the Preview API call, a final read-only scan confirms the
   same file set, scope, size/mtime metadata, counts, package, operator PC, source
-  alias, and source class;
+  alias/class, config generation, and owner-only stable root identity;
 - the production Preview path has an implemented and automated-test-covered
   atomic snapshot binding: it verifies a content-based manifest and parses the
   same protected immutable snapshot retained for later approved actions. A separate
@@ -218,6 +290,10 @@ This precheck is not Upload Preview. It must not create a Preview run, call the
 Upload Preview API, write to the DB, write audit or local state, mutate source
 files, or run Start Upload, Retry Failed, Delete, Settings save, feature-gate
 changes, Supabase cleanup, Docker cleanup, LAN enablement, or deployment.
+It may only read/revalidate a pre-existing human-reviewed protected
+`sourceRootBindingId`; provisioning, reviewing, rotating, repairing, or advancing
+that binding is a separately controlled Settings/source-baseline action and is
+not authorized here.
 
 The precheck may record only safe inventory evidence:
 
@@ -225,12 +301,17 @@ The precheck may record only safe inventory evidence:
 - safe operator PC class;
 - a privacy-safe source alias that is random or otherwise resistant to path
   guessing and is confirmed out of band to map to the exact source;
+- exact protected `sourceConfigGeneration` and the pre-existing random opaque
+  `sourceRootBindingId` in state `reviewed` with exact monotonic generation and
+  safe lifecycle evidence; exact root path,
+  stable volume/share identity, and opened-directory identity remain owner-only;
 - a random, path-independent inventory evidence record id;
 - inventory observation time, a human-approved maximum age, and the resulting
   Preview execution deadline;
-- observed files count for the intended scope;
-- physical data-line count or a conservative approved physical row ceiling;
-- total observed source bytes for a separately human-approved full-byte snapshot
+- positive observed files count for the intended scope;
+- positive physical data-line count or a conservative positive approved physical
+  row ceiling;
+- positive total observed source bytes for a separately human-approved full-byte snapshot
   ceiling;
 - source eligibility or go/no-go reason classes.
 
@@ -244,9 +325,30 @@ ceiling that must be at least `<inventoryObservedBytes>`; it must not be inferre
 from the observation. None of these values may be guessed, copied from an earlier
 run, reused as a long-term default, or used as blanket approval for future folder
 growth.
+`fileCount` is only the copy-ready alias for canonical
+`inventoryObservedFiles`, and `rowLimit` is only the copy-ready alias for
+canonical `inventoryApprovedPhysicalRowsCeiling`; each pair must be exactly equal
+in inventory, preparation approval/result, Preview approval/evidence, and final
+sign-off. Missing or unequal aliases block before claim.
+The source config generation, root-binding id, and stable lifecycle-evidence id
+must remain equal across inventory, manifest approval/result, Preview approval/
+evidence, and final sign-off. State/generation must instead follow the exact
+single-use monotonic transition `reviewed -> preparing -> snapshot_bound` on
+success or `reviewed -> preparing -> invalid` on any failed/expired/crashed
+preparation; terminal states never regress or reuse. Alias/class/count/size/mtime equality does
+not prove root identity; Settings change, drive/share remap, identity change, or
+binding substitution invalidates the inventory.
 
-If inventory cannot establish observed files, an approved physical row ceiling,
-and observed bytes, do not request snapshot preparation or Preview-only. If the operational folder grows
+If inventory cannot establish at least one observed file, a positive approved
+physical row ceiling, positive observed bytes, and complete enumeration/read
+success, do not request snapshot preparation or Preview-only. Zero files, zero
+bytes, zero physical data rows, a zero-byte/header-only scope, every file excluded
+or unreadable, or any enumeration/count/read error is `blocked`, not `no_upload`.
+Snapshot preparation must also prove that every approved file was copied and
+parsed from the protected handles and that every approved file contains at least
+one eligible physical data row before Preview may be approved. Expected excluded
+files may be recorded only outside the approved file set; any approved file that
+is empty, header-only, excluded, or unreadable blocks. If the operational folder grows
 later, repeat read-only inventory and issue a new Preview-only approval for the
 new observed scope only after the atomic-binding implementation/package gate is
 still satisfied.
@@ -262,7 +364,8 @@ reject duplicate/concurrent claims, and finish it as `consumed` with one manifes
 and one full-byte snapshot or `invalid` on failure. The private manifest and
 exact-byte snapshot must be owner-restricted, confidentiality-protected at rest,
 tamper-evident, single-use, and bound to the approval plus inventory/package/
-operator/source scope. Storage protection and capacity for the approved byte
+operator/source scope, exact `sourceConfigGeneration`, and pre-existing reviewed
+`sourceRootBindingId`/state/generation/evidence. Storage protection and capacity for the approved byte
 ceiling must pass before copying. The snapshot is created while the bytes are
 hashed and must not mutate the operational source. The manifest contains
 private canonical file identities and content digests; none of those values may
@@ -270,7 +373,8 @@ be published. Only approval/opaque record ids and safe classes/counts/timestamps
 may leave the protected store.
 
 The protected approval must bind `inventoryObservedAtUtc`, the human-supplied
-`inventoryMaxAgeSeconds`, and a human-supplied
+`inventoryMaxAgeSeconds`, exact `sourceConfigGeneration`, pre-existing
+`sourceRootBindingId`, expected state `reviewed`, exact generation, safe binding evidence, and a human-supplied
 `manifestPreparationExecuteByUtc` no later than the inventory expiry. Both the
 atomic claim and completed manifest/snapshot publication must occur before that
 deadline. Reject an expired claim before any byte copy. If the deadline expires
@@ -285,7 +389,8 @@ TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block unt
 The manifest-preparation approval id is <manifestPreparationApprovalId> and both claim and completed protected publication must occur by <manifestPreparationExecuteByUtc>.
 I approve exactly one protected local content-manifest plus full-byte immutable snapshot preparation from package sourceCommit <sourceCommit> for inventory record <inventoryEvidenceRecordId>.
 That inventory was observed at <inventoryObservedAtUtc> and is approved for at most <inventoryMaxAgeSeconds> seconds; the preparation deadline above is within that window.
-The approved operator PC class is <operatorPcClass>, source alias is <sourceAlias>, source class is <sourceClass>, expected files is <fileCount>, expected physical rows is <= <rowLimit>, inventory-observed source bytes are <inventoryObservedBytes>, and the separately human-approved full-byte snapshot ceiling is <contentSnapshotMaxBytes> bytes with contentSnapshotMaxBytes >= inventoryObservedBytes.
+The pre-existing protected source-root binding is <sourceRootBindingId> in human-reviewed state <sourceRootBindingState=reviewed>, monotonic generation <sourceRootBindingGeneration>, with config generation <sourceConfigGeneration> and safe lifecycle evidence <sourceRootBindingEvidenceId>. It resolves owner-only to the exact canonical root stable volume/share and opened-directory identity. Before any file byte is read, the claim must CAS the reviewed generation to preparing and revalidate that exact identity/config generation under the machine-global coordinator. Only complete manifest/snapshot publication may CAS it to terminal snapshot_bound; any Settings change, drive/share remap, identity mismatch, unresolved binding, copy/expiry/crash/publication failure must CAS it to terminal invalid and dispose partial protected bytes. Neither terminal state regresses or reuses; a fresh chain requires a new separately controlled reviewed binding. Alias/class/count/size/mtime equality does not substitute. This approval does not provision, review, rotate, or repair the root binding.
+The approved operator PC class is <operatorPcClass>, source alias is <sourceAlias>, source class is <sourceClass>, expected files is positive <fileCount=inventoryObservedFiles>, expected physical rows has positive ceiling <= <rowLimit=inventoryApprovedPhysicalRowsCeiling>, inventory-observed source bytes are positive <inventoryObservedBytes>, and the separately human-approved full-byte snapshot ceiling is <contentSnapshotMaxBytes> bytes with contentSnapshotMaxBytes >= inventoryObservedBytes. Zero files/bytes/physical rows, incomplete enumeration/read, or any approved file that is zero-byte, header-only, excluded, unreadable, or lacks an eligible physical data row blocks before Preview and cannot be classified as no_upload; expected exclusions must be outside the approved file set.
 The snapshot may be read only by the later separately approved Preview/Start/Retry chain and only until <contentSnapshotRetainUntilUtc>.
 I approve automatic bounded cryptographic disposal at terminal chain completion (zero-target Preview or completed Start/Retry), invalidation, or that deadline, whichever occurs first: stop active access, clear buffers, destroy the per-snapshot encryption key first, remove the byte file, verify absence, and record <snapshotDispositionEvidenceId>. A failed removal must leave keyless bytes unreadable, alert the operator, block new snapshot preparation, and retry idempotently only for the same record.
 I acknowledge that this write stores a confidential complete copy of the approved operational CSV bytes in owner-restricted protected storage.
@@ -296,6 +401,9 @@ After preparation, publish only `manifestPreparationApprovalId`, its claim/
 completion deadline and terminal state `consumed`, `contentManifestRecordId`, `contentManifestPreparedAtUtc`,
 `contentManifestExecuteByUtc`, safe bindings, and manifest lifecycle class
 `prepared`, plus opaque `contentSnapshotRecordId` and snapshot state `prepared`.
+Also publish the safe config generation and opaque root-binding id, successor
+generation, terminal state `snapshot_bound`, and lifecycle evidence; exact root/path/volume/share/directory identities stay
+owner-only.
 Also publish safe observed/approved byte counts,
 `contentSnapshotRetainUntilUtc`, disposition state `scheduled`, and later safe
 `snapshotDispositionEvidenceId`. Stop if
@@ -303,6 +411,22 @@ protected capacity, confidentiality/access controls, authentication material, or
 the retention/disposition policy is missing; the record cannot be proven
 tamper-evident; or any binding differs. Preview approval may be requested only
 after the human reviews that safe result.
+
+Deterministic source-root tests must reject a different root with the same alias/
+class/file count/row ceiling/bytes/size/mtime, drive-letter or network-share
+remapping, Settings/config-generation drift between inventory and claim,
+Settings/remap races during claim/copy, missing/substituted root-binding ids or
+evidence, root-handle identity change, and delayed publication after invalidation.
+Inventory tests remap immediately before revalidation, between revalidation and
+enumeration, and during traversal while enumeration remains on the stable reviewed
+directory handle. Snapshot every protected/app/runtime/root-binding/approval/
+coordinator/audit store plus source/DB state before successful and rejected
+inventory and prove byte-for-byte no change except the separately exported safe
+inventory report. Every mismatch before copy produces zero source-file byte
+access and zero DB access; any later mismatch fences the generation and disposes
+partial protected bytes without publishing `prepared`. Tests cover exact
+`reviewed -> preparing -> snapshot_bound|invalid` CAS, crash/expiry at each
+transition, no terminal regression/reuse, and stale publisher rejection.
 
 ### Protected Target-Identity Preparation Approval
 
@@ -377,8 +501,9 @@ I approve exactly one Upload Preview-only run from package sourceCommit <sourceC
 The approved inventory record is <inventoryEvidenceRecordId> on operator PC class <operatorPcClass>.
 The approved protected content manifest is <contentManifestRecordId>, prepared at <contentManifestPreparedAtUtc>, and it must be consumed no later than <contentManifestExecuteByUtc>.
 The approved immutable content snapshot is <contentSnapshotRecordId> in state prepared.
-The inventory-observed source bytes are <inventoryObservedBytes>; the separately human-approved maximum size is <contentSnapshotMaxBytes> bytes and must satisfy contentSnapshotMaxBytes >= inventoryObservedBytes. The snapshot may be read only until <contentSnapshotRetainUntilUtc>, and its disposition state is scheduled.
-The approved source alias is <sourceAlias>, the source class is <sourceClass>, expected files is <fileCount>, and expected physical rows is <= <rowLimit>.
+The approved protected source identity is config generation <sourceConfigGeneration> and pre-existing opaque root binding <sourceRootBindingId> in terminal state <sourceRootBindingState=snapshot_bound>, successor generation <sourceRootBindingGeneration>, with safe lifecycle evidence <sourceRootBindingEvidenceId>. It must be the exact monotonic successor of the reviewed inventory generation and match manifest preparation. Preview may revalidate this binding before claim but, after claim, may read only the immutable snapshot and must never reopen the operational root.
+The inventory-observed source bytes are positive <inventoryObservedBytes>; the separately human-approved maximum size is <contentSnapshotMaxBytes> bytes and must satisfy contentSnapshotMaxBytes >= inventoryObservedBytes. The snapshot may be read only until <contentSnapshotRetainUntilUtc>, and its disposition state is scheduled.
+The approved source alias is <sourceAlias>, the source class is <sourceClass>, expected files is positive <fileCount=inventoryObservedFiles>, and expected physical rows has positive ceiling <= <rowLimit=inventoryApprovedPhysicalRowsCeiling>. Every approved file must be readable and contain at least one eligible physical data row in the protected snapshot; an empty/header-only/excluded/unreadable approved file or incompletely enumerated input is blocked, never no_upload. Expected exclusions are recorded only outside the approved file set.
 The approved exact operational DB target is protected binding <targetDbBindingId>; safe target/readiness classes do not replace it.
 The inventory was observed at <inventoryObservedAtUtc>, its approved maximum age is <inventoryMaxAgeSeconds> seconds, and Preview must start no later than <previewExecuteByUtc>.
 This approval does not approve Start Upload, Retry Failed, Delete, Settings save, feature gate enablement, Supabase reset/cleanup, or Docker cleanup.
@@ -388,9 +513,11 @@ In this wording, `expected files` means observed files from the fresh read-only
 inventory, `expected physical rows` means the approved physical row ceiling,
 and `inventoryObservedBytes` means the total observed source bytes from that
 same inventory. It must equal the manifest-preparation record and must not exceed
-the separately approved `contentSnapshotMaxBytes`. The inventory record id, protected content manifest
-record id, content snapshot record id, operator PC class, source alias, and
-trusted target baseline id/alias/state/evidence,
+the separately approved `contentSnapshotMaxBytes`. The inventory record id,
+protected content manifest record id, content snapshot record id, operator PC
+class, source alias, source config generation plus root-binding id/state/exact
+monotonic generation/evidence,
+and trusted target baseline id/alias/state/evidence,
 `targetIdentityPreparationApprovalId`, and `targetDbBindingId` must match
 exactly. No validity window or record reuse may be inferred. All three approval
 ids must resolve to
@@ -399,7 +526,8 @@ Markdown alone do not satisfy the runtime gate. Preview must atomically claim it
 approval, manifest, and prepared target DB binding together. Immediately before the API call, repeat
 the read-only scan; stop unless the observation is unexpired and the file set,
 scope, size/mtime metadata, counts, package, operator PC, source alias, and
-source class are unchanged. This final metadata scan is supplementary and does
+source class, protected config generation, and source-root binding are unchanged.
+This final metadata scan is supplementary and does
 not close the check/use race. Until the Preview implementation atomically claims
 the protected manifest, verifies the private content digests, consumes the same
 protected immutable snapshot bytes, and records a single-use terminal
@@ -419,6 +547,9 @@ Evidence to record after Preview-only:
 - inventory evidence record id, operator PC class, privacy-safe source alias,
   exact `inventoryObservedBytes`, and separately approved
   `contentSnapshotMaxBytes` with equality to the manifest-preparation record;
+- exact source config generation and opaque source-root binding id/state/exact
+  monotonic generation/evidence carried from the reviewed inventory through the
+  snapshot-bound manifest;
 - protected content manifest record id, prepared-at/deadline fields, and
   single-use terminal state;
 - protected content snapshot record id and `previewed` state;
@@ -600,6 +731,7 @@ The Start Upload approval id is <startUploadApprovalId> and it must be claimed b
 I approve exactly one Start Upload for preview run <previewRunId> with target files <targetFiles> and target rows <targetRows>.
 The protected exact target-only set binding is <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>.
 This approval is for package sourceCommit <sourceCommit>, operator PC class <operatorPcClass>, source alias <sourceAlias>, and source class <sourceClass>.
+It carries forward source config generation <sourceConfigGeneration> and opaque source-root binding <sourceRootBindingId> in terminal snapshot-bound state at generation <sourceRootBindingGeneration> with safe lifecycle evidence <sourceRootBindingEvidenceId> exactly as bound by inventory, manifest, and Preview. Start reads only the immutable snapshot and must not reopen or re-resolve the operational root.
 It binds the same pre-existing trusted target baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId> used by Preview.
 It binds protected target operation fence <targetOperationFenceId> in chain state idle, upload branch preview_ready, with exact generation <targetOperationFenceGeneration> and safe evidence <targetOperationFenceEvidenceId>. Job creation must atomically claim that generation for consumer start; a concurrent Delete preflight or any stale/terminal generation must fail.
 It binds exact-target singleton coordinator <targetGlobalCoordinatorId>, sole owner fence <targetOperationFenceId>, state chain_ready, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, and safe evidence <targetGlobalCoordinatorEvidenceId>. That evidence must attest the fixed authenticated machine-global authority, ACL-restricted cross-session mutex, single-operator-PC/local-target boundary, and target-side mutation epoch; a user-profile/app-state database is not authoritative. Job creation must atomically claim both generations for consumer start; any different Preview-chain owner or concurrent target consumer must fail.
@@ -763,6 +895,7 @@ The Retry Failed approval id is <retryApprovalId> and it must be claimed by <ret
 I approve exactly one Retry Failed using protected reconciliation record <retryReconciliationRecordId>, observed at <retryReconciliationObservedAtUtc> and claimable by <retryReconciliationExecuteByUtc>, for upload job <jobId> with freshly reconciled still-absent files <remainingFiles> and physical rows <remainingRows> from the entire prior attempted subset, preserving root failure class <rootFailureClass>.
 That reconciliation record is the protected approved-absent set binding <actionApprovedAbsentSetBindingId> with distinct keys <actionApprovedAbsentKeyCount>. If its source action is Retry, its predecessor is <retryReconciliationPredecessorRecordId> in terminal state superseded_disposed with evidence <retryReconciliationPredecessorDispositionEvidenceId>; if its source action is Start, both predecessor fields are not_applicable.
 This approval is for package sourceCommit <sourceCommit>, operator PC class <operatorPcClass>, source alias <sourceAlias>, and source class <sourceClass>.
+It carries forward source config generation <sourceConfigGeneration> and opaque source-root binding <sourceRootBindingId> in terminal snapshot-bound state at generation <sourceRootBindingGeneration> with safe lifecycle evidence <sourceRootBindingEvidenceId> exactly as bound by inventory, manifest, Preview, source action, and reconciliation. Retry reads only the immutable snapshot and must not reopen or re-resolve the operational root.
 It binds the same pre-existing trusted target baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId> used by Preview/source action/reconciliation.
 It binds protected target operation fence <targetOperationFenceId> in chain state idle, upload branch retryable, with exact generation <targetOperationFenceGeneration> and safe evidence <targetOperationFenceEvidenceId>. Retry creation must atomically claim that generation for consumer retry; any Delete owner or stale/terminal generation must fail.
 It binds exact-target singleton coordinator <targetGlobalCoordinatorId>, sole owner fence <targetOperationFenceId>, state chain_ready, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, and safe evidence <targetGlobalCoordinatorEvidenceId>. That evidence must attest the fixed authenticated machine-global authority, ACL-restricted cross-session mutex, single-operator-PC/local-target boundary, and target-side mutation epoch; a user-profile/app-state database is not authoritative. Retry creation must atomically claim both generations for consumer retry; any different Preview-chain owner or concurrent target consumer must fail.
@@ -834,7 +967,11 @@ count, opaque protected selection-request binding id, and
 `deletePreflightExecuteByUtc`, human-supplied
 `deletePreflightCompleteByUtc`, exact read-only observed source bytes, human-supplied
 `deleteRecoverySnapshotMaxBytes` and `deleteRecoverySnapshotRetainUntilUtc`,
-protected capacity evidence, and an approved owner-only confidentiality class.
+protected capacity evidence, an approved owner-only confidentiality class, and
+the pre-reserved source-only cleanup lifecycle
+`deleteSourceSnapshotCleanupTransactionId`/`deleteSourceSnapshotCleanupMarginSeconds`/
+`deleteSourceSnapshotCleanupByUtc`/
+`deleteSourceSnapshotCleanupState`/`deleteSourceSnapshotCleanupEvidenceId`.
 It authorizes exactly one protected exact-byte Delete source-provenance snapshot before
 the preflight DB read, exactly one preflight run, and only the bounded automatic
 source-snapshot disposition defined below. It authorizes no DB mutation, hard
@@ -846,7 +983,7 @@ TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block unt
 The delete-preflight approval id is <deletePreflightApprovalId>; it must be claimed by <deletePreflightExecuteByUtc>, and protected source-provenance-snapshot plus preflight-result publication must complete by <deletePreflightCompleteByUtc>.
 I approve exactly one read-only operational delete preflight for package <packageSourceCommit>/<packageLabel>/<zipSha256>, Preview <previewRunId>, operator PC <operatorPcClass>, source <sourceAlias>/<sourceClass>, DB target <dbTargetClass> anchored to pre-existing trusted baseline <trustedTargetBaselineId> in verified/non-revoked state <trustedTargetBaselineState>, privacy-safe alias <trustedTargetAlias>, and safe evidence <trustedTargetBaselineEvidenceId>, from consumed target-identity preparation approval <targetIdentityPreparationApprovalId> completed by <targetIdentityPreparationExecuteByUtc>, with protected exact binding <targetDbBindingId> in state <targetDbBindingState>, valid only until <targetDbBindingValidUntilUtc>, safe evidence <targetDbBindingEvidenceId>, and target operation fence <targetOperationFenceId> in chain state idle with Delete branch delete_preflight_ready, exact generation <targetOperationFenceGeneration>, safe evidence <targetOperationFenceEvidenceId>, expected schema <schemaClass>, selected items <selectedItemCount>, and protected selection-request binding <selectionRequestBindingId>.
 It also binds exact-target singleton coordinator <targetGlobalCoordinatorId>, sole owner fence <targetOperationFenceId>, state chain_ready, empty consumer, exact generation <targetGlobalCoordinatorGeneration>, and safe evidence <targetGlobalCoordinatorEvidenceId>. Preflight creation must atomically claim both generations for consumer delete_preflight; any different Preview-chain owner or concurrent target consumer must fail.
-Before any source copy or preflight DB read, this approval permits creation of exactly one owner-only encrypted immutable Delete source-provenance snapshot <deleteRecoverySnapshotId> and protected exact-byte content binding <deleteRecoveryContentBindingId>. The reviewed source scope is the selected files/items above, observed bytes are <deleteRecoveryObservedBytes>, the non-inferred approved ceiling is <deleteRecoverySnapshotMaxBytes>, protected capacity evidence is <deleteRecoveryCapacityEvidenceId>, the approved confidentiality/access class is <deleteRecoveryConfidentialityClass>, and bytes may be read only until <deleteRecoverySnapshotRetainUntilUtc>. Every selected entry must remain inside the canonical approved source root, with no symlink/junction/reparse-point/hard-link ambiguity at any path component; copy, private digest, and parse must use the same stable opened-handle identity. Any root escape, link swap, or handle-identity change disposes partial bytes and stops before DB read. Creation must atomically bind the snapshot to this approval/Preview/selection/source/coordinator/fence, privately verify exact bytes, file boundaries, metric values and parsed keys, and never reuse the disposed upload snapshot. Preflight and Delete/reconcile must read this snapshot only and never reopen the operational source. This source snapshot proves provenance and selected keys only: it is not an exact DB rollback image and cannot make rollbackReadiness true. Preflight must separately report protected DB-before-image readiness plus <deleteDbMutationSideEffectBindingId>/<deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects>, proving both DELETE and exact restore INSERT can affect only the selected direct rows with no secondary relation or externally observable side effect; it must not create a before-image or mutate the DB. Invalidation, blocked/expired preflight, or retention expiry pre-authorizes automatic key destruction plus verified byte removal only for this source snapshot. After a committed Delete, it remains encrypted in awaiting_recovery_disposition while the DB before-image remains recovery_available until a separate immutable single-use early-disposition approval claims both, a separately scoped restore approval restores then disposes both, or equal-deadline automatic cleanup separately CAS-checks this preflight approval for the source snapshot and the consumed hard-delete approval for the before-image. After an authoritative aborted Delete, the before-image remains not_created, restore is forbidden, and only source-snapshot early/expiry disposition applies under the proper approval. All unrelated/new mutations are blocked while any applicable record is unresolved. Disposal failure blocks and alerts.
+Before any source copy or preflight DB read, this approval permits creation of exactly one owner-only encrypted immutable Delete source-provenance snapshot <deleteRecoverySnapshotId> and protected exact-byte content binding <deleteRecoveryContentBindingId>. The reviewed source scope is the selected files/items above, observed bytes are <deleteRecoveryObservedBytes>, the non-inferred approved ceiling is <deleteRecoverySnapshotMaxBytes>, protected capacity evidence is <deleteRecoveryCapacityEvidenceId>, the approved confidentiality/access class is <deleteRecoveryConfidentialityClass>, and bytes may be read only until <deleteRecoverySnapshotRetainUntilUtc>. This approval pre-reserves <deleteSourceSnapshotCleanupTransactionId>, positive human-approved <deleteSourceSnapshotCleanupMarginSeconds>, checked deadline <deleteSourceSnapshotCleanupByUtc=deleteRecoverySnapshotRetainUntilUtc+deleteSourceSnapshotCleanupMarginSeconds>, initial <deleteSourceSnapshotCleanupState=not_started>, and <deleteSourceSnapshotCleanupEvidenceId=not_triggered>; that cleanup may address only this source snapshot and can never address a DB before-image. At the retention boundary all decrypt/recovery access ends irreversibly and the same cleanup must be claimed immediately; the margin authorizes only key-first removal/absence verification/evidence committed strictly before the cleanup deadline. Zero/non-integer/inferred/over-maximum margin or checked-addition overflow invalidates the approval before any copy/read. Every selected entry must remain inside the canonical approved source root, with no symlink/junction/reparse-point/hard-link ambiguity at any path component; copy, private digest, and parse must use the same stable opened-handle identity. Any root escape, link swap, or handle-identity change disposes partial bytes and stops before DB read. Creation must atomically bind the snapshot to this approval/Preview/selection/source/coordinator/fence, privately verify exact bytes, file boundaries, metric values and parsed keys, and never reuse the disposed upload snapshot. Preflight and Delete/reconcile must read this snapshot only and never reopen the operational source. This source snapshot proves provenance and selected keys only: it is not an exact DB rollback image and cannot make rollbackReadiness true. Preflight must separately report protected DB-before-image readiness plus <deleteDbMutationSideEffectBindingId>/<deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects>, proving both DELETE and exact restore INSERT can affect only the selected direct rows with no secondary relation or externally observable side effect; it must not create a before-image or mutate the DB. Invalidation, blocked/expired preflight, early disposition, or retention expiry pre-authorizes automatic key destruction plus verified byte removal only through that source cleanup id. After a committed Delete, it remains encrypted in awaiting_recovery_disposition while the DB before-image remains recovery_available until a separate immutable single-use early-disposition approval atomically claims both distinct record-owned cleanup ids, a separately scoped restore approval uses its own DB cleanup id and the source id to restore then dispose both, or equal-access-deadline automatic cleanup separately CAS-checks this preflight approval/source cleanup for the snapshot and the consumed hard-delete approval/DB cleanup for the before-image. After an authoritative aborted Delete, the before-image remains not_created, restore is forbidden, and only the source cleanup id may be claimed. All unrelated/new mutations are blocked while any applicable record is unresolved. Disposal failure blocks and alerts.
 The preflight must also publish protected mutation-schema fence <deleteDbMutationSchemaFenceBindingId>, proving each later authoritative DELETE or restore-INSERT transaction can acquire the complete engine-appropriate DDL-conflicting relation/catalog lock set or enforced schema-generation fence before inspection and hold it through commit. Preflight observation alone never substitutes for that transaction-time fence.
 This approval permits only the exact protected source-snapshot creation, preflight DB read, protected local evidence/audit write, and bounded automatic source-snapshot disposition above. It does not approve hard delete, reconcile, Preview, Start Upload, Retry Failed, Settings save, runtime lifecycle, source mutation, other cleanup, LAN, or deployment.
 ```
@@ -871,8 +1008,9 @@ state/upload branch/Delete branch/consumer/generation/evidence, public versioned
 binding id, selected item/exact key counts,
 opaque protected selection/keyset/source-evidence/source-file-signature-set
 binding ids, protected Delete source-provenance snapshot/content-binding ids/state/
-observed and maximum bytes/capacity/confidentiality/retention/final-disposition/
-disposition/evidence, `deleteDbBeforeImagePreparationReadiness`,
+  observed and maximum bytes/capacity/confidentiality/retention/final-disposition/
+  disposition/evidence plus source-only cleanup id/positive margin/deadline/state/evidence,
+  `deleteDbBeforeImagePreparationReadiness`,
 protected `deleteDbMutationSchemaFenceBindingId`,
 protected `deleteDbMutationSideEffectBindingId` and
 `deleteDbMutationSideEffectReadiness`,
@@ -888,6 +1026,11 @@ Deterministic tests must reject missing/arbitrary/unresolvable, expired,
 substituted, replayed, or concurrently claimed preflight approvals; field and
 selection-request substitution; multiple preflight creation; response loss;
 failure before/after record commit; and any attempt to perform DB mutation.
+They must reject zero/negative/non-integer/coerced/over-maximum source cleanup
+margin and checked-addition overflow, and exercise immediately before/at/after
+the source access and cleanup deadlines: access ends and the exact cleanup is
+claimed at retention, no decrypt/read occurs in the cleanup-only margin, strict-
+before cleanup completion succeeds, and equality/late completion blocks.
 Pre-commit mismatch/failure must produce zero operational DB writes, and a
 duplicate request must resolve only the same `deletePreflightId`. Same-loopback/
 same-port local cluster or database replacement and target-binding substitution
@@ -953,7 +1096,9 @@ Required preconditions:
   through `deleteExecuteByUtc`, normal `deleteReconcileByUtc`, standard
   `deleteDbBeforeImageRetainUntilUtc`, incident-only
   `deleteCommitUnknownEscrowReconcileByUtc`, and final
-  `deleteCommitUnknownEscrowRetainUntilUtc` and is revalidated with the
+  `deleteCommitUnknownEscrowRetainUntilUtc`; a positive human-approved
+  `deleteCommitUnknownEscrowDispositionMarginSeconds` separates incident
+  reconciliation from the earlier final ceiling, and the target is revalidated with the
   authoritative DB clock inside every delete/reconcile/restore transaction;
 - the same target operation fence is owned only by the consumed preflight result
   in canonical fence state `active`, consumer `delete_preflight`, with separate
@@ -1001,20 +1146,26 @@ The protected approval record must retain every `docs/171` binding, including
 package label/checksum, safe coarse DB fingerprint, trusted target baseline id/
 alias/state/evidence, target-identity preparation
 approval id/state/deadline, protected exact target DB binding id/state/validity/
-evidence, delete reconcile deadline, public schema class, protected schema binding id, preflight id,
+  evidence, Delete claim/active-use/reconcile deadlines, positive mutation-to-
+  reconcile margin, public schema class, protected schema binding id, preflight id,
 selection/keyset/source/source-file-signature/Delete-source-provenance-snapshot
 and DB-before-image protected binding ids, mutation-schema fence, DELETE/restore-
 INSERT mutation-side-effect binding/readiness, policy/gate states,
 approver/executor, stop condition, and evidence location, plus
-`deleteExecuteByUtc` and the single-run lifecycle fields below.
+  `deleteExecuteByUtc`, `deleteActiveUseExpiresAtUtc`,
+  `deleteMutationReconcileMarginSeconds`, and the single-run lifecycle fields below.
 
 ```text
 TEMPLATE STATUS: NOT AUTHORIZATION. Do not fill, sign, or execute this block until production code and deterministic tests implement every prerequisite for this action and a new human approval explicitly releases this gate.
-In addition to every exact field and sentence required by docs/171, including trusted target baseline id/alias/state/evidence, target-identity preparation approval id/state/deadline, target DB binding id/state/validity/evidence, target operation fence id/chain and branch states/consumer/generation/evidence, normal <deleteReconcileByUtc>, incident-only <deleteCommitUnknownEscrowReconcileByUtc>, and final <deleteCommitUnknownEscrowRetainUntilUtc>, the protected delete approval id/approvalId is <deleteApprovalId> and it must be claimed by <deleteExecuteByUtc>.
+In addition to every exact field and sentence required by docs/171, including trusted target baseline id/alias/state/evidence, target-identity preparation approval id/state/deadline, target DB binding id/state/validity/evidence, target operation fence id/chain and branch states/consumer/generation/evidence, the carried preflight-owned source cleanup id/positive margin/deadline/state/evidence, normal <deleteReconcileByUtc>, positive normal DB-before-image cleanup margin <deleteDbBeforeImageNormalCleanupMarginSeconds> and deadline <deleteDbBeforeImageNormalCleanupByUtc>, incident-only <deleteCommitUnknownEscrowReconcileByUtc>, positive <deleteCommitUnknownEscrowDispositionMarginSeconds>, and final <deleteCommitUnknownEscrowRetainUntilUtc>, the protected delete approval id/approvalId is <deleteApprovalId> and it must be claimed by <deleteExecuteByUtc>.
+The non-renewable authoritative DELETE commit deadline is <deleteActiveUseExpiresAtUtc> and the positive human-approved mutation-to-reconcile margin is <deleteMutationReconcileMarginSeconds>; checked ordering requires deleteExecuteByUtc < deleteActiveUseExpiresAtUtc <= deleteReconcileByUtc - deleteMutationReconcileMarginSeconds. The authoritative target clock must be strictly before active-use expiry at commit; equality/after rolls back every DELETE.
+The normal DB-before-image recovery-access cutoff is <deleteDbBeforeImageRetainUntilUtc>, with positive human-approved <deleteDbBeforeImageNormalCleanupMarginSeconds> and checked <deleteDbBeforeImageNormalCleanupByUtc=deleteDbBeforeImageRetainUntilUtc+deleteDbBeforeImageNormalCleanupMarginSeconds>, strictly within <targetDbBindingValidUntilUtc>. At that cutoff one target-epoch-serialized CAS must select exactly one branch: marker-proven committed revokes decryption/restore access, claims <deleteDbBeforeImageCleanupState=claimed_normal>, and completes key-first removal/evidence strictly before the normal deadline; marker-proven aborted proves no image; only a still unresolved marker selects <deleteDbBeforeImageCleanupState=incident_locked>, destroys any existing image key, transitions that image to <deleteDbBeforeImageState=incident_keyless_cleanup_pending>, and selects the later incident-only <deleteDbBeforeImageCleanupByUtc>. The two deadlines/branches are mutually exclusive and non-renewable.
 The ready delete-preflight result <deletePreflightId> is initially ready_available and may be claimed and consumed only by this <deleteApprovalId> and the one deleteRunId generated in the joint claim transaction.
 I approve one atomic transaction that claims both this delete approval and that ready preflight result and durably binds both to exactly one generated deleteRunId; no response loss, commit_unknown result, audit/evidence failure, cancellation, reconciliation, or second approval may create or authorize a second run from either record.
-The random unique <deleteMutationId> and exact DB before-image <deleteDbBeforeImageId> are pre-reserved in this immutable approval. It binds mutation-side-effect inspection <deleteDbMutationSideEffectBindingId> in readiness <deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects> for both DELETE and exact restore INSERT, requires <deleteDbBeforeImageRetainUntilUtc=deleteRecoverySnapshotRetainUntilUtc>, and pre-authorizes only the unresolved-outcome encrypted incident ceiling <deleteCommitUnknownEscrowRetainUntilUtc> plus marker-first incident reconcile deadline <deleteCommitUnknownEscrowReconcileByUtc>, with initial state/evidence <deleteCommitUnknownEscrowState=not_active>/<deleteCommitUnknownEscrowEvidenceId=not_triggered>. Before any DELETE, exactly one target-side prepared marker binds this approval/preflight/run, exact keyset/source provenance, before-image content/schema/complete-column-set/side-effect bindings, target DB binding, and both target-global and chain fence generations. One authoritative target transaction must enforce the same target-global coordinator id/generation/owner through its target-side mutation epoch, lock and revalidate every selected row, prove every foreign-key/cascade, trigger/rule, RLS/policy, generated/default, sequence, replication/publication/CDC, notification, and affected-relation class is absent or inert so only the selected direct rows can change, capture every column's complete typed pre-delete value, record <deleteDbBeforeImageObservedBytes> within <deleteDbBeforeImageMaxBytes>, verify row count <deleteDbBeforeImageRowCount=exactKeyCount>, set rollbackReadiness true, then commit the before-image, exact-key DELETE, and prepared-to-committed marker transition atomically. Any stale coordinator epoch, secondary relation or externally observable side effect, missing row/column, DB values that differ from source, schema/value/side-effect drift, unsupported restore semantics, overflow/capacity/confidentiality failure, or concurrent change rolls back to zero DELETE. Aborted may be finalized only after non-commit is authoritative; timeout/response loss is commit_unknown_blocked until marker-first reconciliation proves committed or aborted and a committed marker has the exact recovery_available before-image. Current row presence/delta may never infer the outcome.
-The normal <deleteReconcileByUtc> is no later than the equal standard recovery deadline. The incident-only deadline must satisfy <deleteCommitUnknownEscrowReconcileByUtc> <= min(<deleteCommitUnknownEscrowRetainUntilUtc>, <targetDbBindingValidUntilUtc>) and is strictly later than the normal reconcile deadline only after escrow activation. The final escrow ceiling is strictly later than the equal standard recovery deadline and no later than <targetDbBindingValidUntilUtc>; no deadline may be inferred or extended.
+The random unique <deleteMutationId> and exact DB before-image <deleteDbBeforeImageId> are pre-reserved in this immutable approval. It binds mutation-side-effect inspection <deleteDbMutationSideEffectBindingId> in readiness <deleteDbMutationSideEffectReadiness=direct_rows_only_no_unmodeled_or_nonrestorable_effects> for both DELETE and exact restore INSERT, requires <deleteDbBeforeImageRetainUntilUtc=deleteRecoverySnapshotRetainUntilUtc>, and pre-authorizes only the unresolved-outcome authenticated keyless-bytes/metadata incident ceiling <deleteCommitUnknownEscrowRetainUntilUtc>, positive cleanup margin <deleteCommitUnknownEscrowDispositionMarginSeconds>, marker-first incident reconcile deadline <deleteCommitUnknownEscrowReconcileByUtc>, and hard-delete-owned DB-before-image cleanup <deleteDbBeforeImageCleanupTransactionId>/<deleteDbBeforeImageCleanupByUtc=min(deleteCommitUnknownEscrowRetainUntilUtc,targetDbBindingValidUntilUtc)>/<deleteDbBeforeImageCleanupState=not_started>/<deleteDbBeforeImageCleanupEvidenceId=not_triggered>, with initial state/evidence <deleteCommitUnknownEscrowState=not_active>/<deleteCommitUnknownEscrowEvidenceId=not_triggered>. The preflight-owned source cleanup <deleteSourceSnapshotCleanupTransactionId>/<deleteSourceSnapshotCleanupByUtc>/<deleteSourceSnapshotCleanupState>/<deleteSourceSnapshotCleanupEvidenceId> is carried forward but is not owned or replaceable by this approval; restore cleanup remains <deleteDbRestoreCleanupTransactionId=not_created>/<deleteDbRestoreCleanupByUtc=not_approved>/<deleteDbRestoreCleanupState=not_created>/<deleteDbRestoreCleanupEvidenceId=not_triggered> until a separate restore approval. Before any DELETE, exactly one target-side prepared marker binds this approval/preflight/run, exact keyset/source provenance, before-image content/schema/complete-column-set/side-effect bindings, target DB binding, and both target-global and chain fence generations. One authoritative target transaction must enforce the same target-global coordinator id/generation/owner through its target-side mutation epoch, lock and revalidate every selected row, prove every foreign-key/cascade, trigger/rule, RLS/policy, generated/default, sequence, replication/publication/CDC, notification, and affected-relation class is absent or inert so only the selected direct rows can change, capture every column's complete typed pre-delete value, record <deleteDbBeforeImageObservedBytes> within <deleteDbBeforeImageMaxBytes>, verify row count <deleteDbBeforeImageRowCount=exactKeyCount>, set rollbackReadiness true, then commit the before-image, exact-key DELETE, and prepared-to-committed marker transition atomically. Any stale coordinator epoch, secondary relation or externally observable effect, missing row/column, DB values that differ from source, schema/value/side-effect drift, unsupported restore semantics, overflow/capacity/confidentiality failure, or concurrent change rolls back to zero DELETE. Aborted may be finalized only after non-commit is authoritative; timeout/response loss is commit_unknown_blocked until marker-first reconciliation proves committed or aborted and a committed marker has the exact recovery_available before-image. Current row presence/delta must never infer the outcome.
+The normal <deleteReconcileByUtc> is no later than the equal standard recovery deadline. The incident-only deadline must satisfy <deleteCommitUnknownEscrowReconcileByUtc> <= min(<deleteCommitUnknownEscrowRetainUntilUtc>, <targetDbBindingValidUntilUtc>) - <deleteCommitUnknownEscrowDispositionMarginSeconds> and is strictly later than the normal reconcile deadline only after escrow activation. Because incident activation already destroyed any image key, the positive margin reserves time only for key-absence verification, authenticated byte removal, absence verification, and permanent-block evidence, so equality with the final ceiling is invalid. The final escrow ceiling is strictly later than the equal standard recovery deadline and no later than <targetDbBindingValidUntilUtc>; no deadline may be inferred or extended.
+If the incident cleanup misses <deleteDbBeforeImageCleanupByUtc>, state becomes disposal_failed_blocked and permanent NO-GO. Only the same pre-reserved DB-before-image cleanup id retains emergency authority to destroy the exact key, remove the exact before-image bytes, and verify absence until disposed_permanent_block; it may not touch the source snapshot or a restore-owned cleanup, decrypt/read content, inspect marker/operational rows, restore, create another cleanup, release any coordinator, or regain success eligibility.
+The DELETE transaction, normal reconcile, incident activation, and hard-delete-owned DB-before-image cleanup must serialize on the same target-side coordinator epoch row. The DELETE transaction conditionally commits only under its original epoch before active-use expiry. At expiry reconcile advances the epoch before authoritative abort; incident activation/cleanup repeats that fence. Cleanup cannot claim or certify absence while any old-epoch DELETE can still commit, and a delayed transaction after epoch advance must roll back.
 The same approval also binds mutation-schema fence <deleteDbMutationSchemaFenceBindingId>. Before the inspection described above, each authoritative transaction must acquire the complete engine-appropriate DDL-conflicting relation/catalog locks or enforced schema-generation fence, revalidate schema/side-effect bindings only after acquisition, and hold the fence through commit. Any concurrent DDL/configuration gap performs zero DELETE or restore writes.
 ```
 
@@ -1025,13 +1176,13 @@ The same approval also binds mutation-schema fence <deleteDbMutationSchemaFenceB
 | Creation fails before any run commit | `invalid` | `invalid` | absent | Zero DB writes; new preflight and approval are required. Neither record may regress. |
 | Exactly one run commits | `consumed` | `consumed`, bound to this approval/run | committed, mutation `not_started` | Both records and the pre-reserved mutation id remain consumed/bound despite response loss, failure, cancellation, audit/evidence failure, or `commit_unknown`. |
 | Target marker prepared | `consumed` | same consumed binding | running, mutation `prepared`, before-image `not_created` | Marker binds the exact approval/preflight/run/keyset/source-provenance/before-image/target/coordinator generations before any DELETE. |
-| Authoritative Delete transaction in flight | `consumed` | same consumed binding | running, mutation `commit_pending`, durable before-image remains `not_created` while transaction-private capture is in progress | The transaction holds and revalidates the exact selected-row, schema/side-effect, target-binding, coordinator/fence, approval, deadline, mutation-id, and before-image bindings. Its only successors are atomic `committed`, authoritative zero-write `aborted`, or `commit_unknown_blocked`; timeout, cancellation, crash, or response loss never asserts abort or releases the coordinator. |
+| Authoritative Delete transaction in flight | `consumed` | same consumed binding | running, mutation `commit_pending`, durable before-image remains `not_created` while transaction-private capture is in progress | The transaction holds and revalidates the exact selected-row, schema/side-effect, target-binding, coordinator epoch/fence, approval, active-use deadline, mutation-id, and before-image bindings. It may commit only while target clock is strictly before expiry and the original epoch still owns the fence. Its only successors are atomic `committed`, authoritative zero-write `aborted`, or `commit_unknown_blocked`; timeout, cancellation, crash, or response loss never asserts abort or releases the coordinator. |
 | Authoritative Delete transaction commits | `consumed` | same consumed binding | terminal succeeded, mutation `committed`, before-image `recovery_available` | Complete typed before-image, exact DELETE, and marker transition commit atomically; source snapshot becomes `awaiting_recovery_disposition`, before-image remains `recovery_available`, and both coordinator/fence states become non-advanceable `recovery_disposition_pending` until both records are terminal. |
 | Non-commit is authoritative | `consumed` | same consumed binding | terminal failed, mutation `aborted`, before-image `not_created` | No approved DELETE or usable before-image committed. Restore is forbidden. Retain marker/evidence, move only the source snapshot to `awaiting_recovery_disposition`, and keep coordinator/fence `recovery_disposition_pending` until source-only early or expiry disposition is verified terminal. Never fabricate or require a DB before-image on this branch. |
 | Duplicate request after commit/response loss | `consumed` | same consumed binding | same committed run | Return or reconcile only the existing run; never create another run. |
 | A different approval requests the same preflight result | any | `consumed`/`claimed` by original approval | absent for different approval | Reject before mutation; the preflight result has one consumer. |
 | Outcome is `commit_unknown` | `consumed` | same consumed binding | same committed run; mutation `commit_unknown_blocked` | Only marker-first read-only reconcile for that run is allowed. Keep global/chain ownership and every retained record; a committed marker requires the exact `recovery_available` before-image, and row presence/delta cannot prove outcome. |
-| Unknown outcome reaches standard retention deadline | `consumed` | same consumed binding | mutation `commit_unknown_retention_incident_blocked`; source snapshot disposed; `deleteCommitUnknownEscrowState=active_locked`, while any target-side before-image remains `recovery_available` but cryptographically access-locked in incident escrow | Keep coordinator/fence non-advanceable. Marker-first reconcile only until the pre-approved `deleteCommitUnknownEscrowReconcileByUtc`, never merely until the later retention ceiling. Committed proof authorizes no restore after standard retention: key-first dispose the before-image under the pre-authorized incident cleanup, then record permanent recovery-loss/security-incident NO-GO while the target-global coordinator remains `commit_unknown_blocked` and cannot advance to a new generation. Aborted proof requires no before-image; any unexpected image is disposed and blocks. Unresolved final escrow expiry follows the same permanent-block disposal path. |
+| Unknown outcome reaches standard retention deadline | `consumed` | same consumed binding | mutation `commit_unknown_retention_incident_blocked`; source decrypt/recovery access ends and its preflight-owned cleanup is claimed immediately for completion strictly before `deleteSourceSnapshotCleanupByUtc`; `deleteCommitUnknownEscrowState=active_locked`; DB cleanup becomes `incident_locked`, and any existing target-side before-image key is destroyed as its state becomes `incident_keyless_cleanup_pending` | Keep coordinator/fence non-advanceable. The incident image state retains only authenticated keyless bytes/metadata and authorizes no decrypt/read/restore. Marker-first reconcile is allowed only until the pre-approved `deleteCommitUnknownEscrowReconcileByUtc`, never merely until the later retention ceiling. Committed proof matches only authenticated bindings/metadata, authorizes no restore after standard retention, and disposes the keyless bytes only through `deleteDbBeforeImageCleanupTransactionId`, then records permanent recovery-loss/security-incident NO-GO while the target-global coordinator remains `commit_unknown_blocked` and cannot advance to a new generation. Aborted proof requires target-epoch-serialized absence proof and CAS `incident_locked -> not_applicable_aborted_incident` with durable DB-cleanup evidence; only after source cleanup is also `committed` with durable evidence may it publish `resolved_aborted`, invalidate target binding/branches/chain, set target-global `invalidated_terminal`, empty target consumers, and release the machine-global coordinator. Source cleanup failure keeps every coordinator blocked. Any unexpected keyless image is disposed by the hard-delete-owned id and blocks. If still unknown when incident reconcile closes, claim that DB cleanup immediately and commit permanent-block disposal strictly before `deleteDbBeforeImageCleanupByUtc`; reaching either cleanup deadline incomplete is `disposal_failed_blocked`, not new cleanup authority. |
 
 Deterministic tests must cover every `docs/171` field substitution, expiry,
 missing/unresolvable approval, concurrent claims, failure before run commit,
@@ -1040,22 +1191,59 @@ cancellation, duplicate request after response loss, and inconsistent approval/
 preflight/run states. They must also cover sequential and concurrent attempts to
 use one ready result from two delete approvals, run-create failure after either
 claim, replay after response loss, and permanent no-regression of both records.
-They must cover standard-retention expiry immediately before/at/after unresolved
-marker reconcile, atomic source disposal/incident-escrow activation, incident
+They must cover standard recovery-access expiry immediately before/at/after unresolved
+marker reconcile, atomic source access revocation/source-cleanup claim plus
+incident-escrow activation, source cleanup strictly before its later deadline, incident
 reconcile immediately before/at/after its distinct deadline, marker-proven
-committed/aborted resolution during escrow, the no-DB-read interval between that
-reconcile deadline and final escrow retention, final escrow expiry and cleanup
-failure, post-standard-retention committed proof followed only by approval-bound
-before-image disposal/permanent NO-GO, rejection of ordinary restore/disposition
-without the already-disposed source snapshot, and prove no inferred abort,
+committed/aborted resolution during escrow raced before/after source cleanup
+commit, proof that aborted resolution CASes `incident_locked ->
+not_applicable_aborted_incident` only with target-epoch-serialized no-image/key/
+bytes evidence and cannot terminal-join or release any coordinator until source
+cleanup is committed with durable evidence, unexpected-image competition uses
+only `claimed_incident` permanent-block cleanup, crash/response loss returns the
+same branch/evidence, permanent
+blocking on source cleanup failure, zero marker/operational-row reads after
+that reconcile deadline, immediate claim of the one permitted recovery-store-only
+DB-before-image cleanup transaction, completion strictly before `deleteDbBeforeImageCleanupByUtc`,
+cleanup-deadline failure, post-standard-retention committed proof followed only by
+approval-bound before-image disposal/permanent NO-GO, rejection of ordinary restore/disposition
+after source recovery access has irrevocably expired, and prove no inferred abort,
 deadline extension, coordinator release, or new mutation.
 They must also cover restore outcome remaining unknown immediately before/at/
 after its reconcile and before-image retention deadlines, approval-bound key-
 first disposal to terminal permanent NO-GO, crash/response loss at key destruction/
-byte removal/evidence publication, cleanup failure, and zero post-deadline DB
-reads/writes or retries.
+byte removal/evidence publication, cleanup failure, zero post-deadline marker/
+operational-row DB reads/writes or retries, and exactly one idempotent approval-
+bound DB-before-image cleanup transaction touching only the exact before-image.
+They must separately cover a marker-proven committed/aborted outcome immediately
+before/at/after `deleteDbBeforeImageRetainUntilUtc`: committed atomically revokes
+DB recovery access and selects `claimed_normal`, aborted proves no image, and
+unresolved selects only cleanup `incident_locked` plus any existing image
+`incident_keyless_cleanup_pending`; early disposition uses only
+`claimed_early`. Injected-clock tests cover strict-before/equality/after
+`deleteDbBeforeImageNormalCleanupByUtc`, response loss/crash/replay around branch
+selection/key destruction/byte removal/evidence, mutual exclusion with incident,
+and zero/negative/non-integer/coerced/max+1/checked-overflow/target-validity-
+overrun normal cleanup margins.
+They must combine crash immediately before key destruction with restart at/after
+`deleteDbBeforeImageCleanupByUtc`: deadline miss records
+`disposal_failed_blocked` and permanent NO-GO, but only that same cleanup id retains
+emergency key-destruction/exact-byte-removal/absence-verification authority until
+`disposed_permanent_block`; it can never decrypt/read content, access marker/
+operational rows, restore, release the coordinator, or create another cleanup.
+Marker-proven aborted incident resolution with no before-image must also test the
+atomic invalid/invalidated-terminal target join, empty consumers, machine-global
+release/generation advance, crash/response loss before/after publication, stale
+workers, and rejection of a concurrent new Preview/control until the join commits.
 They must cover exact target-binding expiry immediately before/at/after joint
 claim, mutation, and reconcile plus same-port target replacement at each boundary.
+They must inject the target clock immediately before/at/after
+`deleteActiveUseExpiresAtUtc`, reject invalid/nonpositive/overflowing mutation-to-
+reconcile margins, and delay an old-epoch prepared DELETE across active-use expiry,
+standard retention, incident reconcile cutoff, and cleanup commit. Only a commit
+strictly before expiry may win; otherwise reconcile/incident cleanup advances the
+same target-side epoch and the delayed transaction rolls back before any later
+before-image/DELETE/marker commit.
 They must also cover Start-vs-Delete, Retry-vs-Delete, zero-target Preview with
 eligible Delete items, terminal-binding replay, stale operation-fence generation,
 and crash/response-loss at every claim/terminal transition.
@@ -1081,7 +1269,15 @@ source/DB-before-image retention deadlines, reject either mismatch, split expiry
 authority between the preflight and hard-delete approvals, and cover committed
 dual-record versus aborted source-only early/expiry disposition, response loss,
 restart, replay, cleanup failure, and coordinator release only after every record
-that actually exists is terminal.
+that actually exists is terminal. Injected-clock incident tests must cover
+immediately before, exactly at, and after the incident-reconcile/final-retention
+deadlines and race the last allowed marker read against key-absence verification/
+authenticated byte cleanup; the
+positive incident disposition margin must prevent overlap or deadline equality.
+They must reject non-integer, negative, zero, fixed-maximum-plus-one, coerced,
+checked-subtraction-underflow, and impossible-order values before approval claim
+with zero DB writes; one and the exact fixed/versioned maximum pass only when the
+derived UTC ordering remains valid.
 At most one `deleteRunId` may commit. Any mismatch or failure before run commit
 must produce zero operational DB writes and invalidate both records; later
 uncertainty may use only read-only reconciliation of the same run.
@@ -1090,6 +1286,8 @@ Evidence to record after delete:
 
 - preview run id;
 - delete approval id, deadline, and terminal state;
+- hard-Delete active-use commit deadline, positive mutation-to-reconcile margin,
+  authoritative target-clock result, and target-side epoch fence/advance evidence;
 - delete preflight id;
 - delete preflight result terminal state, consumed delete approval id, and bound
   delete run id;
@@ -1144,11 +1342,19 @@ Stop before any mutation when any of these are true:
 - active source class is unexpected;
 - the inventory evidence record id, operator PC class, or privacy-safe source
   alias is missing or differs from the exact Preview-only approval;
+- the pre-existing protected source config generation or root-binding id/state/
+  generation/evidence is missing, unreviewed, unresolved, substituted, invalid,
+  changed, or does not follow the same-id monotonic `reviewed -> preparing ->
+  snapshot_bound` success transition across inventory, manifest approval/result,
+  Preview approval/evidence, Start/Retry provenance, and final sign-off; read-only inventory attempts to
+  create/advance it; or alias/class/count/size/mtime equality is treated as exact
+  root identity;
 - `inventoryObservedAtUtc`, `inventoryMaxAgeSeconds`, or `previewExecuteByUtc`
   is missing, the deadline has passed, or the approved maximum age is exceeded;
 - the immediately-before-call read-only scan does not produce
   `preCallSnapshotUnchanged=true` for the exact file set, scope, size/mtime
-  metadata, counts, package, operator PC, source alias, and source class;
+  metadata, counts, package, operator PC, source alias/class, protected config
+  generation, and source-root binding;
 - the stage-specific approval/manifest state differs from the transition table
   in `docs/173`; immediately before Preview claim the manifest-preparation
   approval must be `consumed`, manifest `prepared`, and Preview approval
@@ -1156,10 +1362,13 @@ Stop before any mutation when any of these are true:
 - an approval/record is missing, expired, tampered, unauthenticated, mismatched,
   regressed, double-claimed, or reused outside its valid stage;
 - Settings save or Local Supabase start/stop lacks the protected
-  `operatorControlApprovalId` lifecycle, exact action/deadline/before-state/
-  after-state/operation binding, current config/runtime generation, named actor,
-  atomic single-use claim, response-loss idempotency, and sanitized failure audit
-  required above, or any excluded lifecycle/cleanup action is bundled;
+  `operatorControlApprovalId`/`operatorControlApprovalState` lifecycle, exact
+  action/deadline/before-state/after-state/operation/outcome binding, current
+  config/runtime generation, named actor, machine-global no-active-stage proof,
+  atomic single-use claim, commit-unknown recovery, response-loss idempotency,
+  and sanitized failure audit required above; any partial effect is certified as
+  success/replayed/automatically compensated; or any excluded lifecycle/cleanup
+  action is bundled;
 - `manifestPreparationApprovalId` or `previewApprovalId` is missing,
   unresolvable, in a state invalid for the current stage, or differs across
   approval, manifest creation, atomic claim/run, terminal evidence, and final
@@ -1257,15 +1466,37 @@ Stop before any mutation when any of these are true:
   prepared marker, atomic DELETE-plus-marker commit, marker-first reconciliation,
   or authoritative terminal outcome evidence; row presence/delta is used to infer
   outcome, or an unknown/tampered marker does not keep the chain blocked;
+- Delete lacks human-bound `deleteActiveUseExpiresAtUtc` and positive
+  `deleteMutationReconcileMarginSeconds`, checked claim<active-use<=reconcile-
+  minus-margin ordering, authoritative target-clock strict-before commit check,
+  or shared target-side epoch serialization that fences delayed transactions
+  before reconcile/incident cleanup can publish abort or absence;
 - Delete lacks a pre-reserved `deleteDbBeforeImageId`, protected exact content/
   schema/complete-column-set bindings, exact row-count/byte-ceiling/capacity/
   confidentiality/retention contract, or an authoritative transaction that
   locks/revalidates current rows and atomically commits their complete typed
   before-image with DELETE and the marker transition;
 - Delete lacks the pre-authorized non-extendable unresolved-outcome incident-
-  escrow deadline/state/evidence, standard-deadline unknown outcome can destroy a
-  possibly committed before-image or retain source bytes, or final escrow expiry
-  can release the coordinator instead of key-first permanent incident/NO-GO;
+  escrow reconcile/cleanup/retention deadlines, positive margin, state/evidence,
+  or hard-delete-owned DB-before-image cleanup id/deadline/state/evidence;
+  source, DB-before-image, and restore paths reuse or cross-claim one cleanup id
+  instead of their separately owned lifecycles; incident-time aborted resolution
+  lacks terminal `not_applicable_aborted_incident` plus authoritative absence
+  evidence, can terminal-join/release before source cleanup commits durable evidence, or
+  source cleanup failure releases a coordinator; standard-deadline unknown outcome
+  fails to destroy any existing image key, removes authenticated keyless bytes/
+  metadata before marker-proven committed resolution or reconcile cutoff, removes
+  them afterward outside the bound cleanup, or retains readable source bytes; or committed/
+  unknown outcome fails to claim cleanup immediately at proof/reconcile cutoff and
+  finish key-absence verification, byte removal, and permanent incident/NO-GO
+  evidence before the cleanup deadline;
+- Delete lacks positive `deleteDbBeforeImageNormalCleanupMarginSeconds`, checked
+  `deleteDbBeforeImageNormalCleanupByUtc` within target validity, or the atomic
+  standard-expiry selector between `claimed_early`, `claimed_normal`,
+  `incident_locked`, and `claimed_incident`, with unresolved existing image state
+  `incident_keyless_cleanup_pending`; a known committed image remains
+  recoverable after standard expiry, normal cleanup finishes at/after deadline,
+  or normal and incident branches can both win;
 - Delete lacks a protected mutation-schema fence or mutation-side-effect binding/
   readiness covering every
   foreign-key/cascade, trigger/rule, RLS/policy, generated/default expression,
@@ -1312,6 +1543,9 @@ Stop before any mutation when any of these are true:
   Delete, expiry authority crosses between preflight and hard-delete approvals,
   an aborted Delete requires/fabricates a DB before-image or permits restore, or
   source-only aborted cleanup cannot terminalize only after verified disposal;
+- the incident-escrow approval omits a positive cleanup margin, permits
+  `deleteCommitUnknownEscrowReconcileByUtc` later than the earlier escrow/target
+  ceiling minus that margin, or lets the last marker read race mandatory cleanup;
 - restore claim/marker/transaction/reconciliation/equality/disposition omits
   authoritative-target-clock rechecks immediately before/at/after target-binding
   or before-image retention expiry, lacks a non-renewable active-use lease plus
@@ -1347,11 +1581,13 @@ Current decision: hold all mutating actions.
 The next safe action is a separately authorized production implementation and
 test work package for atomic content-manifest/snapshot binding retained through
 Preview, Start, and Retry, followed by package
-rebuild and verification. Only after that prerequisite passes may the inventory
-be refreshed. A separately controlled pre-provisioned verified target baseline
-must already exist; then protected manifest preparation may be separately
-approved/reviewed, read-only target-identity preparation separately approved and
+rebuild and verification. Only after that prerequisite passes and separately
+controlled pre-provisioned verified target plus human-reviewed source-root
+baselines already exist may inventory read-only revalidate the exact source-root
+binding/config generation. Then protected manifest preparation may be separately
+approved to claim the reviewed root and publish only `snapshot_bound` or terminal
+`invalid`; read-only target-identity preparation may be separately approved and
 its exact-match opaque result human-reviewed, and only then may the later exact
-Preview-only approval be requested. This gate does not authorize baseline
-provisioning/rotation. Start Upload, Retry Failed,
+Preview-only approval be requested. This gate does not authorize source or target
+baseline provisioning/review/repair/rotation. Start Upload, Retry Failed,
 and Delete remain separately gated even if a later Preview succeeds.
